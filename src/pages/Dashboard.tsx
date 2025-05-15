@@ -1,4 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Header from '@/components/layout/Header';
 import UrlInput from '@/components/dashboard/UrlInput';
 import TaskCard, { SubTask } from '@/components/dashboard/TaskCard';
@@ -10,10 +12,29 @@ import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Dashboard = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const discussionId = queryParams.get('discussionId');
+  const taskNumber = queryParams.get('task') ? parseInt(queryParams.get('task')!) : null;
+  
+  // If no discussionId or taskNumber is provided, redirect to discussions page
+  useEffect(() => {
+    if (!discussionId || !taskNumber) {
+      navigate('/discussions');
+    }
+    
+    // Check if user is logged in
+    const user = localStorage.getItem('user');
+    if (!user) {
+      navigate('/');
+    }
+  }, [discussionId, taskNumber, navigate]);
+
   const [url, setUrl] = useState<string>('');
-  const [currentStep, setCurrentStep] = useState(0);
-  const [viewMode, setViewMode] = useState<'grid' | 'detail'>('grid');
-  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+  const [currentStep, setCurrentStep] = useState(taskNumber || 0);
+  const [viewMode, setViewMode] = useState<'grid' | 'detail'>(taskNumber ? 'detail' : 'grid');
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(taskNumber);
   
   // Task 1 subtasks
   const [task1SubTasks, setTask1SubTasks] = useState<SubTask[]>([
@@ -218,11 +239,17 @@ const Dashboard = () => {
     setSelectedTaskId(taskId);
     setViewMode('detail');
     setCurrentStep(taskId);
+    
+    // Update URL with task parameters without full page reload
+    navigate(`/dashboard?discussionId=${discussionId}&task=${taskId}`, { replace: true });
   };
 
   const handleBackToGrid = () => {
     setViewMode('grid');
     setSelectedTaskId(null);
+    
+    // Update URL without the task parameter
+    navigate(`/dashboard?discussionId=${discussionId}`, { replace: true });
   };
 
   const handleCompleteAnnotation = (taskId: number) => {
@@ -353,6 +380,9 @@ const Dashboard = () => {
   const handleBack = () => {
     if (currentStep > 0 && viewMode === 'detail') {
       handleBackToGrid();
+    } else {
+      // Go back to discussions page
+      navigate('/discussions');
     }
   };
 

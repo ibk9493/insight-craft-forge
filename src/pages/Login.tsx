@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,14 @@ const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
+  
+  // Check if already logged in
+  useEffect(() => {
+    const user = localStorage.getItem('user');
+    if (user) {
+      navigate('/discussions');
+    }
+  }, [navigate]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,7 +29,6 @@ const Login = () => {
     }
     
     // For demo purposes, accept any credentials
-    // In a real app, you would validate against a backend
     toast.success('Login successful');
     localStorage.setItem('user', JSON.stringify({ username }));
     navigate('/discussions');
@@ -55,13 +62,11 @@ const Login = () => {
                 placeholder="Enter your password"
               />
             </div>
+            <Button type="submit" className="w-full bg-dashboard-blue hover:bg-blue-600">
+              Login
+            </Button>
           </form>
         </CardContent>
-        <CardFooter>
-          <Button onClick={handleLogin} className="w-full bg-dashboard-blue hover:bg-blue-600">
-            Login
-          </Button>
-        </CardFooter>
       </Card>
     </div>
   );
