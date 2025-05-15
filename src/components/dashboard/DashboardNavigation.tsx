@@ -1,7 +1,8 @@
 
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, ArrowRight, Upload, Download } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Upload, Download, ListFilter } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface DashboardNavigationProps {
   viewMode: 'grid' | 'detail' | 'consensus';
@@ -12,6 +13,7 @@ interface DashboardNavigationProps {
   isConsensus: boolean;
   onFileUpload?: (file: File) => void;
   codeDownloadUrl?: string;
+  discussionId?: string;
 }
 
 const DashboardNavigation = ({
@@ -22,8 +24,11 @@ const DashboardNavigation = ({
   onSave,
   isConsensus,
   onFileUpload,
-  codeDownloadUrl
+  codeDownloadUrl,
+  discussionId
 }: DashboardNavigationProps) => {
+  const navigate = useNavigate();
+  
   // Handle file input change
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0] && onFileUpload) {
@@ -31,18 +36,36 @@ const DashboardNavigation = ({
     }
   };
 
+  // Navigate back to discussions list
+  const handleBackToDiscussions = () => {
+    navigate('/discussions');
+  };
+
   return (
     <div className="flex flex-col space-y-4 mt-6">
       <div className="flex justify-between items-center">
         {viewMode !== 'grid' && (
-          <Button
-            onClick={onBackToGrid}
-            variant="outline"
-            className="flex items-center gap-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span>Back to Tasks</span>
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={onBackToGrid}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>View All Tasks</span>
+            </Button>
+            
+            {discussionId && (
+              <Button
+                onClick={handleBackToDiscussions}
+                variant="outline"
+                className="flex items-center gap-2"
+              >
+                <ListFilter className="h-4 w-4" />
+                <span>Back to Discussions</span>
+              </Button>
+            )}
+          </div>
         )}
       </div>
 

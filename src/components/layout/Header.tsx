@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Link } from 'react-router-dom';
 
 const Header = () => {
   const { user, logout } = useUser();
@@ -19,10 +20,18 @@ const Header = () => {
   return (
     <header className="bg-white border-b border-gray-200 py-4 px-6 flex justify-between items-center">
       <div className="flex items-center">
-        <Github className="h-6 w-6 text-dashboard-blue mr-2" />
-        <h1 className="text-xl font-semibold">GitHub Discussion Evaluator</h1>
+        <Link to="/" className="flex items-center hover:text-dashboard-blue transition-colors">
+          <Github className="h-6 w-6 text-dashboard-blue mr-2" />
+          <h1 className="text-xl font-semibold">GitHub Discussion Evaluator</h1>
+        </Link>
       </div>
       <div className="flex items-center space-x-4">
+        {user && (
+          <Link to="/discussions" className="text-sm text-dashboard-blue hover:underline mr-4">
+            All Discussions
+          </Link>
+        )}
+        
         <span className="text-sm text-gray-500">Dashboard v1.0</span>
         
         {user && (

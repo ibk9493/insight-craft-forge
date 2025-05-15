@@ -1,3 +1,4 @@
+
 import React, { useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import UrlInput from '@/components/dashboard/UrlInput';
@@ -302,6 +303,7 @@ const Dashboard = () => {
           isConsensus={viewMode === 'consensus'}
           onFileUpload={handleFileUpload}
           codeDownloadUrl={codeDownloadUrl}
+          discussionId={discussionId || undefined}
         />
       </div>
     </div>

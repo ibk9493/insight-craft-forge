@@ -1,21 +1,23 @@
 
-import { useCallback } from 'react';
-import { toast } from 'sonner';
+// This is a new file that we'll create to fix the annotation loading issue
+import { useState } from 'react';
 import { SubTask } from '@/components/dashboard/TaskCard';
+import { Annotation, User } from '@/services/api';
+import { toast } from 'sonner';
 
-interface UseAnnotationHandlersProps {
+interface AnnotationHandlersProps {
   task1SubTasks: SubTask[];
   task2SubTasks: SubTask[];
   task3SubTasks: SubTask[];
   consensusTask1: SubTask[];
   consensusTask2: SubTask[];
   consensusTask3: SubTask[];
-  user: any;
-  saveAnnotation: Function;
-  saveConsensusAnnotation: Function;
-  getUserAnnotation: Function;
-  getAnnotationsForTask: Function;
-  getConsensusAnnotation: Function;
+  user: User | null;
+  saveAnnotation: (annotation: Omit<Annotation, 'timestamp'>) => Promise<boolean>;
+  saveConsensusAnnotation: (annotation: Omit<Annotation, 'timestamp'>) => Promise<boolean>;
+  getUserAnnotation: (discussionId: string, userId: string, taskId: number) => Annotation | undefined;
+  getAnnotationsForTask: (discussionId: string, taskId: number) => Annotation[];
+  getConsensusAnnotation: (discussionId: string, taskId: number) => Annotation | undefined;
   updateStepCompletionStatus: (stepIndex: number, completed: boolean) => void;
 }
 
@@ -33,402 +35,312 @@ export function useAnnotationHandlers({
   getAnnotationsForTask,
   getConsensusAnnotation,
   updateStepCompletionStatus
-}: UseAnnotationHandlersProps) {
+}: AnnotationHandlersProps) {
+  const [loading, setLoading] = useState(false);
 
-  // Load user's existing annotation if it exists
-  const loadUserAnnotation = useCallback((discussionId: string, taskId: number) => {
-    if (!user) return;
-    
-    const existingAnnotation = getUserAnnotation(discussionId, user.id, taskId);
-    if (!existingAnnotation) return;
-    
-    // Map the annotation data to subtasks
-    if (taskId === 1) {
-      const updatedSubTasks = task1SubTasks.map(task => {
-        const value = existingAnnotation.data[task.id];
-        if (value !== undefined) {
-          return {
-            ...task,
-            selectedOption: value as string,
-            status: 'completed' as 'completed' | 'pending' | 'na'
-          };
-        }
-        return task;
-      });
-      // We don't have access to setTask1SubTasks here, so we return the updated tasks
-      return updatedSubTasks;
-    }
-    else if (taskId === 2) {
-      const updatedSubTasks = task2SubTasks.map(task => {
-        const value = existingAnnotation.data[task.id];
-        if (value !== undefined) {
-          return {
-            ...task,
-            selectedOption: value as string,
-            textValue: task.textInput ? value as string : undefined,
-            status: 'completed' as 'completed' | 'pending' | 'na'
-          };
-        }
-        return task;
-      });
-      return updatedSubTasks;
-    }
-    else if (taskId === 3) {
-      const updatedSubTasks = task3SubTasks.map(task => {
-        const value = existingAnnotation.data[task.id];
-        if (value !== undefined) {
-          return {
-            ...task,
-            selectedOption: task.textInput ? undefined : value as string,
-            textValue: task.textInput ? value as string : undefined,
-            status: 'completed' as 'completed' | 'pending' | 'na'
-          };
-        }
-        return task;
-      });
-      return updatedSubTasks;
-    }
-  }, [user, getUserAnnotation, task1SubTasks, task2SubTasks, task3SubTasks]);
+  // Load user's annotation for a specific task
+  const loadUserAnnotation = (discussionId: string, taskId: number): SubTask[] | null => {
+    if (!user) return null;
 
-  // Prepare consensus view for pod leads
-  const prepareConsensusView = useCallback((discussionId: string, taskId: number) => {
-    // Get all annotations for this task
-    const taskAnnotations = getAnnotationsForTask(discussionId, taskId);
-    
-    if (taskId === 1) {
-      // Generate consensus subtasks from the data
-      const consensusTasks: SubTask[] = [
-        {
-          id: 'relevance',
-          title: 'Final Relevance Assessment',
-          status: 'pending',
-          options: ['Yes', 'No'],
-          description: `Annotator consensus: ${
-            taskAnnotations.filter(a => a.data.relevance === 'Yes').length
-          }/${taskAnnotations.length} Yes`
-        },
-        {
-          id: 'learning',
-          title: 'Final Learning Value Assessment',
-          status: 'pending',
-          options: ['Yes', 'No'],
-          description: `Annotator consensus: ${
-            taskAnnotations.filter(a => a.data.learning_value === 'Yes').length
-          }/${taskAnnotations.length} Yes`
-        },
-        {
-          id: 'clarity',
-          title: 'Final Clarity Assessment',
-          status: 'pending',
-          options: ['Yes', 'No'],
-          description: `Annotator consensus: ${
-            taskAnnotations.filter(a => a.data.clarity === 'Yes').length
-          }/${taskAnnotations.length} Yes`
-        },
-        {
-          id: 'grounded',
-          title: 'Final Image Grounding Assessment',
-          status: 'pending',
-          options: ['True', 'False', 'N/A'],
-          description: `Annotator results: ${
-            taskAnnotations.filter(a => a.data.grounded === 'True').length
-          } True, ${
-            taskAnnotations.filter(a => a.data.grounded === 'False').length
-          } False, ${
-            taskAnnotations.filter(a => a.data.grounded === 'N/A').length
-          } N/A`
-        }
-      ];
+    try {
+      const annotation = getUserAnnotation(discussionId, user.id, taskId);
       
-      // Check if there's already a consensus annotation
-      const existingConsensus = getConsensusAnnotation(discussionId, taskId);
-      if (existingConsensus) {
-        // Apply existing consensus values
-        consensusTasks.forEach(task => {
-          const value = existingConsensus.data[task.id];
-          if (value !== undefined) {
-            task.selectedOption = value as string;
-            task.status = 'completed';
-          }
-        });
+      if (!annotation) return null;
+      
+      // Create a deep copy of the tasks based on which task we're loading
+      let tasksCopy: SubTask[] = [];
+      if (taskId === 1) {
+        tasksCopy = JSON.parse(JSON.stringify(task1SubTasks));
+      } else if (taskId === 2) {
+        tasksCopy = JSON.parse(JSON.stringify(task2SubTasks));
+      } else if (taskId === 3) {
+        tasksCopy = JSON.parse(JSON.stringify(task3SubTasks));
       }
       
-      return consensusTasks;
-    }
-    else if (taskId === 2) {
-      // Similar to task 1, but with task 2 specific fields
-      const consensusTasks: SubTask[] = [
-        {
-          id: 'aspects',
-          title: 'Final Assessment - Addresses All Aspects',
-          status: 'pending',
-          options: ['Yes', 'No'],
-          description: `Annotator consensus: ${
-            taskAnnotations.filter(a => a.data.aspects === 'Yes').length
-          }/${taskAnnotations.length} Yes`
-        },
-        {
-          id: 'explanation',
-          title: 'Final Assessment - Explanation Provided',
-          status: 'pending',
-          options: ['Yes', 'No'],
-          description: `Annotator consensus: ${
-            taskAnnotations.filter(a => a.data.explanation === 'Yes').length
-          }/${taskAnnotations.length} Yes`
-        },
-        {
-          id: 'execution',
-          title: 'Final Assessment - Code Execution',
-          status: 'pending',
-          options: ['Executable', 'Not Executable', 'N/A'],
-          description: `Annotator results: ${
-            taskAnnotations.filter(a => a.data.execution === 'Executable').length
-          } Executable, ${
-            taskAnnotations.filter(a => a.data.execution === 'Not Executable').length
-          } Not Executable, ${
-            taskAnnotations.filter(a => a.data.execution === 'N/A').length
-          } N/A`
-        },
-        {
-          id: 'download',
-          title: 'Final Assessment - Code Download Link',
-          status: 'pending',
-          options: ['Provided', 'Not Provided', 'N/A'],
-          description: `Annotator consensus`
-        },
-        {
-          id: 'justification',
-          title: 'Final Assessment - Justification',
-          status: 'pending',
-          description: 'Provide final justification',
-          textInput: true
+      // Map the saved data back to the form fields
+      return tasksCopy.map(task => {
+        const savedValue = annotation.data[task.id];
+        if (savedValue !== undefined) {
+          if (typeof savedValue === 'boolean') {
+            return {
+              ...task,
+              selectedOption: savedValue ? 'true' : 'false'
+            };
+          } else if (typeof savedValue === 'string') {
+            return {
+              ...task,
+              selectedOption: savedValue,
+              textValue: annotation.data[`${task.id}_text`] || ''
+            };
+          }
         }
-      ];
+        return task;
+      });
+    } catch (error) {
+      console.error('Failed to load annotation:', error);
+      toast.error('Failed to load your annotation');
+      return null;
+    }
+  };
+
+  // Prepare consensus view based on annotations
+  const prepareConsensusView = (discussionId: string, taskId: number): SubTask[] | null => {
+    try {
+      // First check if there's already a consensus annotation
+      const consensusAnnotation = getConsensusAnnotation(discussionId, taskId);
       
-      // Check for existing consensus annotation
-      const existingConsensus = getConsensusAnnotation(discussionId, taskId);
-      if (existingConsensus) {
-        consensusTasks.forEach(task => {
-          const value = existingConsensus.data[task.id];
-          if (value !== undefined) {
-            if (task.textInput) {
-              task.textValue = value as string;
-            } else {
-              task.selectedOption = value as string;
+      // Initialize with empty consensus tasks based on taskId
+      let consensusTasks: SubTask[] = [];
+      if (taskId === 1) {
+        consensusTasks = JSON.parse(JSON.stringify(consensusTask1));
+      } else if (taskId === 2) {
+        consensusTasks = JSON.parse(JSON.stringify(consensusTask2));
+      } else if (taskId === 3) {
+        consensusTasks = JSON.parse(JSON.stringify(consensusTask3));
+      }
+      
+      // If we have an existing consensus annotation, use it
+      if (consensusAnnotation) {
+        return consensusTasks.map(task => {
+          const savedValue = consensusAnnotation.data[task.id];
+          if (savedValue !== undefined) {
+            if (typeof savedValue === 'boolean') {
+              return {
+                ...task,
+                selectedOption: savedValue ? 'true' : 'false'
+              };
+            } else if (typeof savedValue === 'string') {
+              return {
+                ...task,
+                selectedOption: savedValue,
+                textValue: consensusAnnotation.data[`${task.id}_text`] || ''
+              };
             }
-            task.status = 'completed';
           }
+          return task;
         });
       }
       
-      return consensusTasks;
-    }
-    else if (taskId === 3) {
-      // Task 3 consensus fields
-      const consensusTasks: SubTask[] = [
-        {
-          id: 'rewrite',
-          title: 'Final Rewritten Question',
-          status: 'pending',
-          description: 'Select the best rewritten question or provide your own',
-          textInput: true
-        },
-        {
-          id: 'shortAnswer',
-          title: 'Final Short Answer List',
-          status: 'pending',
-          description: 'Select the best short answer list or provide your own',
-          textInput: true
-        },
-        {
-          id: 'longAnswer',
-          title: 'Final Long Answer',
-          status: 'pending',
-          description: 'Select the best long answer or provide your own',
-          textInput: true
-        },
-        {
-          id: 'classify',
-          title: 'Final Question Type',
-          status: 'pending',
-          options: ['Search', 'Reasoning'],
-          description: `Annotator consensus: ${
-            taskAnnotations.filter(a => a.data.classify === 'Search').length
-          } Search, ${
-            taskAnnotations.filter(a => a.data.classify === 'Reasoning').length
-          } Reasoning`
-        },
-        {
-          id: 'supporting',
-          title: 'Final Supporting Documentation',
-          status: 'pending',
-          description: 'Select the best supporting documentation or provide your own',
-          textInput: true
-        }
-      ];
+      // If no consensus exists yet, populate with annotator data
+      const annotations = getAnnotationsForTask(discussionId, taskId);
       
-      // Check for existing consensus annotation
-      const existingConsensus = getConsensusAnnotation(discussionId, taskId);
-      if (existingConsensus) {
-        consensusTasks.forEach(task => {
-          const value = existingConsensus.data[task.id];
-          if (value !== undefined) {
-            if (task.textInput) {
-              task.textValue = value as string;
-            } else {
-              task.selectedOption = value as string;
+      if (!annotations || annotations.length === 0) {
+        return consensusTasks;
+      }
+      
+      // Convert all annotations to form fields format and count occurrences
+      const fieldCounts: Record<string, Record<string, number>> = {};
+      
+      annotations.forEach(annotation => {
+        Object.entries(annotation.data).forEach(([key, value]) => {
+          // Skip text fields
+          if (key.endsWith('_text')) return;
+          
+          if (!fieldCounts[key]) {
+            fieldCounts[key] = {};
+          }
+          
+          const stringValue = typeof value === 'boolean' ? (value ? 'true' : 'false') : String(value);
+          
+          if (!fieldCounts[key][stringValue]) {
+            fieldCounts[key][stringValue] = 0;
+          }
+          
+          fieldCounts[key][stringValue]++;
+        });
+      });
+      
+      // Find most common value for each field
+      return consensusTasks.map(task => {
+        const counts = fieldCounts[task.id];
+        if (!counts) return task;
+        
+        let maxCount = 0;
+        let mostCommonValue: string = '';
+        
+        Object.entries(counts).forEach(([value, count]) => {
+          if (count > maxCount) {
+            maxCount = count;
+            mostCommonValue = value;
+          }
+        });
+        
+        // If we found a most common value
+        if (mostCommonValue) {
+          // Check if any annotation has text for this field
+          const textFieldKey = `${task.id}_text`;
+          let textValue = '';
+          
+          for (const annotation of annotations) {
+            if (annotation.data[textFieldKey]) {
+              textValue = annotation.data[textFieldKey] as string;
+              break;
             }
-            task.status = 'completed';
           }
-        });
-      }
-      
-      return consensusTasks;
+          
+          return {
+            ...task,
+            selectedOption: mostCommonValue,
+            textValue
+          };
+        }
+        
+        return task;
+      });
+    } catch (error) {
+      console.error('Failed to prepare consensus view:', error);
+      toast.error('Failed to prepare consensus view');
+      return null;
     }
-    
-    return [];
-  }, [getAnnotationsForTask, getConsensusAnnotation]);
+  };
 
-  // Save annotation (combining regular and consensus cases)
-  const handleSaveAnnotation = useCallback(async (
+  // Save annotation or consensus
+  const handleSaveAnnotation = async (
     discussionId: string | null, 
-    currentStep: number, 
+    taskId: number, 
     viewMode: 'grid' | 'detail' | 'consensus',
     uploadedImage: string | null,
     codeDownloadUrl: string | null,
-    handleBackToGrid: () => void
+    onComplete: () => void
   ) => {
-    if (!discussionId || !user) return;
-    
-    let data: Record<string, string | boolean> = {};
-    let success = false;
+    if (!discussionId || !user) {
+      toast.error('Missing discussion ID or user information');
+      return;
+    }
     
     try {
-      if (viewMode === 'consensus') {
-        // Save consensus annotation
-        if (currentStep === 1) {
-          consensusTask1.forEach(task => {
-            if (task.textInput && task.textValue) {
-              data[task.id] = task.textValue;
-            } else if (task.selectedOption) {
-              data[task.id] = task.selectedOption;
-            }
-          });
-          
-          success = await saveConsensusAnnotation({
-            discussionId,
-            userId: user.id,
-            taskId: 1,
-            data
-          });
-        } else if (currentStep === 2) {
-          // Add uploaded image info if available
-          if (uploadedImage) {
-            data['executionScreenshot'] = uploadedImage;
-          }
-          
-          consensusTask2.forEach(task => {
-            if (task.textInput && task.textValue) {
-              data[task.id] = task.textValue;
-            } else if (task.selectedOption) {
-              data[task.id] = task.selectedOption;
-            }
-          });
-          
-          success = await saveConsensusAnnotation({
-            discussionId,
-            userId: user.id,
-            taskId: 2,
-            data
-          });
-        } else if (currentStep === 3) {
-          consensusTask3.forEach(task => {
-            if (task.textInput && task.textValue) {
-              data[task.id] = task.textValue;
-            } else if (task.selectedOption) {
-              data[task.id] = task.selectedOption;
-            }
-          });
-          
-          success = await saveConsensusAnnotation({
-            discussionId,
-            userId: user.id,
-            taskId: 3,
-            data
-          });
-        }
-      } else {
-        // Save regular annotation
-        if (currentStep === 1) {
-          task1SubTasks.forEach(task => {
-            if (task.selectedOption) {
-              data[task.id] = task.selectedOption;
-            }
-          });
-          
-          success = await saveAnnotation({
-            discussionId,
-            userId: user.id,
-            taskId: 1,
-            data
-          });
-        } else if (currentStep === 2) {
-          // Add uploaded image info if available
-          if (uploadedImage) {
-            data['executionScreenshot'] = uploadedImage;
-          }
-          
-          // Add code download link if provided
-          if (codeDownloadUrl) {
-            data['download'] = codeDownloadUrl;
-          }
-          
-          task2SubTasks.forEach(task => {
-            if (task.textInput && task.textValue) {
-              data[task.id] = task.textValue;
-            } else if (task.selectedOption) {
-              data[task.id] = task.selectedOption;
-            }
-          });
-          
-          success = await saveAnnotation({
-            discussionId,
-            userId: user.id,
-            taskId: 2,
-            data
-          });
-        } else if (currentStep === 3) {
-          task3SubTasks.forEach(task => {
-            if (task.textInput && task.textValue) {
-              data[task.id] = task.textValue;
-            } else if (task.selectedOption) {
-              data[task.id] = task.selectedOption;
-            }
-          });
-          
-          success = await saveAnnotation({
-            discussionId,
-            userId: user.id,
-            taskId: 3,
-            data
-          });
-        }
-      }
+      setLoading(true);
       
-      if (success) {
-        toast.success('Annotation saved successfully');
-        updateStepCompletionStatus(currentStep, true);
-        handleBackToGrid();
+      // Prepare data based on current task and mode
+      let taskData: Record<string, any> = {};
+      let currentTasks: SubTask[] = [];
+      
+      if (viewMode === 'detail') {
+        // Regular annotation
+        switch (taskId) {
+          case 1:
+            currentTasks = task1SubTasks;
+            break;
+          case 2:
+            currentTasks = task2SubTasks;
+            // Add screenshot and code download URL for task 2
+            if (uploadedImage) {
+              taskData.screenshot = uploadedImage;
+            }
+            if (codeDownloadUrl) {
+              taskData.codeDownloadUrl = codeDownloadUrl;
+            }
+            break;
+          case 3:
+            currentTasks = task3SubTasks;
+            break;
+          default:
+            toast.error('Invalid task ID');
+            return;
+        }
+        
+        // Convert form data to API format
+        currentTasks.forEach(task => {
+          if (task.selectedOption) {
+            // Convert string 'true'/'false' to actual boolean for boolean fields
+            if (task.selectedOption === 'true' || task.selectedOption === 'false') {
+              taskData[task.id] = task.selectedOption === 'true';
+            } else {
+              taskData[task.id] = task.selectedOption;
+            }
+            
+            // Add text value if present
+            if (task.textValue) {
+              taskData[`${task.id}_text`] = task.textValue;
+            }
+          }
+        });
+        
+        // Save annotation
+        const success = await saveAnnotation({
+          userId: user.id,
+          discussionId,
+          taskId,
+          data: taskData,
+          isConsensus: false
+        });
+        
+        if (success) {
+          updateStepCompletionStatus(taskId, true);
+          toast.success('Annotation saved successfully');
+          onComplete();
+        }
+      } else if (viewMode === 'consensus') {
+        // Consensus annotation
+        if (!isPodLead(user)) {
+          toast.error('Only pod leads can save consensus annotations');
+          return;
+        }
+        
+        switch (taskId) {
+          case 1:
+            currentTasks = consensusTask1;
+            break;
+          case 2:
+            currentTasks = consensusTask2;
+            break;
+          case 3:
+            currentTasks = consensusTask3;
+            break;
+          default:
+            toast.error('Invalid task ID');
+            return;
+        }
+        
+        // Convert form data to API format
+        currentTasks.forEach(task => {
+          if (task.selectedOption) {
+            // Convert string 'true'/'false' to actual boolean for boolean fields
+            if (task.selectedOption === 'true' || task.selectedOption === 'false') {
+              taskData[task.id] = task.selectedOption === 'true';
+            } else {
+              taskData[task.id] = task.selectedOption;
+            }
+            
+            // Add text value if present
+            if (task.textValue) {
+              taskData[`${task.id}_text`] = task.textValue;
+            }
+          }
+        });
+        
+        // Save consensus annotation
+        const success = await saveConsensusAnnotation({
+          userId: user.id,
+          discussionId,
+          taskId,
+          data: taskData,
+          isConsensus: true
+        });
+        
+        if (success) {
+          updateStepCompletionStatus(taskId, true);
+          toast.success('Consensus saved successfully');
+          onComplete();
+        }
       }
     } catch (error) {
-      console.error("Error saving annotation:", error);
+      console.error('Failed to save annotation:', error);
       toast.error('Failed to save annotation');
+    } finally {
+      setLoading(false);
     }
-  }, [task1SubTasks, task2SubTasks, task3SubTasks, consensusTask1, consensusTask2, consensusTask3, user, saveAnnotation, saveConsensusAnnotation, updateStepCompletionStatus]);
+  };
+  
+  // Helper function to check if user is pod lead
+  const isPodLead = (user: User): boolean => {
+    return user.role === 'pod_lead';
+  };
 
   return {
     loadUserAnnotation,
     prepareConsensusView,
-    handleSaveAnnotation
+    handleSaveAnnotation,
+    loading
   };
 }

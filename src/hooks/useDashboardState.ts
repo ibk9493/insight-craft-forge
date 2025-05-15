@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -111,12 +112,17 @@ export function useDashboardState() {
 
   const handleFileUpload = (file: File) => {
     // Create a URL for the uploaded file
-    const imageUrl = URL.createObjectURL(file);
-    setUploadedImage(imageUrl);
-    
-    toast.success("Screenshot uploaded successfully", {
-      description: "The image can be used for code execution verification"
-    });
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (e.target && e.target.result) {
+        setUploadedImage(e.target.result as string);
+        
+        toast.success("Screenshot uploaded successfully", {
+          description: "The image can be used for code execution verification"
+        });
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const updateStepCompletionStatus = (stepIndex: number, completed: boolean) => {
@@ -165,6 +171,33 @@ export function useDashboardState() {
       }
     }
   }, [discussionId, queryParams, discussions, isInitialized]);
+
+  // Load discussion tasks status
+  useEffect(() => {
+    if (discussionId && discussions.length > 0) {
+      const discussion = discussions.find(d => d.id === discussionId);
+      if (discussion) {
+        // Update tasks with current status from the discussion
+        setTasks([
+          {
+            ...tasks[0],
+            status: discussion.tasks.task1.status,
+            currentAnnotators: discussion.tasks.task1.annotators
+          },
+          {
+            ...tasks[1],
+            status: discussion.tasks.task2.status,
+            currentAnnotators: discussion.tasks.task2.annotators
+          },
+          {
+            ...tasks[2],
+            status: discussion.tasks.task3.status,
+            currentAnnotators: discussion.tasks.task3.annotators
+          }
+        ]);
+      }
+    }
+  }, [discussionId, discussions]);
 
   // Check login and redirect if necessary
   useEffect(() => {
