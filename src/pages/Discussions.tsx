@@ -1,11 +1,10 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Header from '@/components/layout/Header';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Github, ArrowRight, ExternalLink, Filter } from 'lucide-react';
+import { Search, Github, ExternalLink, Filter } from 'lucide-react';
 import { toast } from 'sonner';
 import { useUser } from '@/contexts/UserContext';
 import { useAnnotationData } from '@/hooks/useAnnotationData';
@@ -26,7 +25,15 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 
 // Discussion type imported from api service
-import { Discussion } from '@/services/api';
+import { Discussion, TaskState } from '@/services/api';
+
+interface EnhancedDiscussion extends Discussion {
+  tasks: {
+    task1: TaskState & { userAnnotated?: boolean };
+    task2: TaskState & { userAnnotated?: boolean };
+    task3: TaskState & { userAnnotated?: boolean };
+  };
+}
 
 const Discussions = () => {
   const { isAuthenticated, user, isPodLead } = useUser();
@@ -35,7 +42,7 @@ const Discussions = () => {
   const { discussions, getUserAnnotationStatus, getDiscussionsByStatus, loading, error } = useAnnotationData();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [filteredDiscussions, setFilteredDiscussions] = useState<Discussion[]>([]);
+  const [filteredDiscussions, setFilteredDiscussions] = useState<EnhancedDiscussion[]>([]);
   const [showMyAnnotations, setShowMyAnnotations] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   
@@ -124,7 +131,7 @@ const Discussions = () => {
             userAnnotated: userAnnotationStatus.task3,
           },
         },
-      };
+      } as EnhancedDiscussion;
     });
     
     setFilteredDiscussions(updatedDiscussions);

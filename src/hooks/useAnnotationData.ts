@@ -1,7 +1,6 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { useUser } from '@/contexts/UserContext';
-import { api, useMockApi, mockData, Discussion, Annotation, ApiError } from '@/services/api';
+import { api, useMockApi, mockData, Discussion, Annotation, ApiError, TaskStatus } from '@/services/api';
 import { toast } from 'sonner';
 
 export interface UserAnnotationStatus {
@@ -26,8 +25,24 @@ export function useAnnotationData() {
         let data: Discussion[];
         
         if (useMockApi) {
-          // Use mock data when API_URL is not available
-          data = [...mockData.discussions];
+          // Ensure mock data adheres to the TaskStatus type
+          data = mockData.discussions.map(discussion => ({
+            ...discussion,
+            tasks: {
+              task1: {
+                ...discussion.tasks.task1,
+                status: discussion.tasks.task1.status as TaskStatus
+              },
+              task2: {
+                ...discussion.tasks.task2,
+                status: discussion.tasks.task2.status as TaskStatus
+              },
+              task3: {
+                ...discussion.tasks.task3,
+                status: discussion.tasks.task3.status as TaskStatus
+              }
+            }
+          }));
         } else {
           data = await api.discussions.getAll();
         }
@@ -110,8 +125,8 @@ export function useAnnotationData() {
     );
   }, [annotations]);
 
-  // Save an annotation
-  const saveAnnotation = useCallback(async (annotation: Omit<Annotation, 'timestamp'>) => {
+  // Save an annotation with proper type signature to return a Promise
+  const saveAnnotation = useCallback(async (annotation: Omit<Annotation, 'timestamp'>): Promise<boolean> => {
     try {
       setLoading(true);
       let newAnnotation: Annotation;
@@ -199,35 +214,35 @@ export function useAnnotationData() {
             updatedTasks.task1 = { 
               ...updatedTasks.task1,
               annotators: uniqueUserCount,
-              status: uniqueUserCount >= 3 ? 'completed' : 'unlocked'
+              status: uniqueUserCount >= 3 ? 'completed' as TaskStatus : 'unlocked' as TaskStatus
             };
             
             // Unlock task 2 if task 1 is completed
             if (uniqueUserCount >= 3) {
               updatedTasks.task2 = { 
                 ...updatedTasks.task2,
-                status: 'unlocked'
+                status: 'unlocked' as TaskStatus
               };
             }
           } else if (taskId === 2) {
             updatedTasks.task2 = { 
               ...updatedTasks.task2,
               annotators: uniqueUserCount,
-              status: uniqueUserCount >= 3 ? 'completed' : 'unlocked'
+              status: uniqueUserCount >= 3 ? 'completed' as TaskStatus : 'unlocked' as TaskStatus
             };
             
             // Unlock task 3 if task 2 is completed
             if (uniqueUserCount >= 3) {
               updatedTasks.task3 = { 
                 ...updatedTasks.task3,
-                status: 'unlocked'
+                status: 'unlocked' as TaskStatus
               };
             }
           } else if (taskId === 3) {
             updatedTasks.task3 = { 
               ...updatedTasks.task3,
               annotators: uniqueUserCount,
-              status: uniqueUserCount >= 5 ? 'completed' : 'unlocked'
+              status: uniqueUserCount >= 5 ? 'completed' as TaskStatus : 'unlocked' as TaskStatus
             };
           }
           
@@ -314,8 +329,8 @@ export function useAnnotationData() {
     }
   }, [getAnnotationsForTask]);
 
-  // Save consensus annotation by pod lead
-  const saveConsensusAnnotation = useCallback(async (consensusAnnotation: Omit<Annotation, 'timestamp'>) => {
+  // Save consensus annotation with proper type signature
+  const saveConsensusAnnotation = useCallback(async (consensusAnnotation: Omit<Annotation, 'timestamp'>): Promise<boolean> => {
     try {
       setLoading(true);
       

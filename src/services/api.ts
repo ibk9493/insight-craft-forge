@@ -8,18 +8,9 @@ export interface Discussion {
   repository: string;
   createdAt: string;
   tasks: {
-    task1: {
-      status: 'locked' | 'unlocked' | 'completed';
-      annotators: number;
-    };
-    task2: {
-      status: 'locked' | 'unlocked' | 'completed';
-      annotators: number;
-    };
-    task3: {
-      status: 'locked' | 'unlocked' | 'completed';
-      annotators: number;
-    };
+    task1: TaskState;
+    task2: TaskState;
+    task3: TaskState;
   };
 }
 
@@ -317,3 +308,11 @@ export const mockData = {
   ],
   consensus: []
 };
+
+export type TaskStatus = 'locked' | 'unlocked' | 'completed';
+
+export interface TaskState {
+  status: TaskStatus;
+  annotators: number;
+  userAnnotated?: boolean;
+}
