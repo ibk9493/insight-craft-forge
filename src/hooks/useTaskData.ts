@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { SubTask } from '@/components/dashboard/TaskCard';
+import { SubTask, SubTaskStatus } from '@/components/dashboard/TaskCard';
 
 interface ConsensusResult {
   status: 'pending' | 'completed';
@@ -192,7 +192,7 @@ export function useTaskData() {
           ? { 
               ...task, 
               selectedOption, 
-              status: selectedOption ? 'completed' : 'pending'
+              status: selectedOption ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
             } 
           : task
       );
@@ -203,7 +203,7 @@ export function useTaskData() {
           ? { 
               ...task, 
               selectedOption, 
-              status: selectedOption ? 'completed' : 'pending'
+              status: selectedOption ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
             } 
           : task
       );
@@ -214,7 +214,7 @@ export function useTaskData() {
           ? { 
               ...task, 
               selectedOption, 
-              status: selectedOption ? 'completed' : 'pending'
+              status: selectedOption ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
             } 
           : task
       );
@@ -231,7 +231,7 @@ export function useTaskData() {
       if (taskId === 'relevance' && selectedOption === 'No') {
         setTask1SubTasks(task1SubTasks.map(task => {
           if (task.id !== 'relevance' && task.id !== 'consensus') {
-            return { ...task, status: 'na', selectedOption: 'N/A' };
+            return { ...task, status: 'na' as SubTaskStatus, selectedOption: 'N/A' };
           }
           return task;
         }));
@@ -240,7 +240,7 @@ export function useTaskData() {
       if (taskId === 'learning' && selectedOption === 'No') {
         setTask1SubTasks(task1SubTasks.map(task => {
           if (task.id !== 'relevance' && task.id !== 'learning' && task.id !== 'consensus') {
-            return { ...task, status: 'na', selectedOption: 'N/A' };
+            return { ...task, status: 'na' as SubTaskStatus, selectedOption: 'N/A' };
           }
           return task;
         }));
@@ -351,21 +351,21 @@ export function useTaskData() {
     if (taskSet === 'task1') {
       setTask1SubTasks(task1SubTasks.map(task => 
         task.id === 'consensus' 
-          ? { ...task, selectedOption: result, status: 'completed' } 
+          ? { ...task, selectedOption: result, status: 'completed' as SubTaskStatus } 
           : task
       ));
     }
     else if (taskSet === 'task2') {
       setTask2SubTasks(task2SubTasks.map(task => 
         task.id === 'consensus' 
-          ? { ...task, selectedOption: result, status: 'completed' } 
+          ? { ...task, selectedOption: result, status: 'completed' as SubTaskStatus } 
           : task
       ));
     }
     else if (taskSet === 'task3') {
       setTask3SubTasks(task3SubTasks.map(task => 
         task.id === 'consensus' 
-          ? { ...task, selectedOption: result, status: 'completed' } 
+          ? { ...task, selectedOption: result, status: 'completed' as SubTaskStatus } 
           : task
       ));
     }
