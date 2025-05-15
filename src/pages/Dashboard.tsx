@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Header from '@/components/layout/Header';
 import UrlInput from '@/components/dashboard/UrlInput';
@@ -6,6 +6,7 @@ import TaskCard, { SubTask, SubTaskStatus } from '@/components/dashboard/TaskCar
 import TaskGrid from '@/components/dashboard/TaskGrid';
 import ProgressStepper from '@/components/dashboard/ProgressStepper';
 import Summary from '@/components/dashboard/Summary';
+import DashboardNavigation from '@/components/dashboard/DashboardNavigation';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, ArrowRight, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -25,6 +26,7 @@ const Dashboard = () => {
   const [currentStep, setCurrentStep] = useState(taskNumber || 0);
   const [viewMode, setViewMode] = useState<'grid' | 'detail' | 'consensus'>(taskNumber ? 'detail' : 'grid');
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(taskNumber);
+  const [isInitialized, setIsInitialized] = useState<boolean>(false);
   
   // Get access to annotation data
   const {
@@ -221,18 +223,25 @@ const Dashboard = () => {
       navigate('/discussions');
     }
     
+    setIsInitialized(true);
+  }, [discussionId, taskNumber, navigate, isAuthenticated, isPodLead]);
+
+  // Load URL from query params or discussion entry - using a separate effect with dependencies that don't change frequently
+  useEffect(() => {
+    if (!isInitialized) return;
+    
     // If URL parameter is in the query, use it
     const urlParam = queryParams.get('url');
     if (urlParam) {
       setUrl(urlParam);
-    } else if (discussionId) {
+    } else if (discussionId && discussions.length > 0) {
       // Get URL from discussion
       const discussion = discussions.find(d => d.id === discussionId);
       if (discussion) {
         setUrl(discussion.url);
       }
     }
-  }, [discussionId, taskNumber, navigate, queryParams, isAuthenticated, isPodLead]);
+  }, [discussionId, queryParams, discussions, isInitialized]);
 
   // Load user's existing annotation if it exists
   const loadUserAnnotation = (discussionId: string, taskId: number) => {
@@ -518,13 +527,13 @@ const Dashboard = () => {
     }
   };
 
-  const handleBackToGrid = () => {
+  const handleBackToGrid = useCallback(() => {
     setViewMode('grid');
     setSelectedTaskId(null);
     
     // Update URL without the task parameter
     navigate(`/dashboard?discussionId=${discussionId}`, { replace: true });
-  };
+  }, [discussionId, navigate]);
 
   const updateStepCompletionStatus = (stepIndex: number, completed: boolean) => {
     setSteps(steps.map((step, index) => 
@@ -1012,29 +1021,14 @@ const Dashboard = () => {
           </>
         )}
         
-        <div className="flex justify-between mt-6">
-          {viewMode !== 'grid' && (
-            <Button
-              onClick={handleBackToGrid}
-              variant="outline"
-              className="flex items-center gap-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>Back to Grid</span>
-            </Button>
-          )}
-          
-          {viewMode !== 'grid' && currentStep < 4 && currentStep > 0 && (
-            <Button
-              onClick={handleSaveAnnotation}
-              disabled={!canProceed()}
-              className="flex items-center gap-2 bg-dashboard-blue hover:bg-blue-600 ml-auto"
-            >
-              <span>Save {viewMode === 'consensus' ? 'Consensus' : 'Annotation'}</span>
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
+        <DashboardNavigation 
+          viewMode={viewMode}
+          currentStep={currentStep}
+          canProceed={canProceed()}
+          onBackToGrid={handleBackToGrid}
+          onSave={handleSaveAnnotation}
+          isConsensus={viewMode === 'consensus'}
+        />
       </div>
     </div>
   );
