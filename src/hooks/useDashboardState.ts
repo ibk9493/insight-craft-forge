@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -110,13 +109,6 @@ export function useDashboardState() {
     }
   }, [discussionId, navigate]);
 
-  const handleLogout = () => {
-    if (user && logout) {
-      logout();
-      navigate('/');
-    }
-  };
-
   const handleFileUpload = (file: File) => {
     // Create a URL for the uploaded file
     const imageUrl = URL.createObjectURL(file);
@@ -227,7 +219,6 @@ export function useDashboardState() {
     handleUrlSubmit,
     handleSelectTask,
     handleBackToGrid,
-    handleLogout,
     handleFileUpload,
     updateStepCompletionStatus,
     toggleConsensusMode,
@@ -240,7 +231,6 @@ export function useDashboardState() {
     saveAnnotation,
     saveConsensusAnnotation,
     getConsensusAnnotation,
-    discussions,
-    logout
+    discussions
   };
 }

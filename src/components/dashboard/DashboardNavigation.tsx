@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, ArrowRight, LogOut, Upload, Download } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Upload, Download } from 'lucide-react';
 
 interface DashboardNavigationProps {
   viewMode: 'grid' | 'detail' | 'consensus';
@@ -10,7 +10,6 @@ interface DashboardNavigationProps {
   onBackToGrid: () => void;
   onSave: () => void;
   isConsensus: boolean;
-  onLogout?: () => void;
   onFileUpload?: (file: File) => void;
   codeDownloadUrl?: string;
 }
@@ -22,7 +21,6 @@ const DashboardNavigation = ({
   onBackToGrid,
   onSave,
   isConsensus,
-  onLogout,
   onFileUpload,
   codeDownloadUrl
 }: DashboardNavigationProps) => {
@@ -44,17 +42,6 @@ const DashboardNavigation = ({
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Back to Tasks</span>
-          </Button>
-        )}
-        
-        {onLogout && (
-          <Button 
-            onClick={onLogout} 
-            variant="outline" 
-            className="flex items-center gap-2"
-          >
-            <span>Logout</span>
-            <LogOut className="h-4 w-4" />
           </Button>
         )}
       </div>

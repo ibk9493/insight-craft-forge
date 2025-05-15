@@ -1,4 +1,3 @@
-
 import React, { useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import UrlInput from '@/components/dashboard/UrlInput';
@@ -24,7 +23,6 @@ const Dashboard = () => {
     handleUrlSubmit,
     handleSelectTask,
     handleBackToGrid,
-    handleLogout,
     handleFileUpload,
     updateStepCompletionStatus,
     toggleConsensusMode,
@@ -302,7 +300,6 @@ const Dashboard = () => {
           onBackToGrid={handleBackToGrid}
           onSave={onSaveClick}
           isConsensus={viewMode === 'consensus'}
-          onLogout={handleLogout}
           onFileUpload={handleFileUpload}
           codeDownloadUrl={codeDownloadUrl}
         />
