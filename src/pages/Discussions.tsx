@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '@/components/layout/Header';
@@ -99,7 +98,9 @@ const Discussions = () => {
   };
 
   const startTask = (discussionId: string, taskNumber: number) => {
+    console.log(`Starting task ${taskNumber} for discussion ${discussionId}`);
     navigate(`/dashboard?discussionId=${discussionId}&task=${taskNumber}`);
+    toast.success(`Opening Task ${taskNumber}`);
   };
 
   const getTaskStatusClass = (status: 'locked' | 'unlocked' | 'completed') => {
