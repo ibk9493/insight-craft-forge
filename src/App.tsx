@@ -1,4 +1,5 @@
 
+import { useState, useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -12,8 +13,14 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 const App = () => {
-  // Check if user is logged in
-  const isLoggedIn = !!localStorage.getItem('user');
+  // Use state for authentication status
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  
+  // Check authentication status on load
+  useEffect(() => {
+    const user = localStorage.getItem('user');
+    setIsLoggedIn(!!user);
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -22,7 +29,10 @@ const App = () => {
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={!isLoggedIn ? <Login /> : <Navigate to="/discussions" />} />
+            <Route 
+              path="/" 
+              element={!isLoggedIn ? <Login onLoginSuccess={() => setIsLoggedIn(true)} /> : <Navigate to="/discussions" />} 
+            />
             <Route 
               path="/discussions" 
               element={isLoggedIn ? <Discussions /> : <Navigate to="/" />} 

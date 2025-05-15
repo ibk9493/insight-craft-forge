@@ -1,12 +1,15 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { toast } from 'sonner';
 
-const Login = () => {
+interface LoginProps {
+  onLoginSuccess: () => void;
+}
+
+const Login = ({ onLoginSuccess }: LoginProps) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
@@ -31,6 +34,11 @@ const Login = () => {
     // For demo purposes, accept any credentials
     toast.success('Login successful');
     localStorage.setItem('user', JSON.stringify({ username }));
+    
+    // Signal successful login to parent component
+    onLoginSuccess();
+    
+    // Navigate to discussions
     navigate('/discussions');
   };
 

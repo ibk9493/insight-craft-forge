@@ -1,6 +1,10 @@
-
 import { useState } from 'react';
 import { SubTask } from '@/components/dashboard/TaskCard';
+
+interface ConsensusResult {
+  status: 'pending' | 'completed';
+  result?: string;
+}
 
 export function useTaskData() {
   // Task 1 subtasks
@@ -38,7 +42,7 @@ export function useTaskData() {
       title: 'Consensus by 3 annotators',
       status: 'pending',
       options: ['Agreement', 'No Agreement'],
-      description: 'Check if there is consensus among annotators'
+      description: 'System-determined consensus based on annotator submissions'
     }
   ]);
   
@@ -77,7 +81,7 @@ export function useTaskData() {
       title: 'Consensus by 3 annotators',
       status: 'pending',
       options: ['Agreement', 'No Agreement'],
-      description: 'Check if there is consensus among annotators'
+      description: 'System-determined consensus based on annotator submissions'
     }
   ]);
   
@@ -123,9 +127,14 @@ export function useTaskData() {
       title: 'Consensus by 5 annotators',
       status: 'pending',
       options: ['Agreement', 'No Agreement'],
-      description: 'Check if there is consensus among annotators'
+      description: 'System-determined consensus based on annotator submissions'
     }
   ]);
+
+  // Store annotations from multiple annotators
+  const [task1Annotations, setTask1Annotations] = useState<Array<Record<string, string>>>([]);
+  const [task2Annotations, setTask2Annotations] = useState<Array<Record<string, string>>>([]);
+  const [task3Annotations, setTask3Annotations] = useState<Array<Record<string, string>>>([]);
   
   // Progress steps
   const [steps, setSteps] = useState([
@@ -172,6 +181,11 @@ export function useTaskData() {
   const handleSubTaskChange = (taskSet: string, taskId: string, selectedOption?: string) => {
     let updated: SubTask[] = [];
 
+    // Skip changes to consensus fields as they're system-determined
+    if (taskId === 'consensus') {
+      return;
+    }
+
     if (taskSet === 'task1') {
       updated = task1SubTasks.map(task => 
         task.id === taskId 
@@ -216,7 +230,7 @@ export function useTaskData() {
       // If relevance is No, mark the rest as N/A
       if (taskId === 'relevance' && selectedOption === 'No') {
         setTask1SubTasks(task1SubTasks.map(task => {
-          if (task.id !== 'relevance') {
+          if (task.id !== 'relevance' && task.id !== 'consensus') {
             return { ...task, status: 'na', selectedOption: 'N/A' };
           }
           return task;
@@ -225,12 +239,135 @@ export function useTaskData() {
       // If learning is No, mark the rest as N/A
       if (taskId === 'learning' && selectedOption === 'No') {
         setTask1SubTasks(task1SubTasks.map(task => {
-          if (task.id !== 'relevance' && task.id !== 'learning') {
+          if (task.id !== 'relevance' && task.id !== 'learning' && task.id !== 'consensus') {
             return { ...task, status: 'na', selectedOption: 'N/A' };
           }
           return task;
         }));
       }
+    }
+  };
+
+  // Function to save annotation when an annotator completes a task
+  const saveAnnotation = (taskSet: string) => {
+    let currentAnnotation: Record<string, string> = {};
+    
+    if (taskSet === 'task1') {
+      task1SubTasks.forEach(task => {
+        if (task.id !== 'consensus' && task.selectedOption) {
+          currentAnnotation[task.id] = task.selectedOption;
+        }
+      });
+      setTask1Annotations([...task1Annotations, currentAnnotation]);
+      
+      // If we have 3 annotators, determine consensus
+      if (task1Annotators + 1 >= 3) {
+        determineConsensus(taskSet);
+      }
+    } 
+    else if (taskSet === 'task2') {
+      task2SubTasks.forEach(task => {
+        if (task.id !== 'consensus' && task.selectedOption) {
+          currentAnnotation[task.id] = task.selectedOption;
+        }
+      });
+      setTask2Annotations([...task2Annotations, currentAnnotation]);
+      
+      // If we have 3 annotators, determine consensus
+      if (task2Annotators + 1 >= 3) {
+        determineConsensus(taskSet);
+      }
+    }
+    else if (taskSet === 'task3') {
+      task3SubTasks.forEach(task => {
+        if (task.id !== 'consensus' && task.selectedOption) {
+          currentAnnotation[task.id] = task.selectedOption;
+        }
+      });
+      setTask3Annotations([...task3Annotations, currentAnnotation]);
+      
+      // If we have 5 annotators, determine consensus
+      if (task3Annotators + 1 >= 5) {
+        determineConsensus(taskSet);
+      }
+    }
+  };
+
+  // Determine consensus based on majority rule
+  const determineConsensus = (taskSet: string) => {
+    if (taskSet === 'task1') {
+      const hasConsensus = checkMajorityAgreement(task1Annotations);
+      updateConsensusTask(taskSet, hasConsensus ? 'Agreement' : 'No Agreement');
+    }
+    else if (taskSet === 'task2') {
+      const hasConsensus = checkMajorityAgreement(task2Annotations);
+      updateConsensusTask(taskSet, hasConsensus ? 'Agreement' : 'No Agreement');
+    }
+    else if (taskSet === 'task3') {
+      const hasConsensus = checkMajorityAgreement(task3Annotations);
+      updateConsensusTask(taskSet, hasConsensus ? 'Agreement' : 'No Agreement');
+    }
+  };
+
+  // Check if there's majority agreement on all fields
+  const checkMajorityAgreement = (annotations: Array<Record<string, string>>): boolean => {
+    if (annotations.length === 0) return false;
+    
+    // Get all field keys except consensus
+    const fields = Object.keys(annotations[0]);
+    
+    for (const field of fields) {
+      const valueCount: Record<string, number> = {};
+      
+      // Count occurrences of each value
+      annotations.forEach(annotation => {
+        const value = annotation[field];
+        if (value) {
+          valueCount[value] = (valueCount[value] || 0) + 1;
+        }
+      });
+      
+      // Find the most common value
+      let maxCount = 0;
+      let majorityValue = '';
+      for (const [value, count] of Object.entries(valueCount)) {
+        if (count > maxCount) {
+          maxCount = count;
+          majorityValue = value;
+        }
+      }
+      
+      // Check if there's a majority (more than half)
+      if (maxCount <= annotations.length / 2) {
+        return false;
+      }
+    }
+    
+    return true;
+  };
+
+  // Update the consensus task with the result
+  const updateConsensusTask = (taskSet: string, result: string) => {
+    if (taskSet === 'task1') {
+      setTask1SubTasks(task1SubTasks.map(task => 
+        task.id === 'consensus' 
+          ? { ...task, selectedOption: result, status: 'completed' } 
+          : task
+      ));
+    }
+    else if (taskSet === 'task2') {
+      setTask2SubTasks(task2SubTasks.map(task => 
+        task.id === 'consensus' 
+          ? { ...task, selectedOption: result, status: 'completed' } 
+          : task
+      ));
+    }
+    else if (taskSet === 'task3') {
+      setTask3SubTasks(task3SubTasks.map(task => 
+        task.id === 'consensus' 
+          ? { ...task, selectedOption: result, status: 'completed' } 
+          : task
+      ));
     }
   };
 
@@ -268,6 +405,8 @@ export function useTaskData() {
     checkForSubtaskLogic,
     getTask1Progress,
     getTask2Progress,
-    getTask3Progress
+    getTask3Progress,
+    saveAnnotation,
+    determineConsensus
   };
 }

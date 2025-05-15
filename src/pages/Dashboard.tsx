@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Header from '@/components/layout/Header';
@@ -39,7 +38,8 @@ const Dashboard = () => {
     checkForSubtaskLogic,
     getTask1Progress,
     getTask2Progress,
-    getTask3Progress
+    getTask3Progress,
+    saveAnnotation
   } = useTaskData();
   
   const { 
@@ -147,14 +147,17 @@ const Dashboard = () => {
   };
 
   const handleCompleteAnnotation = (taskId: number) => {
-    // This simulates an annotator completing a task
+    // Save the annotation data
     if (taskId === 1) {
+      saveAnnotation('task1');
       setTask1Annotators(prev => Math.min(prev + 1, 3));
       toast.success(`Task 1: Annotator ${task1Annotators + 1}/3 completed`);
     } else if (taskId === 2) {
+      saveAnnotation('task2');
       setTask2Annotators(prev => Math.min(prev + 1, 3));
       toast.success(`Task 2: Annotator ${task2Annotators + 1}/3 completed`);
     } else if (taskId === 3) {
+      saveAnnotation('task3');
       setTask3Annotators(prev => Math.min(prev + 1, 5));
       toast.success(`Task 3: Annotator ${task3Annotators + 1}/5 completed`);
     }
