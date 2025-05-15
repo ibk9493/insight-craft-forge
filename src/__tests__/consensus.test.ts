@@ -84,7 +84,7 @@ describe('Consensus calculation', () => {
 
   it('should correctly determine consensus when all annotators agree', async () => {
     // Mock API response
-    api.consensus.calculate.mockResolvedValue({
+    api.consensus.calculate = vi.fn().mockResolvedValue({
       result: 'Agreement',
       agreement: true
     });
@@ -110,7 +110,7 @@ describe('Consensus calculation', () => {
 
   it('should correctly determine consensus when annotators disagree', async () => {
     // Mock API response for disagreement
-    api.consensus.calculate.mockResolvedValue({
+    api.consensus.calculate = vi.fn().mockResolvedValue({
       result: 'No Agreement',
       agreement: false
     });
@@ -136,7 +136,7 @@ describe('Consensus calculation', () => {
 
   it('should handle errors in consensus calculation gracefully', async () => {
     // Mock API response to throw an error
-    api.consensus.calculate.mockRejectedValue({
+    api.consensus.calculate = vi.fn().mockRejectedValue({
       message: 'Failed to calculate consensus'
     });
 
