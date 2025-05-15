@@ -311,8 +311,4 @@ export const mockData = {
 
 export type TaskStatus = 'locked' | 'unlocked' | 'completed';
 
-export type TaskState = {
-  status: TaskStatus;
-  annotators: number;
-  userAnnotated?: boolean;
-};
+export type TaskState = 'locked' | 'unlocked' | 'completed';
