@@ -1,13 +1,16 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '@/components/layout/Header';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Search, Github, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
+import { useUser } from '@/contexts/UserContext';
+import { useAnnotationData } from '@/hooks/useAnnotationData';
 
-// Sample discussion data - would be replaced with actual JSON data
+// Sample discussion data type
 interface Discussion {
   id: string;
   title: string;
@@ -18,92 +21,102 @@ interface Discussion {
     task1: {
       status: 'locked' | 'unlocked' | 'completed';
       annotators: number;
+      userAnnotated?: boolean;
     };
     task2: {
       status: 'locked' | 'unlocked' | 'completed';
       annotators: number;
+      userAnnotated?: boolean;
     };
     task3: {
       status: 'locked' | 'unlocked' | 'completed';
       annotators: number;
+      userAnnotated?: boolean;
     };
   };
 }
 
-const sampleDiscussions: Discussion[] = [
-  {
-    id: '1',
-    title: 'How to implement feature X?',
-    url: 'https://github.com/org/repo/discussions/123',
-    repository: 'org/repo',
-    createdAt: '2025-05-01',
-    tasks: {
-      task1: { status: 'unlocked', annotators: 1 },
-      task2: { status: 'locked', annotators: 0 },
-      task3: { status: 'locked', annotators: 0 }
-    }
-  },
-  {
-    id: '2',
-    title: 'Bug in module Y',
-    url: 'https://github.com/org/repo/discussions/456',
-    repository: 'org/repo',
-    createdAt: '2025-05-05',
-    tasks: {
-      task1: { status: 'completed', annotators: 3 },
-      task2: { status: 'unlocked', annotators: 1 },
-      task3: { status: 'locked', annotators: 0 }
-    }
-  },
-  {
-    id: '3',
-    title: 'Documentation update for Z',
-    url: 'https://github.com/org/repo/discussions/789',
-    repository: 'org/repo',
-    createdAt: '2025-05-10',
-    tasks: {
-      task1: { status: 'completed', annotators: 3 },
-      task2: { status: 'completed', annotators: 3 },
-      task3: { status: 'unlocked', annotators: 2 }
-    }
-  }
-];
-
 const Discussions = () => {
-  const [discussions, setDiscussions] = useState<Discussion[]>(sampleDiscussions);
-  const [searchQuery, setSearchQuery] = useState('');
+  const { isAuthenticated, user, isPodLead } = useUser();
   const navigate = useNavigate();
-
-  // Check if user is logged in
+  const { discussions, getUserAnnotationStatus, getDiscussionsByStatus } = useAnnotationData();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredDiscussions, setFilteredDiscussions] = useState<Discussion[]>([]);
+  
   useEffect(() => {
-    const user = localStorage.getItem('user');
-    if (!user) {
+    if (!isAuthenticated) {
       navigate('/');
+      return;
     }
-  }, [navigate]);
+    
+    // Update discussions with user annotation status
+    if (discussions && user) {
+      const updatedDiscussions = discussions.map(discussion => {
+        const userAnnotationStatus = getUserAnnotationStatus(discussion.id, user.id);
+        return {
+          ...discussion,
+          tasks: {
+            task1: {
+              ...discussion.tasks.task1,
+              userAnnotated: userAnnotationStatus.task1,
+            },
+            task2: {
+              ...discussion.tasks.task2,
+              userAnnotated: userAnnotationStatus.task2,
+            },
+            task3: {
+              ...discussion.tasks.task3,
+              userAnnotated: userAnnotationStatus.task3,
+            },
+          },
+        };
+      });
+      
+      setFilteredDiscussions(updatedDiscussions);
+    }
+  }, [discussions, isAuthenticated, navigate, getUserAnnotationStatus, user]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    // Filter discussions based on search query
-    // This is a simplified implementation
+    
     if (searchQuery) {
-      const filtered = sampleDiscussions.filter(
+      const filtered = discussions.filter(
         discussion => discussion.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                       discussion.repository.toLowerCase().includes(searchQuery.toLowerCase())
       );
-      setDiscussions(filtered);
+      setFilteredDiscussions(filtered);
     } else {
-      setDiscussions(sampleDiscussions);
+      setFilteredDiscussions(discussions);
     }
   };
 
   const startTask = (discussionId: string, taskNumber: number) => {
-    console.log(`Starting task ${taskNumber} for discussion ${discussionId}`);
+    // Check if user has already annotated this task
+    const discussion = discussions.find(d => d.id === discussionId);
+    if (!discussion) return;
+    
+    // For pod leads, they can always view the results
+    if (isPodLead) {
+      navigate(`/dashboard?discussionId=${discussionId}&task=${taskNumber}`);
+      return;
+    }
+    
+    // For annotators, check if they've already annotated
+    const userAnnotationStatus = getUserAnnotationStatus(discussionId, user!.id);
+    const hasAnnotated = taskNumber === 1 ? userAnnotationStatus.task1 : 
+                        taskNumber === 2 ? userAnnotationStatus.task2 : 
+                        userAnnotationStatus.task3;
+    
+    if (hasAnnotated) {
+      toast.info("You've already annotated this task. You can view or edit your annotation.");
+    }
+    
     navigate(`/dashboard?discussionId=${discussionId}&task=${taskNumber}`);
-    toast.success(`Opening Task ${taskNumber}`);
   };
 
-  const getTaskStatusClass = (status: 'locked' | 'unlocked' | 'completed') => {
+  const getTaskStatusClass = (status: 'locked' | 'unlocked' | 'completed', userAnnotated?: boolean) => {
+    if (userAnnotated) return 'bg-purple-100 text-purple-800';
+    
     switch (status) {
       case 'completed':
         return 'bg-green-100 text-green-800';
@@ -117,14 +130,23 @@ const Discussions = () => {
   const getTaskButtonState = (discussion: Discussion, taskNumber: number) => {
     const task = taskNumber === 1 ? discussion.tasks.task1 : 
                 taskNumber === 2 ? discussion.tasks.task2 : discussion.tasks.task3;
-                
-    const isEnabled = task.status === 'unlocked' || task.status === 'completed';
+    
+    const userAnnotated = task.userAnnotated;
+    const isEnabled = task.status === 'unlocked' || task.status === 'completed' || isPodLead;
     const requiredAnnotators = taskNumber === 3 ? 5 : 3;
-    const text = task.status === 'completed' 
-      ? `View Results (${task.annotators}/${requiredAnnotators})` 
-      : task.status === 'unlocked' 
-        ? `Start Task (${task.annotators}/${requiredAnnotators})` 
-        : `Locked (${task.annotators}/${requiredAnnotators})`;
+    
+    let text = '';
+    if (isPodLead && task.status === 'completed') {
+      text = `Create Consensus (${task.annotators}/${requiredAnnotators})`;
+    } else if (userAnnotated) {
+      text = `View Your Annotation (${task.annotators}/${requiredAnnotators})`;
+    } else if (task.status === 'completed') {
+      text = `View Results (${task.annotators}/${requiredAnnotators})`;
+    } else if (task.status === 'unlocked') {
+      text = `Start Task (${task.annotators}/${requiredAnnotators})`;
+    } else {
+      text = `Locked (${task.annotators}/${requiredAnnotators})`;
+    }
         
     return {
       isEnabled,
@@ -156,7 +178,7 @@ const Discussions = () => {
         </div>
         
         <div className="grid gap-6">
-          {discussions.map((discussion) => (
+          {filteredDiscussions.map((discussion) => (
             <Card key={discussion.id} className="overflow-hidden">
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -181,8 +203,8 @@ const Discussions = () => {
                   <div className="border rounded-md p-4">
                     <div className="flex justify-between items-center mb-2">
                       <h3 className="font-medium">Task 1: Question Quality</h3>
-                      <span className={`text-xs px-2 py-1 rounded-full ${getTaskStatusClass(discussion.tasks.task1.status)}`}>
-                        {discussion.tasks.task1.status}
+                      <span className={`text-xs px-2 py-1 rounded-full ${getTaskStatusClass(discussion.tasks.task1.status, discussion.tasks.task1.userAnnotated)}`}>
+                        {discussion.tasks.task1.userAnnotated ? 'Annotated' : discussion.tasks.task1.status}
                       </span>
                     </div>
                     <p className="text-xs text-gray-500 mb-4">
@@ -202,8 +224,8 @@ const Discussions = () => {
                   <div className="border rounded-md p-4">
                     <div className="flex justify-between items-center mb-2">
                       <h3 className="font-medium">Task 2: Answer Quality</h3>
-                      <span className={`text-xs px-2 py-1 rounded-full ${getTaskStatusClass(discussion.tasks.task2.status)}`}>
-                        {discussion.tasks.task2.status}
+                      <span className={`text-xs px-2 py-1 rounded-full ${getTaskStatusClass(discussion.tasks.task2.status, discussion.tasks.task2.userAnnotated)}`}>
+                        {discussion.tasks.task2.userAnnotated ? 'Annotated' : discussion.tasks.task2.status}
                       </span>
                     </div>
                     <p className="text-xs text-gray-500 mb-4">
@@ -223,8 +245,8 @@ const Discussions = () => {
                   <div className="border rounded-md p-4">
                     <div className="flex justify-between items-center mb-2">
                       <h3 className="font-medium">Task 3: Rewriting</h3>
-                      <span className={`text-xs px-2 py-1 rounded-full ${getTaskStatusClass(discussion.tasks.task3.status)}`}>
-                        {discussion.tasks.task3.status}
+                      <span className={`text-xs px-2 py-1 rounded-full ${getTaskStatusClass(discussion.tasks.task3.status, discussion.tasks.task3.userAnnotated)}`}>
+                        {discussion.tasks.task3.userAnnotated ? 'Annotated' : discussion.tasks.task3.status}
                       </span>
                     </div>
                     <p className="text-xs text-gray-500 mb-4">

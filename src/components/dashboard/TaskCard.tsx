@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, CheckCircle, AlertCircle, HelpCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Textarea } from '@/components/ui/textarea';
 
 export interface SubTask {
   id: string;
@@ -10,6 +11,8 @@ export interface SubTask {
   options?: string[];
   selectedOption?: string;
   description?: string;
+  textInput?: boolean;
+  textValue?: string;
 }
 
 interface TaskCardProps {
@@ -17,7 +20,7 @@ interface TaskCardProps {
   description: string;
   subTasks: SubTask[];
   status: 'pending' | 'inProgress' | 'completed';
-  onSubTaskChange: (taskId: string, selectedOption?: string) => void;
+  onSubTaskChange: (taskId: string, selectedOption?: string, textValue?: string) => void;
   active?: boolean;
 }
 
@@ -91,6 +94,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 {task.description && (
                   <p className="text-gray-500 text-xs mb-2">{task.description}</p>
                 )}
+                
+                {/* Option buttons */}
                 {task.options && task.options.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-2">
                     {task.options.map((option) => (
@@ -107,6 +112,18 @@ const TaskCard: React.FC<TaskCardProps> = ({
                         {option}
                       </button>
                     ))}
+                  </div>
+                )}
+                
+                {/* Text input field */}
+                {task.textInput && (
+                  <div className="mt-3">
+                    <Textarea
+                      value={task.textValue || ''}
+                      onChange={(e) => onSubTaskChange(task.id, undefined, e.target.value)}
+                      placeholder={`Enter ${task.title.toLowerCase()}`}
+                      className="min-h-[100px] text-sm"
+                    />
                   </div>
                 )}
               </div>

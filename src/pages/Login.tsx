@@ -1,27 +1,24 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
+import { useUser } from '@/contexts/UserContext';
 
-interface LoginProps {
-  onLoginSuccess: () => void;
-}
-
-const Login = ({ onLoginSuccess }: LoginProps) => {
+const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
+  const { login, isAuthenticated } = useUser();
   
-  // Check if already logged in
-  useEffect(() => {
-    const user = localStorage.getItem('user');
-    if (user) {
+  // Redirect if already logged in
+  React.useEffect(() => {
+    if (isAuthenticated) {
       navigate('/discussions');
     }
-  }, [navigate]);
+  }, [isAuthenticated, navigate]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,15 +29,14 @@ const Login = ({ onLoginSuccess }: LoginProps) => {
       return;
     }
     
-    // For demo purposes, accept any credentials
-    toast.success('Login successful');
-    localStorage.setItem('user', JSON.stringify({ username }));
+    const success = login(username, password);
     
-    // Signal successful login to parent component
-    onLoginSuccess();
-    
-    // Navigate to discussions
-    navigate('/discussions');
+    if (success) {
+      toast.success('Login successful');
+      navigate('/discussions');
+    } else {
+      toast.error('Invalid username or password');
+    }
   };
 
   return (
@@ -75,6 +71,13 @@ const Login = ({ onLoginSuccess }: LoginProps) => {
               Login
             </Button>
           </form>
+          <div className="mt-4 text-center text-sm text-gray-500">
+            <p>Available test accounts:</p>
+            <p>annotator1 / password</p>
+            <p>annotator2 / password</p>
+            <p>annotator3 / password</p>
+            <p>lead / password</p>
+          </div>
         </CardContent>
       </Card>
     </div>
