@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Header from '@/components/layout/Header';
 import UrlInput from '@/components/dashboard/UrlInput';
@@ -17,7 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 const Dashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, isAuthenticated, isPodLead } = useUser();
+  const { user, isAuthenticated, isPodLead, logout } = useUser();
   const queryParams = new URLSearchParams(location.search);
   const discussionId = queryParams.get('discussionId');
   const taskNumber = queryParams.get('task') ? parseInt(queryParams.get('task')!) : null;
@@ -27,6 +27,11 @@ const Dashboard = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'detail' | 'consensus'>(taskNumber ? 'detail' : 'grid');
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(taskNumber);
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [codeDownloadUrl, setCodeDownloadUrl] = useState<string | null>(null);
+  
+  // Prevent infinite render cycles
+  const initialLoadRef = useRef(false);
   
   // Get access to annotation data
   const {
@@ -199,34 +204,55 @@ const Dashboard = () => {
       return;
     }
     
-    // If discussion ID is provided but no task is selected, show grid view
-    if (discussionId && !taskNumber) {
-      setViewMode('grid');
-      setCurrentStep(0);
-    }
-    // If discussion ID and task are provided, show task detail view
-    else if (discussionId && taskNumber) {
-      setViewMode('detail');
-      setCurrentStep(taskNumber);
-      setSelectedTaskId(taskNumber);
+    // Only run once on component mount
+    if (!initialLoadRef.current) {
+      initialLoadRef.current = true;
       
-      // Load existing annotation for this user if it exists
-      loadUserAnnotation(discussionId, taskNumber);
-      
-      // For pod leads, also prepare consensus view
-      if (isPodLead) {
-        prepareConsensusView(discussionId, taskNumber);
+      // If discussion ID is provided but no task is selected, show grid view
+      if (discussionId && !taskNumber) {
+        setViewMode('grid');
+        setCurrentStep(0);
       }
+      // If discussion ID and task are provided, show task detail view
+      else if (discussionId && taskNumber) {
+        setViewMode('detail');
+        setCurrentStep(taskNumber);
+        setSelectedTaskId(taskNumber);
+        
+        // Load existing annotation for this user if it exists
+        if (user) {
+          loadUserAnnotation(discussionId, taskNumber);
+        }
+        
+        // For pod leads, also prepare consensus view
+        if (isPodLead) {
+          prepareConsensusView(discussionId, taskNumber);
+        }
+      }
+      // If nothing is provided, redirect to discussions page
+      else if (!discussionId) {
+        navigate('/discussions');
+      }
+      
+      setIsInitialized(true);
     }
-    // If nothing is provided, redirect to discussions page
-    else if (!discussionId) {
-      navigate('/discussions');
-    }
-    
-    setIsInitialized(true);
   }, [discussionId, taskNumber, navigate, isAuthenticated, isPodLead]);
 
-  // Load URL from query params or discussion entry - using a separate effect with dependencies that don't change frequently
+  // Set code download URL when discussion ID is available
+  useEffect(() => {
+    if (discussionId) {
+      // Find the discussion to get repository URL
+      const discussion = discussions.find(d => d.id === discussionId);
+      if (discussion) {
+        // In a real implementation, this would come from the API or a config file
+        // For now, we'll use a mock URL for demonstration
+        const repoName = discussion.repository || 'owner/repo';
+        setCodeDownloadUrl(`https://github.com/${repoName}/archive/refs/tags/latest.tar.gz`);
+      }
+    }
+  }, [discussionId, discussions]);
+
+  // Load URL from query params or discussion entry
   useEffect(() => {
     if (!isInitialized) return;
     
@@ -517,7 +543,7 @@ const Dashboard = () => {
     navigate(`/dashboard?discussionId=${discussionId}&task=${taskId}`, { replace: true });
     
     // Load user annotation if it exists
-    if (discussionId) {
+    if (discussionId && user) {
       loadUserAnnotation(discussionId, taskId);
       
       // For pod leads, also prepare consensus view
@@ -532,8 +558,27 @@ const Dashboard = () => {
     setSelectedTaskId(null);
     
     // Update URL without the task parameter
-    navigate(`/dashboard?discussionId=${discussionId}`, { replace: true });
+    if (discussionId) {
+      navigate(`/dashboard?discussionId=${discussionId}`, { replace: true });
+    } else {
+      navigate(`/dashboard`, { replace: true });
+    }
   }, [discussionId, navigate]);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
+
+  const handleFileUpload = (file: File) => {
+    // Create a URL for the uploaded file
+    const imageUrl = URL.createObjectURL(file);
+    setUploadedImage(imageUrl);
+    
+    toast.success("Screenshot uploaded successfully", {
+      description: "The image can be used for code execution verification"
+    });
+  };
 
   const updateStepCompletionStatus = (stepIndex: number, completed: boolean) => {
     setSteps(steps.map((step, index) => 
@@ -652,138 +697,115 @@ const Dashboard = () => {
     let data: Record<string, string | boolean> = {};
     let success = false;
     
-    if (viewMode === 'consensus') {
-      // Save consensus annotation
-      if (currentStep === 1) {
-        consensusTask1.forEach(task => {
-          if (task.textInput && task.textValue) {
-            data[task.id] = task.textValue;
-          } else if (task.selectedOption) {
-            data[task.id] = task.selectedOption;
-          }
-        });
-        
-        try {
+    try {
+      if (viewMode === 'consensus') {
+        // Save consensus annotation
+        if (currentStep === 1) {
+          consensusTask1.forEach(task => {
+            if (task.textInput && task.textValue) {
+              data[task.id] = task.textValue;
+            } else if (task.selectedOption) {
+              data[task.id] = task.selectedOption;
+            }
+          });
+          
           success = await saveConsensusAnnotation({
             discussionId,
             userId: user.id,
             taskId: 1,
             data
           });
-        } catch (error) {
-          toast.error('Failed to save consensus');
-          return;
-        }
-        
-      } else if (currentStep === 2) {
-        consensusTask2.forEach(task => {
-          if (task.textInput && task.textValue) {
-            data[task.id] = task.textValue;
-          } else if (task.selectedOption) {
-            data[task.id] = task.selectedOption;
+        } else if (currentStep === 2) {
+          // Add uploaded image info if available
+          if (uploadedImage) {
+            data['executionScreenshot'] = uploadedImage;
           }
-        });
-        
-        try {
+          
+          consensusTask2.forEach(task => {
+            if (task.textInput && task.textValue) {
+              data[task.id] = task.textValue;
+            } else if (task.selectedOption) {
+              data[task.id] = task.selectedOption;
+            }
+          });
+          
           success = await saveConsensusAnnotation({
             discussionId,
             userId: user.id,
             taskId: 2,
             data
           });
-        } catch (error) {
-          toast.error('Failed to save consensus');
-          return;
-        }
-        
-      } else if (currentStep === 3) {
-        consensusTask3.forEach(task => {
-          if (task.textInput && task.textValue) {
-            data[task.id] = task.textValue;
-          } else if (task.selectedOption) {
-            data[task.id] = task.selectedOption;
-          }
-        });
-        
-        try {
+        } else if (currentStep === 3) {
+          consensusTask3.forEach(task => {
+            if (task.textInput && task.textValue) {
+              data[task.id] = task.textValue;
+            } else if (task.selectedOption) {
+              data[task.id] = task.selectedOption;
+            }
+          });
+          
           success = await saveConsensusAnnotation({
             discussionId,
             userId: user.id,
             taskId: 3,
             data
           });
-        } catch (error) {
-          toast.error('Failed to save consensus');
-          return;
         }
-      }
-      
-      if (success) {
-        toast.success('Consensus saved successfully');
-        updateStepCompletionStatus(currentStep, true);
-        handleBackToGrid();
-      }
-    } else {
-      // Save regular annotation
-      if (currentStep === 1) {
-        task1SubTasks.forEach(task => {
-          if (task.selectedOption) {
-            data[task.id] = task.selectedOption;
-          }
-        });
-        
-        try {
+      } else {
+        // Save regular annotation
+        if (currentStep === 1) {
+          task1SubTasks.forEach(task => {
+            if (task.selectedOption) {
+              data[task.id] = task.selectedOption;
+            }
+          });
+          
           success = await saveAnnotation({
             discussionId,
             userId: user.id,
             taskId: 1,
             data
           });
-        } catch (error) {
-          toast.error('Failed to save annotation');
-          return;
-        }
-        
-      } else if (currentStep === 2) {
-        task2SubTasks.forEach(task => {
-          if (task.textInput && task.textValue) {
-            data[task.id] = task.textValue;
-          } else if (task.selectedOption) {
-            data[task.id] = task.selectedOption;
+        } else if (currentStep === 2) {
+          // Add uploaded image info if available
+          if (uploadedImage) {
+            data['executionScreenshot'] = uploadedImage;
           }
-        });
-        
-        try {
+          
+          // Add code download link if provided
+          if (codeDownloadUrl) {
+            data['download'] = codeDownloadUrl;
+          }
+          
+          task2SubTasks.forEach(task => {
+            if (task.textInput && task.textValue) {
+              data[task.id] = task.textValue;
+            } else if (task.selectedOption) {
+              data[task.id] = task.selectedOption;
+            }
+          });
+          
           success = await saveAnnotation({
             discussionId,
             userId: user.id,
             taskId: 2,
             data
           });
-        } catch (error) {
-          toast.error('Failed to save annotation');
-          return;
-        }
-        
-      } else if (currentStep === 3) {
-        task3SubTasks.forEach(task => {
-          if (task.textInput && task.textValue) {
-            data[task.id] = task.textValue;
-          } else if (task.selectedOption) {
-            data[task.id] = task.selectedOption;
-          }
-        });
-        
-        try {
+        } else if (currentStep === 3) {
+          task3SubTasks.forEach(task => {
+            if (task.textInput && task.textValue) {
+              data[task.id] = task.textValue;
+            } else if (task.selectedOption) {
+              data[task.id] = task.selectedOption;
+            }
+          });
+          
           success = await saveAnnotation({
             discussionId,
             userId: user.id,
             taskId: 3,
             data
           });
-        } catch (error) {
-          toast.error('Failed to save annotation');
-          return;
         }
       }
       
@@ -792,6 +814,9 @@ const Dashboard = () => {
         updateStepCompletionStatus(currentStep, true);
         handleBackToGrid();
       }
+    } catch (error) {
+      console.error("Error saving annotation:", error);
+      toast.error('Failed to save annotation');
     }
   };
 
@@ -903,11 +928,12 @@ const Dashboard = () => {
               <p className="text-gray-600 text-sm">
                 GitHub Discussion URL: <span className="text-dashboard-blue">{url}</span>
               </p>
-              <p className="text-gray-600 text-sm mt-2">
-                Task 1 requires 3 annotators, Task 2 requires 3 annotators, Task 3 requires 5 annotators.
-              </p>
             </div>
-            <TaskGrid tasks={tasks} onSelectTask={handleSelectTask} />
+            <TaskGrid 
+              tasks={tasks} 
+              onSelectTask={handleSelectTask} 
+              githubUrl={url}
+            />
           </>
         )}
         
@@ -928,6 +954,7 @@ const Dashboard = () => {
               </div>
             )}
             
+            {/* Task cards for different steps */}
             {currentStep === 1 && viewMode === 'detail' && (
               <TaskCard
                 title="Task 1: Question Quality Assessment"
@@ -1028,6 +1055,9 @@ const Dashboard = () => {
           onBackToGrid={handleBackToGrid}
           onSave={handleSaveAnnotation}
           isConsensus={viewMode === 'consensus'}
+          onLogout={handleLogout}
+          onFileUpload={handleFileUpload}
+          codeDownloadUrl={codeDownloadUrl}
         />
       </div>
     </div>

@@ -311,8 +311,8 @@ export const mockData = {
 
 export type TaskStatus = 'locked' | 'unlocked' | 'completed';
 
-export interface TaskState {
+export type TaskState = {
   status: TaskStatus;
   annotators: number;
   userAnnotated?: boolean;
-}
+};
