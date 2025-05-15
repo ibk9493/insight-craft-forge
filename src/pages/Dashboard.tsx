@@ -1,8 +1,8 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import UrlInput from '@/components/dashboard/UrlInput';
 import TaskCard, { SubTask } from '@/components/dashboard/TaskCard';
+import TaskGrid from '@/components/dashboard/TaskGrid';
 import ProgressStepper from '@/components/dashboard/ProgressStepper';
 import Summary from '@/components/dashboard/Summary';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,10 @@ import { toast } from 'sonner';
 const Dashboard = () => {
   const [url, setUrl] = useState<string>('');
   const [currentStep, setCurrentStep] = useState(0);
+  const [viewMode, setViewMode] = useState<'grid' | 'detail'>('grid');
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+  
+  // Task 1 subtasks
   const [task1SubTasks, setTask1SubTasks] = useState<SubTask[]>([
     {
       id: 'relevance',
@@ -50,6 +54,7 @@ const Dashboard = () => {
     }
   ]);
   
+  // Task 2 subtasks
   const [task2SubTasks, setTask2SubTasks] = useState<SubTask[]>([
     {
       id: 'aspects',
@@ -88,6 +93,7 @@ const Dashboard = () => {
     }
   ]);
   
+  // Task 3 subtasks
   const [task3SubTasks, setTask3SubTasks] = useState<SubTask[]>([
     {
       id: 'rewrite',
@@ -133,6 +139,7 @@ const Dashboard = () => {
     }
   ]);
   
+  // Progress steps
   const [steps, setSteps] = useState([
     { id: 1, title: 'Input URL', completed: false },
     { id: 2, title: 'Task 1', completed: false },
@@ -141,13 +148,97 @@ const Dashboard = () => {
     { id: 5, title: 'Summary', completed: false },
   ]);
 
+  // Add annotator counters
+  const [task1Annotators, setTask1Annotators] = useState(0);
+  const [task2Annotators, setTask2Annotators] = useState(0);
+  const [task3Annotators, setTask3Annotators] = useState(0);
+
+  // Tasks for grid view
+  const [tasks, setTasks] = useState([
+    {
+      id: 1,
+      title: "Question Quality Assessment",
+      description: "Evaluate the quality of the question based on relevance, learning value, clarity, and image grounding.",
+      status: 'locked' as 'locked' | 'unlocked' | 'completed',
+      requiredAnnotators: 3,
+      currentAnnotators: 0
+    },
+    {
+      id: 2,
+      title: "Answer Quality Assessment",
+      description: "Evaluate the quality of the answer based on comprehensiveness, explanation, code execution, and completeness.",
+      status: 'locked' as 'locked' | 'unlocked' | 'completed',
+      requiredAnnotators: 3,
+      currentAnnotators: 0
+    },
+    {
+      id: 3,
+      title: "Rewrite Question and Answer",
+      description: "Rewrite the question and answer to improve clarity, conciseness, and coherence.",
+      status: 'locked' as 'locked' | 'unlocked' | 'completed',
+      requiredAnnotators: 5,
+      currentAnnotators: 0
+    }
+  ]);
+
+  // Effect to update tasks status based on URL and annotator counts
+  useEffect(() => {
+    if (!url) return;
+    
+    const updatedTasks = [...tasks];
+    
+    // Task 1 is unlocked once URL is submitted
+    updatedTasks[0].status = task1Annotators >= 3 ? 'completed' : 'unlocked';
+    updatedTasks[0].currentAnnotators = task1Annotators;
+    
+    // Task 2 is unlocked when Task 1 is completed (3 annotators)
+    if (task1Annotators >= 3) {
+      updatedTasks[1].status = task2Annotators >= 3 ? 'completed' : 'unlocked';
+      updatedTasks[1].currentAnnotators = task2Annotators;
+    }
+    
+    // Task 3 is unlocked when Task 2 is completed (3 annotators)
+    if (task2Annotators >= 3) {
+      updatedTasks[2].status = task3Annotators >= 5 ? 'completed' : 'unlocked';
+      updatedTasks[2].currentAnnotators = task3Annotators;
+    }
+    
+    setTasks(updatedTasks);
+  }, [url, task1Annotators, task2Annotators, task3Annotators]);
+
   const handleUrlSubmit = (url: string) => {
     setUrl(url);
-    setCurrentStep(1);
     updateStepCompletionStatus(0, true);
     toast.success("URL submitted successfully", {
-      description: "Now complete Task 1: Question Quality Assessment"
+      description: "Tasks are now available for annotation"
     });
+  };
+
+  const handleSelectTask = (taskId: number) => {
+    setSelectedTaskId(taskId);
+    setViewMode('detail');
+    setCurrentStep(taskId);
+  };
+
+  const handleBackToGrid = () => {
+    setViewMode('grid');
+    setSelectedTaskId(null);
+  };
+
+  const handleCompleteAnnotation = (taskId: number) => {
+    // This simulates an annotator completing a task
+    if (taskId === 1) {
+      setTask1Annotators(prev => Math.min(prev + 1, 3));
+      toast.success(`Task 1: Annotator ${task1Annotators + 1}/3 completed`);
+    } else if (taskId === 2) {
+      setTask2Annotators(prev => Math.min(prev + 1, 3));
+      toast.success(`Task 2: Annotator ${task2Annotators + 1}/3 completed`);
+    } else if (taskId === 3) {
+      setTask3Annotators(prev => Math.min(prev + 1, 5));
+      toast.success(`Task 3: Annotator ${task3Annotators + 1}/5 completed`);
+    }
+    
+    handleBackToGrid();
   };
 
   const handleSubTaskChange = (taskSet: string, taskId: string, selectedOption?: string) => {
@@ -244,27 +335,24 @@ const Dashboard = () => {
 
   const handleNext = () => {
     if (currentStep < 4) {
-      // Mark current step as completed
       updateStepCompletionStatus(currentStep, true);
-      setCurrentStep(currentStep + 1);
       
-      // Show appropriate toast
-      const nextTaskMessages = [
-        "Now complete Task 1: Question Quality Assessment",
-        "Now complete Task 2: Answer Quality Assessment",
-        "Now complete Task 3: Rewrite Question and Answer",
-        "Review your evaluation summary"
-      ];
-      
-      toast.success(`Step ${currentStep + 1} completed`, {
-        description: nextTaskMessages[currentStep]
-      });
+      // Simulate annotator completion
+      if (currentStep === 1) {
+        handleCompleteAnnotation(1);
+      } else if (currentStep === 2) {
+        handleCompleteAnnotation(2);
+      } else if (currentStep === 3) {
+        handleCompleteAnnotation(3);
+      } else {
+        setCurrentStep(currentStep + 1);
+      }
     }
   };
 
   const handleBack = () => {
-    if (currentStep > 0) {
-      setCurrentStep(currentStep - 1);
+    if (currentStep > 0 && viewMode === 'detail') {
+      handleBackToGrid();
     }
   };
 
@@ -300,78 +388,112 @@ const Dashboard = () => {
     };
   };
 
+  // Determine if all tasks are completed and we can show summary
+  const allTasksCompleted = task1Annotators >= 3 && task2Annotators >= 3 && task3Annotators >= 5;
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <Header />
       
       <div className="container max-w-4xl mx-auto px-4 py-6 flex-grow">
-        <ProgressStepper steps={steps} currentStep={currentStep + 1} />
-        
         {currentStep === 0 && (
           <UrlInput onSubmit={handleUrlSubmit} />
         )}
         
-        {currentStep === 1 && (
-          <TaskCard
-            title="Task 1: Question Quality Assessment"
-            description="Evaluate the quality of the question based on relevance, learning value, clarity, and image grounding."
-            subTasks={task1SubTasks}
-            status={getTask1Progress()}
-            onSubTaskChange={(taskId, selectedOption) => 
-              handleSubTaskChange('task1', taskId, selectedOption)
-            }
-            active={true}
-          />
+        {url && currentStep > 0 && viewMode === 'grid' && (
+          <>
+            <div className="mb-6">
+              <h2 className="text-xl font-semibold mb-2">Annotation Tasks</h2>
+              <p className="text-gray-600 text-sm">
+                GitHub Discussion URL: <span className="text-dashboard-blue">{url}</span>
+              </p>
+              <p className="text-gray-600 text-sm mt-2">
+                Task 1 requires 3 annotators, Task 2 requires 3 annotators, Task 3 requires 5 annotators.
+              </p>
+            </div>
+            <TaskGrid tasks={tasks} onSelectTask={handleSelectTask} />
+            
+            {allTasksCompleted && (
+              <div className="mt-6 text-center">
+                <Button 
+                  onClick={() => setCurrentStep(4)}
+                  className="bg-dashboard-blue hover:bg-blue-600"
+                >
+                  View Final Summary
+                </Button>
+              </div>
+            )}
+          </>
         )}
         
-        {currentStep === 2 && (
-          <TaskCard
-            title="Task 2: Answer Quality Assessment"
-            description="Evaluate the quality of the answer based on comprehensiveness, explanation, code execution, and completeness."
-            subTasks={task2SubTasks}
-            status={getTask2Progress()}
-            onSubTaskChange={(taskId, selectedOption) => 
-              handleSubTaskChange('task2', taskId, selectedOption)
-            }
-            active={true}
-          />
-        )}
-        
-        {currentStep === 3 && (
-          <TaskCard
-            title="Task 3: Rewrite Question and Answer"
-            description="Rewrite the question and answer to improve clarity, conciseness, and coherence."
-            subTasks={task3SubTasks}
-            status={getTask3Progress()}
-            onSubTaskChange={(taskId, selectedOption) => 
-              handleSubTaskChange('task3', taskId, selectedOption)
-            }
-            active={true}
-          />
-        )}
-        
-        {currentStep === 4 && (
-          <Summary results={getSummaryData()} />
+        {url && viewMode === 'detail' && (
+          <>
+            <ProgressStepper steps={steps} currentStep={currentStep} />
+            
+            {currentStep === 1 && (
+              <TaskCard
+                title="Task 1: Question Quality Assessment"
+                description="Evaluate the quality of the question based on relevance, learning value, clarity, and image grounding."
+                subTasks={task1SubTasks}
+                status={getTask1Progress()}
+                onSubTaskChange={(taskId, selectedOption) => 
+                  handleSubTaskChange('task1', taskId, selectedOption)
+                }
+                active={true}
+              />
+            )}
+            
+            {currentStep === 2 && (
+              <TaskCard
+                title="Task 2: Answer Quality Assessment"
+                description="Evaluate the quality of the answer based on comprehensiveness, explanation, code execution, and completeness."
+                subTasks={task2SubTasks}
+                status={getTask2Progress()}
+                onSubTaskChange={(taskId, selectedOption) => 
+                  handleSubTaskChange('task2', taskId, selectedOption)
+                }
+                active={true}
+              />
+            )}
+            
+            {currentStep === 3 && (
+              <TaskCard
+                title="Task 3: Rewrite Question and Answer"
+                description="Rewrite the question and answer to improve clarity, conciseness, and coherence."
+                subTasks={task3SubTasks}
+                status={getTask3Progress()}
+                onSubTaskChange={(taskId, selectedOption) => 
+                  handleSubTaskChange('task3', taskId, selectedOption)
+                }
+                active={true}
+              />
+            )}
+            
+            {currentStep === 4 && (
+              <Summary results={getSummaryData()} />
+            )}
+          </>
         )}
         
         <div className="flex justify-between mt-6">
-          <Button
-            onClick={handleBack}
-            disabled={currentStep === 0}
-            variant="outline"
-            className="flex items-center gap-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span>Back</span>
-          </Button>
+          {viewMode === 'detail' && currentStep > 0 && (
+            <Button
+              onClick={handleBack}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Back to Grid</span>
+            </Button>
+          )}
           
-          {currentStep < 4 && (
+          {viewMode === 'detail' && currentStep < 4 && currentStep > 0 && (
             <Button
               onClick={handleNext}
               disabled={!canProceed()}
-              className="flex items-center gap-2 bg-dashboard-blue hover:bg-blue-600"
+              className="flex items-center gap-2 bg-dashboard-blue hover:bg-blue-600 ml-auto"
             >
-              <span>Next</span>
+              <span>Complete Annotation</span>
               <ArrowRight className="h-4 w-4" />
             </Button>
           )}
