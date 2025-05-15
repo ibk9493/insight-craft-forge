@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Header from '@/components/layout/Header';
 import UrlInput from '@/components/dashboard/UrlInput';
-import TaskCard, { SubTask } from '@/components/dashboard/TaskCard';
+import TaskCard, { SubTask, SubTaskStatus } from '@/components/dashboard/TaskCard';
 import TaskGrid from '@/components/dashboard/TaskGrid';
 import ProgressStepper from '@/components/dashboard/ProgressStepper';
 import Summary from '@/components/dashboard/Summary';
@@ -250,7 +249,7 @@ const Dashboard = () => {
           return {
             ...task,
             selectedOption: value as string,
-            status: 'completed'
+            status: 'completed' as SubTaskStatus
           };
         }
         return task;
@@ -265,7 +264,7 @@ const Dashboard = () => {
             ...task,
             selectedOption: value as string,
             textValue: task.textInput ? value as string : undefined,
-            status: 'completed'
+            status: 'completed' as SubTaskStatus
           };
         }
         return task;
@@ -280,7 +279,7 @@ const Dashboard = () => {
             ...task,
             selectedOption: task.textInput ? undefined : value as string,
             textValue: task.textInput ? value as string : undefined,
-            status: 'completed'
+            status: 'completed' as SubTaskStatus
           };
         }
         return task;
@@ -543,7 +542,7 @@ const Dashboard = () => {
                 ...task, 
                 selectedOption,
                 textValue,
-                status: (selectedOption || textValue) ? 'completed' : 'pending'
+                status: (selectedOption || textValue) ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
               } 
             : task
         );
@@ -555,7 +554,7 @@ const Dashboard = () => {
                 ...task, 
                 selectedOption,
                 textValue,
-                status: (selectedOption || textValue) ? 'completed' : 'pending'
+                status: (selectedOption || textValue) ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
               } 
             : task
         );
@@ -567,7 +566,7 @@ const Dashboard = () => {
                 ...task, 
                 selectedOption,
                 textValue,
-                status: (selectedOption || textValue) ? 'completed' : 'pending'
+                status: (selectedOption || textValue) ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
               } 
             : task
         );
@@ -581,7 +580,7 @@ const Dashboard = () => {
             ? { 
                 ...task, 
                 selectedOption,
-                status: selectedOption ? 'completed' : 'pending'
+                status: selectedOption ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
               } 
             : task
         );
@@ -593,7 +592,7 @@ const Dashboard = () => {
                 ...task, 
                 selectedOption,
                 textValue,
-                status: (selectedOption || textValue) ? 'completed' : 'pending'
+                status: (selectedOption || textValue) ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
               } 
             : task
         );
@@ -605,7 +604,7 @@ const Dashboard = () => {
                 ...task, 
                 selectedOption,
                 textValue,
-                status: (selectedOption || textValue) ? 'completed' : 'pending'
+                status: (selectedOption || textValue) ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
               } 
             : task
         );

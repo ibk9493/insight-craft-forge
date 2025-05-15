@@ -1,13 +1,14 @@
-
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, CheckCircle, AlertCircle, HelpCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Textarea } from '@/components/ui/textarea';
 
+export type SubTaskStatus = 'pending' | 'completed' | 'failed' | 'na';
+
 export interface SubTask {
   id: string;
   title: string;
-  status: 'pending' | 'completed' | 'failed' | 'na';
+  status: SubTaskStatus;
   options?: string[];
   selectedOption?: string;
   description?: string;
