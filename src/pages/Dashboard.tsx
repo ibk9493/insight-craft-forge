@@ -637,7 +637,7 @@ const Dashboard = () => {
     return true;
   };
 
-  const handleSaveAnnotation = () => {
+  const handleSaveAnnotation = async () => {
     if (!discussionId || !user) return;
     
     let data: Record<string, string | boolean> = {};
@@ -654,12 +654,17 @@ const Dashboard = () => {
           }
         });
         
-        success = saveConsensusAnnotation({
-          discussionId,
-          userId: user.id,
-          taskId: 1,
-          data
-        });
+        try {
+          success = await saveConsensusAnnotation({
+            discussionId,
+            userId: user.id,
+            taskId: 1,
+            data
+          });
+        } catch (error) {
+          toast.error('Failed to save consensus');
+          return;
+        }
         
       } else if (currentStep === 2) {
         consensusTask2.forEach(task => {
@@ -670,12 +675,17 @@ const Dashboard = () => {
           }
         });
         
-        success = saveConsensusAnnotation({
-          discussionId,
-          userId: user.id,
-          taskId: 2,
-          data
-        });
+        try {
+          success = await saveConsensusAnnotation({
+            discussionId,
+            userId: user.id,
+            taskId: 2,
+            data
+          });
+        } catch (error) {
+          toast.error('Failed to save consensus');
+          return;
+        }
         
       } else if (currentStep === 3) {
         consensusTask3.forEach(task => {
@@ -686,12 +696,17 @@ const Dashboard = () => {
           }
         });
         
-        success = saveConsensusAnnotation({
-          discussionId,
-          userId: user.id,
-          taskId: 3,
-          data
-        });
+        try {
+          success = await saveConsensusAnnotation({
+            discussionId,
+            userId: user.id,
+            taskId: 3,
+            data
+          });
+        } catch (error) {
+          toast.error('Failed to save consensus');
+          return;
+        }
       }
       
       if (success) {
@@ -708,12 +723,17 @@ const Dashboard = () => {
           }
         });
         
-        success = saveAnnotation({
-          discussionId,
-          userId: user.id,
-          taskId: 1,
-          data
-        });
+        try {
+          success = await saveAnnotation({
+            discussionId,
+            userId: user.id,
+            taskId: 1,
+            data
+          });
+        } catch (error) {
+          toast.error('Failed to save annotation');
+          return;
+        }
         
       } else if (currentStep === 2) {
         task2SubTasks.forEach(task => {
@@ -724,12 +744,17 @@ const Dashboard = () => {
           }
         });
         
-        success = saveAnnotation({
-          discussionId,
-          userId: user.id,
-          taskId: 2,
-          data
-        });
+        try {
+          success = await saveAnnotation({
+            discussionId,
+            userId: user.id,
+            taskId: 2,
+            data
+          });
+        } catch (error) {
+          toast.error('Failed to save annotation');
+          return;
+        }
         
       } else if (currentStep === 3) {
         task3SubTasks.forEach(task => {
@@ -740,12 +765,17 @@ const Dashboard = () => {
           }
         });
         
-        success = saveAnnotation({
-          discussionId,
-          userId: user.id,
-          taskId: 3,
-          data
-        });
+        try {
+          success = await saveAnnotation({
+            discussionId,
+            userId: user.id,
+            taskId: 3,
+            data
+          });
+        } catch (error) {
+          toast.error('Failed to save annotation');
+          return;
+        }
       }
       
       if (success) {
