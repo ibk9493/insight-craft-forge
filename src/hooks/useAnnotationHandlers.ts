@@ -2,8 +2,9 @@
 // This is a new file that we'll create to fix the annotation loading issue
 import { useState } from 'react';
 import { SubTask } from '@/components/dashboard/TaskCard';
-import { Annotation, User } from '@/services/api';
+import { Annotation } from '@/services/api';
 import { toast } from 'sonner';
+import { User } from '@/contexts/UserContext'; // Import User from UserContext instead of api
 
 interface AnnotationHandlersProps {
   task1SubTasks: SubTask[];
@@ -58,19 +59,21 @@ export function useAnnotationHandlers({
       }
       
       // Map the saved data back to the form fields
+      // Ensure we're returning properly typed SubTask[] objects
       return tasksCopy.map(task => {
         const savedValue = annotation.data[task.id];
         if (savedValue !== undefined) {
           if (typeof savedValue === 'boolean') {
             return {
               ...task,
-              selectedOption: savedValue ? 'true' : 'false'
+              selectedOption: savedValue ? 'true' : 'false',
+              textValue: task.textValue || '' // Ensure textValue is string
             };
           } else if (typeof savedValue === 'string') {
             return {
               ...task,
               selectedOption: savedValue,
-              textValue: annotation.data[`${task.id}_text`] || ''
+              textValue: (annotation.data[`${task.id}_text`] as string) || ''
             };
           }
         }
@@ -101,19 +104,21 @@ export function useAnnotationHandlers({
       
       // If we have an existing consensus annotation, use it
       if (consensusAnnotation) {
+        // Ensure we're returning properly typed SubTask[] objects
         return consensusTasks.map(task => {
           const savedValue = consensusAnnotation.data[task.id];
           if (savedValue !== undefined) {
             if (typeof savedValue === 'boolean') {
               return {
                 ...task,
-                selectedOption: savedValue ? 'true' : 'false'
+                selectedOption: savedValue ? 'true' : 'false',
+                textValue: task.textValue || '' // Ensure textValue is string
               };
             } else if (typeof savedValue === 'string') {
               return {
                 ...task,
                 selectedOption: savedValue,
-                textValue: consensusAnnotation.data[`${task.id}_text`] || ''
+                textValue: (consensusAnnotation.data[`${task.id}_text`] as string) || ''
               };
             }
           }
@@ -151,6 +156,7 @@ export function useAnnotationHandlers({
       });
       
       // Find most common value for each field
+      // Ensure we're returning properly typed SubTask[] objects
       return consensusTasks.map(task => {
         const counts = fieldCounts[task.id];
         if (!counts) return task;
@@ -172,8 +178,9 @@ export function useAnnotationHandlers({
           let textValue = '';
           
           for (const annotation of annotations) {
-            if (annotation.data[textFieldKey]) {
-              textValue = annotation.data[textFieldKey] as string;
+            const textFieldValue = annotation.data[textFieldKey];
+            if (textFieldValue && typeof textFieldValue === 'string') {
+              textValue = textFieldValue;
               break;
             }
           }
@@ -256,13 +263,12 @@ export function useAnnotationHandlers({
           }
         });
         
-        // Save annotation
+        // Save annotation without isConsensus property
         const success = await saveAnnotation({
           userId: user.id,
           discussionId,
           taskId,
-          data: taskData,
-          isConsensus: false
+          data: taskData
         });
         
         if (success) {
@@ -309,13 +315,12 @@ export function useAnnotationHandlers({
           }
         });
         
-        // Save consensus annotation
+        // Save consensus annotation without isConsensus property
         const success = await saveConsensusAnnotation({
           userId: user.id,
           discussionId,
           taskId,
-          data: taskData,
-          isConsensus: true
+          data: taskData
         });
         
         if (success) {
