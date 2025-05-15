@@ -3,7 +3,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface AnnotatorViewProps {
-  discussionId: string | null;
+  discussionId: string;
   currentStep: number;
   getAnnotationsForTask: (discussionId: string, taskId: number) => any[];
 }
@@ -28,10 +28,10 @@ const AnnotatorView: React.FC<AnnotatorViewProps> = ({
             </CardHeader>
             <CardContent className="py-3">
               <div className="space-y-2">
-                {Object.entries(annotation.data).map(([key, value]) => (
+                {Object.entries(annotation.data || {}).map(([key, value]) => (
                   <div key={key} className="flex justify-between">
                     <span className="font-medium">{key}:</span>
-                    <span className="text-gray-600">{value.toString()}</span>
+                    <span className="text-gray-600">{value?.toString() || ""}</span>
                   </div>
                 ))}
               </div>

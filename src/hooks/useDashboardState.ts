@@ -9,7 +9,7 @@ import { SubTask, SubTaskStatus } from '@/components/dashboard/TaskCard';
 export function useDashboardState() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, isAuthenticated, isPodLead } = useUser();
+  const { user, isAuthenticated, isPodLead, logout } = useUser();
   const queryParams = new URLSearchParams(location.search);
   const discussionId = queryParams.get('discussionId');
   const taskNumber = queryParams.get('task') ? parseInt(queryParams.get('task')!) : null;
@@ -94,15 +94,8 @@ export function useDashboardState() {
     // Update URL with task parameters without full page reload
     navigate(`/dashboard?discussionId=${discussionId}&task=${taskId}`, { replace: true });
     
-    // Load user annotation if it exists
-    if (discussionId && user) {
-      loadUserAnnotation(discussionId, taskId);
-      
-      // For pod leads, also prepare consensus view
-      if (isPodLead) {
-        prepareConsensusView(discussionId, taskId);
-      }
-    }
+    // Note: loadUserAnnotation and prepareConsensusView will be handled in Dashboard.tsx
+    // with useAnnotationHandlers hook
   };
 
   const handleBackToGrid = useCallback(() => {
@@ -118,7 +111,7 @@ export function useDashboardState() {
   }, [discussionId, navigate]);
 
   const handleLogout = () => {
-    if (user) {
+    if (user && logout) {
       logout();
       navigate('/');
     }
@@ -143,7 +136,8 @@ export function useDashboardState() {
   const toggleConsensusMode = () => {
     if (viewMode === 'detail') {
       setViewMode('consensus');
-      prepareConsensusView(discussionId!, currentStep);
+      // Note: prepareConsensusView will be handled in Dashboard.tsx
+      // with useAnnotationHandlers hook
     } else {
       setViewMode('detail');
     }
@@ -201,16 +195,6 @@ export function useDashboardState() {
         setViewMode('detail');
         setCurrentStep(taskNumber);
         setSelectedTaskId(taskNumber);
-        
-        // Load existing annotation for this user if it exists
-        if (user) {
-          loadUserAnnotation(discussionId, taskNumber);
-        }
-        
-        // For pod leads, also prepare consensus view
-        if (isPodLead) {
-          prepareConsensusView(discussionId, taskNumber);
-        }
       }
       // If nothing is provided, redirect to discussions page
       else if (!discussionId) {
@@ -219,7 +203,7 @@ export function useDashboardState() {
       
       setIsInitialized(true);
     }
-  }, [discussionId, taskNumber, navigate, isAuthenticated, isPodLead, user]);
+  }, [discussionId, taskNumber, navigate, isAuthenticated]);
 
   return {
     url,
@@ -257,6 +241,6 @@ export function useDashboardState() {
     saveConsensusAnnotation,
     getConsensusAnnotation,
     discussions,
-    logout: useUser().logout,
+    logout
   };
 }

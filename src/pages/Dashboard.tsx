@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import UrlInput from '@/components/dashboard/UrlInput';
 import TaskCard from '@/components/dashboard/TaskCard';
@@ -95,6 +95,37 @@ const Dashboard = () => {
     updateStepCompletionStatus
   });
 
+  // Initialize data when task changes
+  useEffect(() => {
+    if (discussionId && user && currentStep > 0 && currentStep <= 3) {
+      if (viewMode === 'detail') {
+        // Load user's existing annotation
+        const updatedSubTasks = loadUserAnnotation(discussionId, currentStep);
+        if (updatedSubTasks) {
+          if (currentStep === 1) {
+            setTask1SubTasks(updatedSubTasks);
+          } else if (currentStep === 2) {
+            setTask2SubTasks(updatedSubTasks);
+          } else if (currentStep === 3) {
+            setTask3SubTasks(updatedSubTasks);
+          }
+        }
+      } else if (viewMode === 'consensus' && isPodLead) {
+        // Prepare consensus view
+        const consensusTasks = prepareConsensusView(discussionId, currentStep);
+        if (consensusTasks && consensusTasks.length > 0) {
+          if (currentStep === 1) {
+            setConsensusTask1(consensusTasks);
+          } else if (currentStep === 2) {
+            setConsensusTask2(consensusTasks);
+          } else if (currentStep === 3) {
+            setConsensusTask3(consensusTasks);
+          }
+        }
+      }
+    }
+  }, [discussionId, currentStep, viewMode, user, isPodLead]);
+
   // Get summary data for all tasks
   const getSummaryData = () => {
     return {
@@ -185,7 +216,7 @@ const Dashboard = () => {
                   active={true}
                 />
                 <AnnotatorView 
-                  discussionId={discussionId} 
+                  discussionId={discussionId || ""} 
                   currentStep={currentStep} 
                   getAnnotationsForTask={getAnnotationsForTask}
                 />
@@ -218,7 +249,7 @@ const Dashboard = () => {
                   active={true}
                 />
                 <AnnotatorView 
-                  discussionId={discussionId} 
+                  discussionId={discussionId || ""} 
                   currentStep={currentStep} 
                   getAnnotationsForTask={getAnnotationsForTask}
                 />
@@ -251,7 +282,7 @@ const Dashboard = () => {
                   active={true}
                 />
                 <AnnotatorView 
-                  discussionId={discussionId} 
+                  discussionId={discussionId || ""} 
                   currentStep={currentStep} 
                   getAnnotationsForTask={getAnnotationsForTask}
                 />

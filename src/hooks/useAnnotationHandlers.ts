@@ -36,7 +36,7 @@ export function useAnnotationHandlers({
 }: UseAnnotationHandlersProps) {
 
   // Load user's existing annotation if it exists
-  const loadUserAnnotation = useCallback((discussionId: string, taskId: number, task1SubTasks: SubTask[], task2SubTasks: SubTask[], task3SubTasks: SubTask[], setTask1SubTasks: Function, setTask2SubTasks: Function, setTask3SubTasks: Function) => {
+  const loadUserAnnotation = useCallback((discussionId: string, taskId: number) => {
     if (!user) return;
     
     const existingAnnotation = getUserAnnotation(discussionId, user.id, taskId);
@@ -55,7 +55,8 @@ export function useAnnotationHandlers({
         }
         return task;
       });
-      setTask1SubTasks(updatedSubTasks);
+      // We don't have access to setTask1SubTasks here, so we return the updated tasks
+      return updatedSubTasks;
     }
     else if (taskId === 2) {
       const updatedSubTasks = task2SubTasks.map(task => {
@@ -70,7 +71,7 @@ export function useAnnotationHandlers({
         }
         return task;
       });
-      setTask2SubTasks(updatedSubTasks);
+      return updatedSubTasks;
     }
     else if (taskId === 3) {
       const updatedSubTasks = task3SubTasks.map(task => {
@@ -85,12 +86,12 @@ export function useAnnotationHandlers({
         }
         return task;
       });
-      setTask3SubTasks(updatedSubTasks);
+      return updatedSubTasks;
     }
-  }, [user, getUserAnnotation]);
+  }, [user, getUserAnnotation, task1SubTasks, task2SubTasks, task3SubTasks]);
 
   // Prepare consensus view for pod leads
-  const prepareConsensusView = useCallback((discussionId: string, taskId: number, setConsensusTask1: Function, setConsensusTask2: Function, setConsensusTask3: Function) => {
+  const prepareConsensusView = useCallback((discussionId: string, taskId: number) => {
     // Get all annotations for this task
     const taskAnnotations = getAnnotationsForTask(discussionId, taskId);
     
@@ -152,7 +153,7 @@ export function useAnnotationHandlers({
         });
       }
       
-      setConsensusTask1(consensusTasks);
+      return consensusTasks;
     }
     else if (taskId === 2) {
       // Similar to task 1, but with task 2 specific fields
@@ -220,7 +221,7 @@ export function useAnnotationHandlers({
         });
       }
       
-      setConsensusTask2(consensusTasks);
+      return consensusTasks;
     }
     else if (taskId === 3) {
       // Task 3 consensus fields
@@ -282,8 +283,10 @@ export function useAnnotationHandlers({
         });
       }
       
-      setConsensusTask3(consensusTasks);
+      return consensusTasks;
     }
+    
+    return [];
   }, [getAnnotationsForTask, getConsensusAnnotation]);
 
   // Save annotation (combining regular and consensus cases)

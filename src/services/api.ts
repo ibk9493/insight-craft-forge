@@ -309,6 +309,12 @@ export const mockData = {
   consensus: []
 };
 
+// Update TaskStatus type to be a union of literal strings
 export type TaskStatus = 'locked' | 'unlocked' | 'completed';
 
-export type TaskState = 'locked' | 'unlocked' | 'completed';
+// Update TaskState interface to include all the properties we're using
+export interface TaskState {
+  status: TaskStatus;
+  annotators: number;
+  userAnnotated?: boolean;
+}
