@@ -4,6 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { useEffect, useState } from "react";
 import Login from "./pages/Login";
 import Discussions from "./pages/Discussions";
 import Dashboard from "./pages/Dashboard";
@@ -11,9 +12,18 @@ import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 import { UserProvider } from "./contexts/UserContext";
 
-const queryClient = new QueryClient();
+function App() {
+  // Create a client once per component render
+  // This ensures the QueryClient isn't created during module initialization
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: 1,
+        staleTime: 30000,
+      },
+    },
+  }));
 
-const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <UserProvider>
@@ -33,6 +43,6 @@ const App = () => {
       </UserProvider>
     </QueryClientProvider>
   );
-};
+}
 
 export default App;
