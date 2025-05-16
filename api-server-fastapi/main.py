@@ -1,4 +1,3 @@
-
 import os
 import uuid
 from datetime import datetime
@@ -8,6 +7,8 @@ from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, F
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
+from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
+from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
@@ -27,7 +28,10 @@ models.Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title="SWE-QA API",
     description="API for the Software Engineering QA Annotation System",
-    version="1.0.0"
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json"
 )
 
 # Configure CORS

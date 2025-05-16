@@ -3,12 +3,19 @@ import { toast } from 'sonner';
 import { ApiError } from './types';
 import { mockDiscussions, mockAnnotations } from './mockData';
 
-// API base configuration
+/**
+ * API base configuration values from environment variables
+ */
 export const API_URL = import.meta.env.VITE_API_URL || '';
 export const API_KEY = import.meta.env.VITE_API_KEY || '';
 export const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA === 'true';
 
-// Helper function to handle API responses
+/**
+ * Handles API responses and performs error checking
+ * @param response - The fetch API response
+ * @returns The parsed JSON response
+ * @throws ApiError if the response is not ok or not JSON
+ */
 export const handleResponse = async <T>(response: Response): Promise<T> => {
   // Check if response is OK
   if (!response.ok) {
@@ -32,7 +39,15 @@ export const handleResponse = async <T>(response: Response): Promise<T> => {
   return response.json() as Promise<T>;
 };
 
-// API request function with error handling and fallback to mock data
+/**
+ * Makes API requests with error handling and fallback to mock data
+ * 
+ * @param endpoint - API endpoint path (without base URL)
+ * @param method - HTTP method (GET, POST, PUT, DELETE)
+ * @param body - Request body for POST/PUT requests
+ * @param headers - Additional headers to include
+ * @returns The API response data
+ */
 export const apiRequest = async <T>(
   endpoint: string,
   method: string = 'GET',
