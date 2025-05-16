@@ -75,7 +75,7 @@ const Admin = () => {
           
           {/* Role indicator */}
           <div className="mt-2">
-            <Alert variant={isAdmin ? "default" : "secondary"}>
+            <Alert variant={isAdmin ? "default" : "outline"}>
               <div className="flex items-center gap-2">
                 {isAdmin ? 
                   <Settings className="h-4 w-4" /> : 
