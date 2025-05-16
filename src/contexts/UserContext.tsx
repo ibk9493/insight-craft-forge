@@ -20,6 +20,7 @@ interface UserContextType {
   isAuthenticated: boolean;
   isPodLead: boolean;
   isAdmin: boolean;
+  setUserRole: (role: UserRole) => void;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -97,21 +98,17 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const mockGoogleUser = MOCK_USERS.find(u => u.provider === 'google');
         
         if (mockGoogleUser) {
-          setUser({
+          const googleUser = {
             id: mockGoogleUser.id,
             username: mockGoogleUser.username,
             role: mockGoogleUser.role,
-            provider: 'google'
-          });
+            provider: 'google' as const
+          };
           
-          localStorage.setItem('user', JSON.stringify({
-            id: mockGoogleUser.id,
-            username: mockGoogleUser.username,
-            role: mockGoogleUser.role,
-            provider: 'google'
-          }));
+          setUser(googleUser);
+          localStorage.setItem('user', JSON.stringify(googleUser));
           
-          toast.success(`Logged in as ${mockGoogleUser.role === 'admin' ? 'Administrator' : mockGoogleUser.role === 'pod_lead' ? 'Pod Lead' : 'Annotator'}`);
+          toast.success(`Logged in as ${googleUser.role === 'admin' ? 'Administrator' : googleUser.role === 'pod_lead' ? 'Pod Lead' : 'Annotator'}`);
           
           return true;
         }
@@ -122,6 +119,16 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       toast.error('Failed to authenticate with Google');
       return false;
     }
+  };
+
+  const setUserRole = (role: UserRole) => {
+    if (!user) return;
+    
+    const updatedUser = { ...user, role };
+    setUser(updatedUser);
+    localStorage.setItem('user', JSON.stringify(updatedUser));
+    
+    toast.success(`Role updated to ${role === 'admin' ? 'Administrator' : role === 'pod_lead' ? 'Pod Lead' : 'Annotator'}`);
   };
 
   const logout = () => {
@@ -135,6 +142,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     login,
     googleLogin,
     logout,
+    setUserRole,
     isAuthenticated: !!user,
     isPodLead: user?.role === 'pod_lead',
     isAdmin: user?.role === 'admin',

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Tab, TabList, TabPanel, TabsContainer } from '@/components/ui/tabs';
@@ -75,7 +74,7 @@ const Admin = () => {
           
           {/* Role indicator */}
           <div className="mt-2">
-            <Alert variant={isAdmin ? "default" : "outline"}>
+            <Alert variant={isAdmin ? "default" : "default"}>
               <div className="flex items-center gap-2">
                 {isAdmin ? 
                   <Settings className="h-4 w-4" /> : 

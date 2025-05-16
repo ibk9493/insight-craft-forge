@@ -9,21 +9,23 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs-w
 import { toast } from 'sonner';
 import { GoogleLogin } from '@react-oauth/google';
 import { useUser } from '@/contexts/UserContext';
+import RoleSelector from '@/components/auth/RoleSelector';
 
 const Login: React.FC = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showRoleSelector, setShowRoleSelector] = useState(false);
   
   const { login, googleLogin, isAuthenticated } = useUser();
   const navigate = useNavigate();
 
   // Redirect if already logged in
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && !showRoleSelector) {
       navigate('/discussions');
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, showRoleSelector]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,6 +54,8 @@ const Login: React.FC = () => {
       const success = await googleLogin(credentialResponse.credential);
       if (!success) {
         toast.error('Google login failed');
+      } else {
+        setShowRoleSelector(true);
       }
     } catch (error) {
       console.error('Error with Google login', error);
@@ -64,6 +68,26 @@ const Login: React.FC = () => {
   const handleGoogleLoginError = () => {
     toast.error('Google login failed');
   };
+  
+  const handleRoleSelected = () => {
+    setShowRoleSelector(false);
+    navigate('/discussions');
+  };
+
+  if (showRoleSelector) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="w-full max-w-md space-y-8">
+          <div className="text-center">
+            <h1 className="text-3xl font-bold text-dashboard-blue">Complete Your Profile</h1>
+            <p className="mt-2 text-gray-600">Select your role in the annotation system</p>
+          </div>
+          
+          <RoleSelector onRoleSelected={handleRoleSelected} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
