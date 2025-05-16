@@ -1,6 +1,6 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api, mockData } from '../services/api';
+import { api } from '../services/api';
 import { useAnnotationData } from '../hooks/useAnnotationData';
 import { renderHook, act } from '@testing-library/react';
 
@@ -18,49 +18,52 @@ vi.mock('../services/api', () => {
         getByTaskAndDiscussion: vi.fn(),
         getUserAnnotation: vi.fn(),
         save: vi.fn(),
+        upload: vi.fn(),
       },
       consensus: {
         get: vi.fn(),
         save: vi.fn(),
         calculate: vi.fn(),
       },
-    },
-    useMockApi: true,
-    mockData: {
-      discussions: [
-        {
-          id: 'test1',
-          title: 'Test Discussion',
-          url: 'https://github.com/org/repo/discussions/123',
-          repository: 'org/repo',
-          createdAt: '2025-05-01',
-          tasks: {
-            task1: { status: 'unlocked', annotators: 2 },
-            task2: { status: 'locked', annotators: 0 },
-            task3: { status: 'locked', annotators: 0 }
-          }
-        }
-      ],
-      annotations: [
-        {
-          discussionId: 'test1',
-          userId: 'user1',
-          taskId: 1,
-          data: { relevance: 'Yes', learning_value: 'Yes', clarity: 'Yes' },
-          timestamp: '2025-05-01T00:00:00.000Z'
-        },
-        {
-          discussionId: 'test1',
-          userId: 'user2',
-          taskId: 1,
-          data: { relevance: 'Yes', learning_value: 'Yes', clarity: 'Yes' },
-          timestamp: '2025-05-01T00:00:00.000Z'
-        },
-      ],
-      consensus: []
+      code: {
+        getDownloadUrl: vi.fn(),
+      }
     }
   };
 });
+
+// Mock test data (moved from api.ts to here)
+const mockDiscussions = [
+  {
+    id: 'test1',
+    title: 'Test Discussion',
+    url: 'https://github.com/org/repo/discussions/123',
+    repository: 'org/repo',
+    createdAt: '2025-05-01',
+    tasks: {
+      task1: { status: 'unlocked', annotators: 2 },
+      task2: { status: 'locked', annotators: 0 },
+      task3: { status: 'locked', annotators: 0 }
+    }
+  }
+];
+
+const mockAnnotations = [
+  {
+    discussionId: 'test1',
+    userId: 'user1',
+    taskId: 1,
+    data: { relevance: true, learning_value: true, clarity: true },
+    timestamp: '2025-05-01T00:00:00.000Z'
+  },
+  {
+    discussionId: 'test1',
+    userId: 'user2',
+    taskId: 1,
+    data: { relevance: true, learning_value: true, clarity: true },
+    timestamp: '2025-05-01T00:00:00.000Z'
+  }
+];
 
 // Mock the UserContext
 vi.mock('../contexts/UserContext', () => {
