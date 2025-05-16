@@ -6,8 +6,8 @@ export const API_CONFIG = {
   // Base URL for the API
   BASE_URL: import.meta.env.VITE_API_URL || 'https://api-mock.example.com',
   
-  // Whether to use mock data (true if VITE_API_URL is not set)
-  USE_MOCK: !import.meta.env.VITE_API_URL,
+  // Whether to use mock data
+  USE_MOCK: import.meta.env.VITE_USE_MOCK_DATA === 'true' || !import.meta.env.VITE_API_URL,
   
   // API endpoints
   ENDPOINTS: {
@@ -21,7 +21,8 @@ export const API_CONFIG = {
   
   // Default request headers
   HEADERS: {
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    'X-API-Key': import.meta.env.VITE_API_KEY || ''
   }
 };
 
@@ -33,8 +34,12 @@ export const AUTH_CONFIG = {
   // Local storage keys
   STORAGE_KEYS: {
     TOKEN: 'swe_qa_token',
-    USER: 'swe_qa_user'
-  }
+    USER: 'swe_qa_user',
+    AUTHORIZED_USERS: 'authorizedUsers'
+  },
+  
+  // Google OAuth client ID
+  GOOGLE_CLIENT_ID: import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
 };
 
 // Task configuration

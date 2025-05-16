@@ -1,9 +1,9 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { UserRole } from '@/services/api/types';
+import { AUTH_CONFIG } from '@/config';
 
 export interface User {
   id: string;
@@ -29,6 +29,7 @@ interface UserContextType {
   authorizedUsers: AuthorizedUser[];
   addAuthorizedUser: (email: string, role: UserRole) => void;
   removeAuthorizedUser: (email: string) => void;
+  loadAuthorizedUsers: () => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -55,29 +56,47 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
   const [authorizedUsers, setAuthorizedUsers] = useState<AuthorizedUser[]>([]);
 
-  // Check if user is already logged in
+  // Check if user is already logged in and load authorized users
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
+    const storedUser = localStorage.getItem(AUTH_CONFIG.STORAGE_KEYS.USER);
     if (storedUser) {
       try {
         const parsedUser = JSON.parse(storedUser);
         setUser(parsedUser);
       } catch (error) {
-        localStorage.removeItem('user');
+        localStorage.removeItem(AUTH_CONFIG.STORAGE_KEYS.USER);
       }
     }
     
-    // Load authorized users from localStorage
-    const storedAuthorizedUsers = localStorage.getItem('authorizedUsers');
-    if (storedAuthorizedUsers) {
-      try {
-        const parsedAuthorizedUsers = JSON.parse(storedAuthorizedUsers);
-        setAuthorizedUsers(parsedAuthorizedUsers);
-      } catch (error) {
-        localStorage.removeItem('authorizedUsers');
+    // Load authorized users
+    loadAuthorizedUsers();
+  }, []);
+  
+  // Load authorized users from API or localStorage
+  const loadAuthorizedUsers = async () => {
+    try {
+      // Try to load from API first
+      const apiUsers = await api.auth.getAuthorizedUsers();
+      setAuthorizedUsers(apiUsers);
+      
+      // Cache in localStorage for offline use
+      localStorage.setItem(AUTH_CONFIG.STORAGE_KEYS.AUTHORIZED_USERS, JSON.stringify(apiUsers));
+    } catch (error) {
+      console.error('Failed to load authorized users from API', error);
+      
+      // Fall back to localStorage if API fails
+      const storedAuthorizedUsers = localStorage.getItem(AUTH_CONFIG.STORAGE_KEYS.AUTHORIZED_USERS);
+      if (storedAuthorizedUsers) {
+        try {
+          const parsedAuthorizedUsers = JSON.parse(storedAuthorizedUsers);
+          setAuthorizedUsers(parsedAuthorizedUsers);
+        } catch (error) {
+          console.error('Failed to parse authorized users from localStorage', error);
+          localStorage.removeItem(AUTH_CONFIG.STORAGE_KEYS.AUTHORIZED_USERS);
+        }
       }
     }
-  }, []);
+  };
 
   const login = (username: string, password: string) => {
     // In a real app, this would be an API call
@@ -88,7 +107,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (foundUser) {
       const { password: _, ...userWithoutPassword } = foundUser;
       setUser({...userWithoutPassword, provider: 'local'});
-      localStorage.setItem('user', JSON.stringify({...userWithoutPassword, provider: 'local'}));
+      localStorage.setItem(AUTH_CONFIG.STORAGE_KEYS.USER, JSON.stringify({...userWithoutPassword, provider: 'local'}));
       
       // Show toast based on user role
       if (userWithoutPassword.role === 'admin') {
@@ -107,15 +126,11 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const googleLogin = async (googleToken: string): Promise<boolean> => {
     try {
-      // In a real app, this would verify the token with your backend
-      console.log("Google token received:", googleToken);
-      
-      // Simulate API call verification (in a real app, this would be a backend call)
+      // Call the API to verify the Google token
       const response = await api.auth.verifyGoogleToken(googleToken);
       
       if (response.success) {
-        // Extract email from Google response (mock for now)
-        const email = 'google.user@example.com'; // In a real app, this would come from the Google response
+        const email = response.user.email;
         
         // Check if email is in authorized users
         const authorizedUser = authorizedUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
@@ -123,33 +138,33 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (authorizedUser) {
           // Use the role assigned by admin
           const googleUser = {
-            id: '5', // Generated ID in real app
+            id: response.user.id,
             username: email,
             role: authorizedUser.role,
             provider: 'google' as const
           };
           
           setUser(googleUser);
-          localStorage.setItem('user', JSON.stringify(googleUser));
+          localStorage.setItem(AUTH_CONFIG.STORAGE_KEYS.USER, JSON.stringify(googleUser));
           
           toast.success(`Logged in as ${googleUser.role === 'admin' ? 'Administrator' : googleUser.role === 'pod_lead' ? 'Pod Lead' : 'Annotator'}`);
           
           return true;
         } else {
-          // If user not authorized, show role selector
-          // Role will be confirmed but not saved until user selects a role
+          // If user not authorized, use default role
           const googleUser = {
-            id: '5', // Generated ID in real app
+            id: response.user.id,
             username: email,
-            role: 'annotator' as const, // Default role
+            role: 'annotator' as const,
             provider: 'google' as const
           };
           
           setUser(googleUser);
-          localStorage.setItem('user', JSON.stringify(googleUser));
+          localStorage.setItem(AUTH_CONFIG.STORAGE_KEYS.USER, JSON.stringify(googleUser));
           return true;
         }
       }
+      toast.error('Failed to authenticate with Google');
       return false;
     } catch (error) {
       console.error('Google login error:', error);
@@ -163,26 +178,48 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     
     const updatedUser = { ...user, role };
     setUser(updatedUser);
-    localStorage.setItem('user', JSON.stringify(updatedUser));
+    localStorage.setItem(AUTH_CONFIG.STORAGE_KEYS.USER, JSON.stringify(updatedUser));
     
     toast.success(`Role updated to ${role === 'admin' ? 'Administrator' : role === 'pod_lead' ? 'Pod Lead' : 'Annotator'}`);
   };
 
-  const addAuthorizedUser = (email: string, role: UserRole) => {
-    const newAuthorizedUsers = [...authorizedUsers, { email, role }];
-    setAuthorizedUsers(newAuthorizedUsers);
-    localStorage.setItem('authorizedUsers', JSON.stringify(newAuthorizedUsers));
+  const addAuthorizedUser = async (email: string, role: UserRole) => {
+    try {
+      // Call API to add authorized user
+      await api.auth.addAuthorizedUser(email, role);
+      
+      // Update local state
+      const newAuthorizedUsers = [...authorizedUsers, { email, role }];
+      setAuthorizedUsers(newAuthorizedUsers);
+      
+      // Update localStorage
+      localStorage.setItem(AUTH_CONFIG.STORAGE_KEYS.AUTHORIZED_USERS, JSON.stringify(newAuthorizedUsers));
+    } catch (error) {
+      console.error('Failed to add authorized user', error);
+      toast.error('Failed to add authorized user');
+    }
   };
   
-  const removeAuthorizedUser = (email: string) => {
-    const newAuthorizedUsers = authorizedUsers.filter(user => user.email !== email);
-    setAuthorizedUsers(newAuthorizedUsers);
-    localStorage.setItem('authorizedUsers', JSON.stringify(newAuthorizedUsers));
+  const removeAuthorizedUser = async (email: string) => {
+    try {
+      // Call API to remove authorized user
+      await api.auth.removeAuthorizedUser(email);
+      
+      // Update local state
+      const newAuthorizedUsers = authorizedUsers.filter(user => user.email !== email);
+      setAuthorizedUsers(newAuthorizedUsers);
+      
+      // Update localStorage
+      localStorage.setItem(AUTH_CONFIG.STORAGE_KEYS.AUTHORIZED_USERS, JSON.stringify(newAuthorizedUsers));
+    } catch (error) {
+      console.error('Failed to remove authorized user', error);
+      toast.error('Failed to remove authorized user');
+    }
   };
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem('user');
+    localStorage.removeItem(AUTH_CONFIG.STORAGE_KEYS.USER);
     toast.info('Logged out successfully');
   };
 
@@ -198,6 +235,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     authorizedUsers,
     addAuthorizedUser,
     removeAuthorizedUser,
+    loadAuthorizedUsers
   };
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;

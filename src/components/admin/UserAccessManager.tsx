@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,25 +15,61 @@ interface AuthorizedUser {
 }
 
 const UserAccessManager: React.FC = () => {
-  const { addAuthorizedUser, authorizedUsers, removeAuthorizedUser } = useUser();
+  const { addAuthorizedUser, authorizedUsers, removeAuthorizedUser, loadAuthorizedUsers } = useUser();
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRole>('annotator');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
-  const handleAddUser = () => {
+  // Refresh user list on mount
+  useEffect(() => {
+    refreshUserList();
+  }, []);
+  
+  const refreshUserList = async () => {
+    try {
+      setIsRefreshing(true);
+      await loadAuthorizedUsers();
+      toast.success('User list refreshed');
+    } catch (error) {
+      console.error('Failed to refresh user list', error);
+      toast.error('Failed to refresh user list');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+  
+  const handleAddUser = async () => {
     if (!email || !email.includes('@')) {
       toast.error('Please enter a valid email address');
       return;
     }
     
-    addAuthorizedUser(email, role);
-    setEmail('');
-    setRole('annotator');
-    toast.success(`Added ${email} as ${role}`);
+    try {
+      setIsLoading(true);
+      await addAuthorizedUser(email, role);
+      setEmail('');
+      setRole('annotator');
+      toast.success(`Added ${email} as ${role}`);
+    } catch (error) {
+      console.error('Failed to add user', error);
+      toast.error('Failed to add user');
+    } finally {
+      setIsLoading(false);
+    }
   };
   
-  const handleRemoveUser = (email: string) => {
-    removeAuthorizedUser(email);
-    toast.success(`Removed ${email} from authorized users`);
+  const handleRemoveUser = async (email: string) => {
+    try {
+      setIsLoading(true);
+      await removeAuthorizedUser(email);
+      toast.success(`Removed ${email} from authorized users`);
+    } catch (error) {
+      console.error('Failed to remove user', error);
+      toast.error('Failed to remove user');
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   return (
@@ -54,13 +90,14 @@ const UserAccessManager: React.FC = () => {
                 type="email" 
                 placeholder="user@example.com" 
                 value={email} 
-                onChange={(e) => setEmail(e.target.value)} 
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={isLoading}
               />
             </div>
             
             <div className="space-y-2">
               <Label>Role</Label>
-              <RadioGroup value={role} onValueChange={(value) => setRole(value as UserRole)}>
+              <RadioGroup value={role} onValueChange={(value) => setRole(value as UserRole)} disabled={isLoading}>
                 <div className="flex items-center space-x-2 mb-2">
                   <RadioGroupItem value="annotator" id="add-annotator" />
                   <Label htmlFor="add-annotator" className="cursor-pointer">Annotator</Label>
@@ -76,13 +113,24 @@ const UserAccessManager: React.FC = () => {
               </RadioGroup>
             </div>
             
-            <Button onClick={handleAddUser} className="w-full">
-              Add User
+            <Button onClick={handleAddUser} className="w-full" disabled={isLoading}>
+              {isLoading ? 'Adding User...' : 'Add User'}
             </Button>
           </div>
           
           <div className="border-t pt-4">
-            <h3 className="font-medium mb-2">Authorized Users</h3>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-medium">Authorized Users</h3>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={refreshUserList} 
+                disabled={isRefreshing}
+              >
+                {isRefreshing ? 'Refreshing...' : 'Refresh List'}
+              </Button>
+            </div>
+            
             {authorizedUsers.length === 0 ? (
               <p className="text-sm text-muted-foreground">No authorized users added yet</p>
             ) : (
@@ -100,8 +148,9 @@ const UserAccessManager: React.FC = () => {
                       variant="ghost" 
                       size="sm" 
                       onClick={() => handleRemoveUser(user.email)}
+                      disabled={isLoading}
                     >
-                      Remove
+                      {isLoading ? '...' : 'Remove'}
                     </Button>
                   </div>
                 ))}
