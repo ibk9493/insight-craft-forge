@@ -1,3 +1,4 @@
+
 import { apiRequest } from './helpers';
 import { Discussion, Annotation, TaskStatus, GitHubDiscussion, UploadResult, TaskManagementResult } from './types';
 import { mockDiscussions } from './mockData';
@@ -78,6 +79,7 @@ export const api = {
           user: {
             id: '5',
             username: 'google.user@example.com',
+            email: 'google.user@example.com',
             role: 'annotator',
             provider: 'google'
           }
@@ -86,6 +88,37 @@ export const api = {
       
       // Actual API call in production
       return apiRequest<{success: boolean, user: any}>('/auth/google', 'POST', { token });
+    },
+    
+    // New endpoint to get authorized users (in real app)
+    getAuthorizedUsers: () => {
+      // In development, we use localStorage instead
+      if (import.meta.env.DEV) {
+        console.log('DEV mode: Using localStorage for authorized users');
+        const users = localStorage.getItem('authorizedUsers') || '[]';
+        return Promise.resolve(JSON.parse(users));
+      }
+      
+      // Actual API call in production
+      return apiRequest<{email: string, role: string}[]>('/auth/authorized-users');
+    },
+    
+    // New endpoint to add authorized user (in real app)
+    addAuthorizedUser: (email: string, role: string) => {
+      // In a real app, this would send to your backend
+      console.log('Adding authorized user:', email, role);
+      
+      // Actual API call in production
+      return apiRequest<{success: boolean}>('/auth/authorized-users', 'POST', { email, role });
+    },
+    
+    // New endpoint to remove authorized user (in real app)
+    removeAuthorizedUser: (email: string) => {
+      // In a real app, this would send to your backend
+      console.log('Removing authorized user:', email);
+      
+      // Actual API call in production
+      return apiRequest<{success: boolean}>(`/auth/authorized-users/${encodeURIComponent(email)}`, 'DELETE');
     }
   },
   

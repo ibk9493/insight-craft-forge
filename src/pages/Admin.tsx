@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Tab, TabList, TabPanel, TabsContainer } from '@/components/ui/tabs';
@@ -10,6 +11,7 @@ import { useAnnotationData } from '@/hooks/useAnnotationData';
 import { Loader, Settings, Upload, Users, FileText } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import UserAccessManager from '@/components/admin/UserAccessManager';
 
 const Admin = () => {
   const { isAuthenticated, isPodLead, isAdmin, user } = useUser();
@@ -74,7 +76,7 @@ const Admin = () => {
           
           {/* Role indicator */}
           <div className="mt-2">
-            <Alert variant={isAdmin ? "default" : "default"}>
+            <Alert>
               <div className="flex items-center gap-2">
                 {isAdmin ? 
                   <Settings className="h-4 w-4" /> : 
@@ -111,6 +113,10 @@ const Admin = () => {
                 <Tab value="upload-discussions" className="flex items-center gap-2">
                   <Upload className="h-4 w-4" />
                   <span>Upload Discussions</span>
+                </Tab>
+                <Tab value="user-management" className="flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  <span>User Management</span>
                 </Tab>
                 <Tab value="system-settings" className="flex items-center gap-2">
                   <FileText className="h-4 w-4" />
@@ -169,81 +175,92 @@ const Admin = () => {
           
           {/* Upload Discussions Tab - Admin Only */}
           {isAdmin && (
-            <TabPanel value="upload-discussions">
-              <div className="mb-4">
-                <h2 className="text-lg font-medium">Upload Discussions</h2>
-                <p className="text-sm text-gray-500">
-                  Import discussions from JSON files
-                </p>
-              </div>
-              <JsonUploader />
-            </TabPanel>
-          )}
-          
-          {/* System Settings Tab - Admin Only */}
-          {isAdmin && (
-            <TabPanel value="system-settings">
-              <div className="mb-4">
-                <h2 className="text-lg font-medium">System Reports</h2>
-                <p className="text-sm text-gray-500">
-                  View system statistics and generate reports
-                </p>
-              </div>
+            <>
+              <TabPanel value="upload-discussions">
+                <div className="mb-4">
+                  <h2 className="text-lg font-medium">Upload Discussions</h2>
+                  <p className="text-sm text-gray-500">
+                    Import discussions from JSON files
+                  </p>
+                </div>
+                <JsonUploader />
+              </TabPanel>
+
+              {/* User Management Tab - Admin Only */}
+              <TabPanel value="user-management">
+                <div className="mb-4">
+                  <h2 className="text-lg font-medium">User Management</h2>
+                  <p className="text-sm text-gray-500">
+                    Manage which email addresses can log in via Google and their roles
+                  </p>
+                </div>
+                <UserAccessManager />
+              </TabPanel>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Annotation Statistics</CardTitle>
-                    <CardDescription>Overall system usage</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <dl className="space-y-4">
-                      <div className="flex justify-between">
-                        <dt className="text-sm font-medium text-gray-500">Total Discussions:</dt>
-                        <dd className="text-sm font-medium">{discussions.length}</dd>
-                      </div>
-                      <div className="flex justify-between">
-                        <dt className="text-sm font-medium text-gray-500">Completed Tasks:</dt>
-                        <dd className="text-sm font-medium">
-                          {discussions.reduce((acc, disc) => {
-                            if (disc.tasks.task1.status === 'completed') acc++;
-                            if (disc.tasks.task2.status === 'completed') acc++;
-                            if (disc.tasks.task3.status === 'completed') acc++;
-                            return acc;
-                          }, 0)}
-                        </dd>
-                      </div>
-                      <div className="flex justify-between">
-                        <dt className="text-sm font-medium text-gray-500">Active Annotators:</dt>
-                        <dd className="text-sm font-medium">3</dd>
-                      </div>
-                      <div className="flex justify-between">
-                        <dt className="text-sm font-medium text-gray-500">Average Time per Task:</dt>
-                        <dd className="text-sm font-medium">12 minutes</dd>
-                      </div>
-                    </dl>
-                  </CardContent>
-                </Card>
+              {/* System Settings Tab - Admin Only */}
+              <TabPanel value="system-settings">
+                <div className="mb-4">
+                  <h2 className="text-lg font-medium">System Reports</h2>
+                  <p className="text-sm text-gray-500">
+                    View system statistics and generate reports
+                  </p>
+                </div>
                 
-                <Card>
-                  <CardHeader>
-                    <CardTitle>System Actions</CardTitle>
-                    <CardDescription>Administrative tools</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <Button className="w-full" variant="outline">
-                      Export All Annotations
-                    </Button>
-                    <Button className="w-full" variant="outline">
-                      Generate Statistics Report
-                    </Button>
-                    <Button className="w-full" variant="outline">
-                      View Access Logs
-                    </Button>
-                  </CardContent>
-                </Card>
-              </div>
-            </TabPanel>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Annotation Statistics</CardTitle>
+                      <CardDescription>Overall system usage</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <dl className="space-y-4">
+                        <div className="flex justify-between">
+                          <dt className="text-sm font-medium text-gray-500">Total Discussions:</dt>
+                          <dd className="text-sm font-medium">{discussions.length}</dd>
+                        </div>
+                        <div className="flex justify-between">
+                          <dt className="text-sm font-medium text-gray-500">Completed Tasks:</dt>
+                          <dd className="text-sm font-medium">
+                            {discussions.reduce((acc, disc) => {
+                              if (disc.tasks.task1.status === 'completed') acc++;
+                              if (disc.tasks.task2.status === 'completed') acc++;
+                              if (disc.tasks.task3.status === 'completed') acc++;
+                              return acc;
+                            }, 0)}
+                          </dd>
+                        </div>
+                        <div className="flex justify-between">
+                          <dt className="text-sm font-medium text-gray-500">Active Annotators:</dt>
+                          <dd className="text-sm font-medium">3</dd>
+                        </div>
+                        <div className="flex justify-between">
+                          <dt className="text-sm font-medium text-gray-500">Average Time per Task:</dt>
+                          <dd className="text-sm font-medium">12 minutes</dd>
+                        </div>
+                      </dl>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>System Actions</CardTitle>
+                      <CardDescription>Administrative tools</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <Button className="w-full" variant="outline">
+                        Export All Annotations
+                      </Button>
+                      <Button className="w-full" variant="outline">
+                        Generate Statistics Report
+                      </Button>
+                      <Button className="w-full" variant="outline">
+                        View Access Logs
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabPanel>
+            </>
           )}
         </TabsContainer>
       </div>
