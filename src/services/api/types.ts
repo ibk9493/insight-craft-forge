@@ -29,10 +29,39 @@ export interface ApiError {
 
 // Task status types
 export type TaskStatus = 'locked' | 'unlocked' | 'completed';
+export type UserRole = 'annotator' | 'pod_lead' | 'admin';
 
 // Task state interface
 export interface TaskState {
   status: TaskStatus;
   annotators: number;
   userAnnotated?: boolean;
+}
+
+// JSON Upload types
+export interface UploadResult {
+  success: boolean;
+  message: string;
+  discussionsAdded: number;
+  errors?: string[];
+}
+
+export interface TaskManagementResult {
+  success: boolean;
+  message: string;
+  discussion?: Discussion;
+}
+
+// GitHub Discussion format from JSON upload
+export interface GitHubDiscussion {
+  id: string;
+  title: string;
+  url: string;
+  repository?: string;
+  createdAt: string;
+  tasks?: {
+    task1?: Partial<TaskState>;
+    task2?: Partial<TaskState>;
+    task3?: Partial<TaskState>;
+  };
 }

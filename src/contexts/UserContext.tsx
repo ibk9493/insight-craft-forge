@@ -3,11 +3,12 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
+import { UserRole } from '@/services/api/types';
 
 export interface User {
   id: string;
   username: string;
-  role: 'annotator' | 'pod_lead';
+  role: UserRole;
   provider?: 'local' | 'google';
 }
 
@@ -18,6 +19,7 @@ interface UserContextType {
   logout: () => void;
   isAuthenticated: boolean;
   isPodLead: boolean;
+  isAdmin: boolean;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -36,8 +38,8 @@ const MOCK_USERS = [
   { id: '2', username: 'annotator2', password: 'password', role: 'annotator' as const },
   { id: '3', username: 'annotator3', password: 'password', role: 'annotator' as const },
   { id: '4', username: 'lead', password: 'password', role: 'pod_lead' as const },
-  // Mock Google user
   { id: '5', username: 'google.user@example.com', provider: 'google', role: 'annotator' as const },
+  { id: '6', username: 'admin', password: 'admin123', role: 'admin' as const },
 ];
 
 export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -75,7 +77,6 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const googleLogin = async (googleToken: string): Promise<boolean> => {
     try {
       // In a real app, this would verify the token with your backend
-      // For demo purposes, we'll simulate a successful verification
       console.log("Google token received:", googleToken);
       
       // Simulate API call verification (in a real app, this would be a backend call)
@@ -123,6 +124,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     logout,
     isAuthenticated: !!user,
     isPodLead: user?.role === 'pod_lead',
+    isAdmin: user?.role === 'admin',
   };
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;

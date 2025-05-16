@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Github, ChevronDown, LogOut, User, Home } from 'lucide-react';
+import { Github, ChevronDown, LogOut, User, Home, Settings } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import {
   DropdownMenu,
@@ -15,7 +15,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Link, useLocation } from 'react-router-dom';
 
 const Header = () => {
-  const { user, logout } = useUser();
+  const { user, logout, isAdmin, isPodLead } = useUser();
   const location = useLocation();
   
   // Helper to generate breadcrumbs based on current path
@@ -30,6 +30,10 @@ const Header = () => {
     
     if (path === '/discussions') {
       return <span className="text-sm text-gray-500">Discussions</span>;
+    }
+    
+    if (path === '/admin') {
+      return <span className="text-sm text-gray-500">Admin</span>;
     }
     
     const queryParams = new URLSearchParams(location.search);
@@ -81,6 +85,12 @@ const Header = () => {
             <Link to="/discussions" className="text-dashboard-blue hover:underline">
               All Discussions
             </Link>
+            {(isAdmin || isPodLead) && (
+              <Link to="/admin" className="flex items-center text-dashboard-blue hover:underline">
+                <Settings className="h-4 w-4 mr-1" />
+                <span>Admin</span>
+              </Link>
+            )}
           </div>
         )}
         
@@ -104,8 +114,19 @@ const Header = () => {
               <DropdownMenuSeparator />
               <DropdownMenuItem className="flex items-center gap-2">
                 <User className="h-4 w-4" />
-                <span>Role: {user.role === 'pod_lead' ? 'Pod Lead' : 'Annotator'}</span>
+                <span>Role: {user.role === 'pod_lead' ? 'Pod Lead' : user.role === 'admin' ? 'Administrator' : 'Annotator'}</span>
               </DropdownMenuItem>
+              {(isAdmin || isPodLead) && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link to="/admin" className="flex items-center gap-2 cursor-pointer">
+                      <Settings className="h-4 w-4" />
+                      <span>Admin Panel</span>
+                    </Link>
+                  </DropdownMenuItem>
+                </>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem 
                 onClick={logout}
