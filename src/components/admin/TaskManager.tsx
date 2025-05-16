@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { api, Discussion, TaskStatus } from '@/services/api';
+import { api, Discussion, TaskStatus, TaskManagementResult } from '@/services/api';
 import { Lock, LockOpen, Check } from 'lucide-react';
 
 interface TaskManagerProps {

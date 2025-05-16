@@ -141,7 +141,7 @@ export const api = {
     },
     
     // Update task status
-    updateTaskStatus: (discussionId: string, taskId: number, status: TaskStatus) => {
+    updateTaskStatus: (discussionId: string, taskId: number, status: TaskStatus): Promise<TaskManagementResult> => {
       console.log(`Updating task ${taskId} of discussion ${discussionId} to ${status}`);
       
       // Simulate API call in development
