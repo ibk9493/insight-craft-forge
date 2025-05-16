@@ -1,7 +1,6 @@
-
 // This is a new file that we'll create to fix the annotation loading issue
 import { useState } from 'react';
-import { SubTask } from '@/components/dashboard/TaskCard';
+import { SubTask, SubTaskStatus } from '@/components/dashboard/TaskCard';
 import { Annotation } from '@/services/api';
 import { toast } from 'sonner';
 import { User } from '@/contexts/UserContext'; // Import User from UserContext instead of api

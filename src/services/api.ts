@@ -1,4 +1,14 @@
+
 import { toast } from 'sonner';
+
+/**
+ * API Service for SWE-QA Annotation System
+ * 
+ * This file implements the API layer for the annotation system, with
+ * both real API calls and a mock implementation for development.
+ * 
+ * For detailed API documentation and expected endpoints, see api-docs.md
+ */
 
 // Types for API responses
 export interface Discussion {
@@ -25,6 +35,16 @@ export interface Annotation {
 export interface ApiError {
   message: string;
   status?: number;
+}
+
+// Update TaskStatus type to be a union of literal strings
+export type TaskStatus = 'locked' | 'unlocked' | 'completed';
+
+// Update TaskState interface to include all the properties we're using
+export interface TaskState {
+  status: TaskStatus;
+  annotators: number;
+  userAnnotated?: boolean;
 }
 
 // API base configuration
@@ -98,6 +118,15 @@ export const api = {
       apiRequest<Annotation>(`/annotations?discussionId=${discussionId}&userId=${userId}&taskId=${taskId}`),
     save: (annotation: Omit<Annotation, 'timestamp'>) => 
       apiRequest<Annotation>('/annotations', 'POST', annotation),
+    upload: (file: File, discussionId: string) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('discussionId', discussionId);
+      return apiRequest<{fileUrl: string}>('/files/upload', 'POST', formData, {
+        // Don't set Content-Type for FormData, browser will set it correctly
+        'Content-Type': undefined as any
+      });
+    }
   },
 
   // Consensus endpoints
@@ -108,6 +137,12 @@ export const api = {
       apiRequest<Annotation>('/consensus', 'POST', consensus),
     calculate: (discussionId: string, taskId: number) => 
       apiRequest<{result: string, agreement: boolean}>(`/consensus/calculate?discussionId=${discussionId}&taskId=${taskId}`),
+  },
+  
+  // Code download endpoint
+  code: {
+    getDownloadUrl: (discussionId: string, repo: string) => 
+      apiRequest<{downloadUrl: string}>(`/code/download?discussionId=${discussionId}&repo=${repo}`)
   }
 };
 

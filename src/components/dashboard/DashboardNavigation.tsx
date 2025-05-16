@@ -50,7 +50,7 @@ const DashboardNavigation = ({
     <div className="flex flex-col space-y-4 mt-6">
       <div className="flex justify-between items-center">
         {viewMode !== 'grid' && (
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button
               onClick={onBackToGrid}
               variant="outline"
