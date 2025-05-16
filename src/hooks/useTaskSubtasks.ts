@@ -10,28 +10,32 @@ export function useTaskSubtasks() {
       title: 'Relevance Check',
       status: 'pending',
       options: ['Yes', 'No'],
-      description: 'Check if the question is relevant to the topic'
+      description: 'Check if the question is relevant to the topic',
+      requiresRemarks: true
     },
     {
       id: 'learning',
       title: 'Learning Value Check',
       status: 'pending',
       options: ['Yes', 'No'],
-      description: 'Check if the question has learning value'
+      description: 'Check if the question has learning value',
+      requiresRemarks: true
     },
     {
       id: 'clarity',
       title: 'Clarity Check',
       status: 'pending',
       options: ['Yes', 'No'],
-      description: 'Check if the question is clear'
+      description: 'Check if the question is clear',
+      requiresRemarks: true
     },
     {
       id: 'grounded',
       title: 'Image Grounded Check',
       status: 'pending',
       options: ['True', 'False', 'N/A'],
-      description: 'Check if images are properly referenced (if any)'
+      description: 'Check if images are properly referenced (if any)',
+      requiresRemarks: true
     }
   ]);
   
@@ -42,28 +46,32 @@ export function useTaskSubtasks() {
       title: 'Addresses All Aspects',
       status: 'pending',
       options: ['Yes', 'No'],
-      description: 'Check if the answer addresses all aspects of the question'
+      description: 'Check if the answer addresses all aspects of the question',
+      requiresRemarks: true
     },
     {
       id: 'explanation',
       title: 'Explanation Provided',
       status: 'pending',
       options: ['Yes', 'No'],
-      description: 'Check if the answer provides an explanation'
+      description: 'Check if the answer provides an explanation',
+      requiresRemarks: true
     },
     {
       id: 'execution',
       title: 'Manual Code Execution Check',
       status: 'pending',
       options: ['Executable', 'Not Executable', 'N/A'],
-      description: 'Check if the provided code is executable'
+      description: 'Check if the provided code is executable',
+      requiresRemarks: true
     },
     {
       id: 'download',
       title: 'Provide Code Download Link',
       status: 'pending',
       options: ['Provided', 'Not Provided', 'N/A'],
-      description: 'Provide a link to download the code'
+      description: 'Provide a link to download the code',
+      requiresRemarks: true
     },
     {
       id: 'justification',
@@ -105,7 +113,8 @@ export function useTaskSubtasks() {
       title: 'Question Type',
       status: 'pending',
       options: ['Search', 'Reasoning'],
-      description: 'Classify the question type'
+      description: 'Classify the question type',
+      requiresRemarks: true
     },
     {
       id: 'supporting',
@@ -129,7 +138,7 @@ export function useTaskSubtasks() {
           ? { 
               ...task, 
               selectedOption,
-              textValue,
+              textValue: textValue !== undefined ? textValue : task.textValue,
               status: (selectedOption || textValue) ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
             } 
           : task
@@ -141,7 +150,7 @@ export function useTaskSubtasks() {
           ? { 
               ...task, 
               selectedOption,
-              textValue,
+              textValue: textValue !== undefined ? textValue : task.textValue,
               status: (selectedOption || textValue) ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
             } 
           : task
@@ -153,7 +162,7 @@ export function useTaskSubtasks() {
           ? { 
               ...task, 
               selectedOption,
-              textValue,
+              textValue: textValue !== undefined ? textValue : task.textValue,
               status: (selectedOption || textValue) ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
             } 
           : task
@@ -165,7 +174,7 @@ export function useTaskSubtasks() {
           ? { 
               ...task, 
               selectedOption,
-              textValue,
+              textValue: textValue !== undefined ? textValue : task.textValue,
               status: (selectedOption || textValue) ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
             } 
           : task
@@ -177,7 +186,7 @@ export function useTaskSubtasks() {
           ? { 
               ...task, 
               selectedOption,
-              textValue,
+              textValue: textValue !== undefined ? textValue : task.textValue,
               status: (selectedOption || textValue) ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
             } 
           : task
@@ -189,7 +198,7 @@ export function useTaskSubtasks() {
           ? { 
               ...task, 
               selectedOption,
-              textValue,
+              textValue: textValue !== undefined ? textValue : task.textValue,
               status: (selectedOption || textValue) ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
             } 
           : task

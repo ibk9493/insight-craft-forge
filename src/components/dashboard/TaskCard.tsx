@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, CheckCircle, AlertCircle, HelpCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -14,6 +15,7 @@ export interface SubTask {
   description?: string;
   textInput?: boolean;
   textValue?: string;
+  requiresRemarks?: boolean; // New field to indicate if remarks are required
 }
 
 interface TaskCardProps {
@@ -116,13 +118,16 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   </div>
                 )}
                 
-                {/* Text input field */}
-                {task.textInput && (
+                {/* Text input field - shown for explicit textInput or when a Yes/No option is selected and requiresRemarks is true */}
+                {(task.textInput || 
+                 (task.requiresRemarks && task.selectedOption && 
+                  (task.selectedOption === 'Yes' || task.selectedOption === 'No' || 
+                   task.selectedOption === 'True' || task.selectedOption === 'False'))) && (
                   <div className="mt-3">
                     <Textarea
                       value={task.textValue || ''}
                       onChange={(e) => onSubTaskChange(task.id, undefined, e.target.value)}
-                      placeholder={`Enter ${task.title.toLowerCase()}`}
+                      placeholder={`Enter ${task.textInput ? task.title.toLowerCase() : 'remarks'}`}
                       className="min-h-[100px] text-sm"
                     />
                   </div>

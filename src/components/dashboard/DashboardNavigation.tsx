@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, ArrowRight, Upload, Download, ListFilter } from 'lucide-react';
+import { ArrowLeft, Home, Upload, Download, ListFilter } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface DashboardNavigationProps {
@@ -40,6 +40,11 @@ const DashboardNavigation = ({
   const handleBackToDiscussions = () => {
     navigate('/discussions');
   };
+  
+  // Navigate to dashboard home
+  const handleGoToDashboard = () => {
+    navigate('/dashboard');
+  };
 
   return (
     <div className="flex flex-col space-y-4 mt-6">
@@ -65,6 +70,15 @@ const DashboardNavigation = ({
                 <span>Back to Discussions</span>
               </Button>
             )}
+            
+            <Button
+              onClick={handleGoToDashboard}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              <Home className="h-4 w-4" />
+              <span>Dashboard Home</span>
+            </Button>
           </div>
         )}
       </div>
@@ -111,7 +125,7 @@ const DashboardNavigation = ({
             className="flex items-center gap-2 bg-dashboard-blue hover:bg-blue-600"
           >
             <span>Save {isConsensus ? 'Consensus' : 'Annotation'}</span>
-            <ArrowRight className="h-4 w-4" />
+            <ArrowLeft className="h-4 w-4" />
           </Button>
         </div>
       )}

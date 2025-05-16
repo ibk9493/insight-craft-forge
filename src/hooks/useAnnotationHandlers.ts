@@ -62,18 +62,20 @@ export function useAnnotationHandlers({
       // Ensure we're returning properly typed SubTask[] objects
       return tasksCopy.map(task => {
         const savedValue = annotation.data[task.id];
+        const savedTextValue = annotation.data[`${task.id}_text`];
+        
         if (savedValue !== undefined) {
           if (typeof savedValue === 'boolean') {
             return {
               ...task,
-              selectedOption: savedValue ? 'true' : 'false',
-              textValue: task.textValue || '' // Ensure textValue is string
+              selectedOption: savedValue ? 'True' : 'False', // Convert boolean to string option
+              textValue: typeof savedTextValue === 'string' ? savedTextValue : (task.textValue || '') // Ensure textValue is string
             };
           } else if (typeof savedValue === 'string') {
             return {
               ...task,
               selectedOption: savedValue,
-              textValue: (annotation.data[`${task.id}_text`] as string) || ''
+              textValue: typeof savedTextValue === 'string' ? savedTextValue : (task.textValue || '')
             };
           }
         }
@@ -95,11 +97,11 @@ export function useAnnotationHandlers({
       // Initialize with empty consensus tasks based on taskId
       let consensusTasks: SubTask[] = [];
       if (taskId === 1) {
-        consensusTasks = JSON.parse(JSON.stringify(consensusTask1));
+        consensusTasks = JSON.parse(JSON.stringify(task1SubTasks));
       } else if (taskId === 2) {
-        consensusTasks = JSON.parse(JSON.stringify(consensusTask2));
+        consensusTasks = JSON.parse(JSON.stringify(task2SubTasks));
       } else if (taskId === 3) {
-        consensusTasks = JSON.parse(JSON.stringify(consensusTask3));
+        consensusTasks = JSON.parse(JSON.stringify(task3SubTasks));
       }
       
       // If we have an existing consensus annotation, use it
@@ -107,18 +109,20 @@ export function useAnnotationHandlers({
         // Ensure we're returning properly typed SubTask[] objects
         return consensusTasks.map(task => {
           const savedValue = consensusAnnotation.data[task.id];
+          const savedTextValue = consensusAnnotation.data[`${task.id}_text`];
+          
           if (savedValue !== undefined) {
             if (typeof savedValue === 'boolean') {
               return {
                 ...task,
-                selectedOption: savedValue ? 'true' : 'false',
-                textValue: task.textValue || '' // Ensure textValue is string
+                selectedOption: savedValue ? 'True' : 'False', // Convert boolean to string option
+                textValue: typeof savedTextValue === 'string' ? savedTextValue : (task.textValue || '') // Ensure textValue is string
               };
             } else if (typeof savedValue === 'string') {
               return {
                 ...task,
                 selectedOption: savedValue,
-                textValue: (consensusAnnotation.data[`${task.id}_text`] as string) || ''
+                textValue: typeof savedTextValue === 'string' ? savedTextValue : (task.textValue || '')
               };
             }
           }
@@ -135,17 +139,33 @@ export function useAnnotationHandlers({
       
       // Convert all annotations to form fields format and count occurrences
       const fieldCounts: Record<string, Record<string, number>> = {};
+      const textValues: Record<string, string[]> = {};
       
       annotations.forEach(annotation => {
         Object.entries(annotation.data).forEach(([key, value]) => {
-          // Skip text fields
-          if (key.endsWith('_text')) return;
+          // Skip text fields, we'll handle them separately
+          if (key.endsWith('_text')) {
+            const baseKey = key.replace('_text', '');
+            if (!textValues[baseKey]) {
+              textValues[baseKey] = [];
+            }
+            if (typeof value === 'string' && value.trim() !== '') {
+              textValues[baseKey].push(value);
+            }
+            return;
+          }
           
           if (!fieldCounts[key]) {
             fieldCounts[key] = {};
           }
           
-          const stringValue = typeof value === 'boolean' ? (value ? 'true' : 'false') : String(value);
+          // Convert boolean values to strings to match our options format
+          let stringValue: string;
+          if (typeof value === 'boolean') {
+            stringValue = value ? 'True' : 'False';
+          } else {
+            stringValue = String(value);
+          }
           
           if (!fieldCounts[key][stringValue]) {
             fieldCounts[key][stringValue] = 0;
@@ -173,22 +193,15 @@ export function useAnnotationHandlers({
         
         // If we found a most common value
         if (mostCommonValue) {
-          // Check if any annotation has text for this field
-          const textFieldKey = `${task.id}_text`;
-          let textValue = '';
-          
-          for (const annotation of annotations) {
-            const textFieldValue = annotation.data[textFieldKey];
-            if (textFieldValue && typeof textFieldValue === 'string') {
-              textValue = textFieldValue;
-              break;
-            }
-          }
+          // Use the first non-empty text value for this field
+          const textFieldValues = textValues[task.id] || [];
+          const textValue = textFieldValues.length > 0 ? textFieldValues[0] : '';
           
           return {
             ...task,
             selectedOption: mostCommonValue,
-            textValue
+            textValue,
+            status: 'completed' as SubTaskStatus
           };
         }
         
@@ -249,9 +262,10 @@ export function useAnnotationHandlers({
         // Convert form data to API format
         currentTasks.forEach(task => {
           if (task.selectedOption) {
-            // Convert string 'true'/'false' to actual boolean for boolean fields
-            if (task.selectedOption === 'true' || task.selectedOption === 'false') {
-              taskData[task.id] = task.selectedOption === 'true';
+            // Convert string options to actual boolean for boolean fields if needed
+            if (task.selectedOption === 'True' || task.selectedOption === 'False' ||
+                task.selectedOption === 'Yes' || task.selectedOption === 'No') {
+              taskData[task.id] = (task.selectedOption === 'True' || task.selectedOption === 'Yes');
             } else {
               taskData[task.id] = task.selectedOption;
             }
@@ -263,7 +277,7 @@ export function useAnnotationHandlers({
           }
         });
         
-        // Save annotation without isConsensus property
+        // Save annotation
         const success = await saveAnnotation({
           userId: user.id,
           discussionId,
@@ -301,9 +315,10 @@ export function useAnnotationHandlers({
         // Convert form data to API format
         currentTasks.forEach(task => {
           if (task.selectedOption) {
-            // Convert string 'true'/'false' to actual boolean for boolean fields
-            if (task.selectedOption === 'true' || task.selectedOption === 'false') {
-              taskData[task.id] = task.selectedOption === 'true';
+            // Convert string options to actual boolean for boolean fields if needed
+            if (task.selectedOption === 'True' || task.selectedOption === 'False' ||
+                task.selectedOption === 'Yes' || task.selectedOption === 'No') {
+              taskData[task.id] = (task.selectedOption === 'True' || task.selectedOption === 'Yes');
             } else {
               taskData[task.id] = task.selectedOption;
             }
@@ -315,7 +330,7 @@ export function useAnnotationHandlers({
           }
         });
         
-        // Save consensus annotation without isConsensus property
+        // Save consensus annotation
         const success = await saveConsensusAnnotation({
           userId: user.id,
           discussionId,
