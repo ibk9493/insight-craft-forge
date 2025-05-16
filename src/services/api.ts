@@ -1,4 +1,3 @@
-
 import { toast } from 'sonner';
 import { TASK_CONFIG } from '@/config';
 
@@ -329,6 +328,31 @@ export const api = {
   code: {
     getDownloadUrl: (discussionId: string, repo: string) => 
       apiRequest<{downloadUrl: string}>(`/code/download?discussionId=${discussionId}&repo=${repo}`)
+  },
+  
+  // Authentication endpoints
+  auth: {
+    verifyGoogleToken: (token: string) => {
+      // In a real app, this would send the token to your backend
+      console.log('Verifying Google token:', token);
+      
+      // Simulate API response for development/testing
+      if (import.meta.env.DEV) {
+        console.log('DEV mode: Simulating Google authentication success');
+        return Promise.resolve({
+          success: true,
+          user: {
+            id: '5',
+            username: 'google.user@example.com',
+            role: 'annotator',
+            provider: 'google'
+          }
+        });
+      }
+      
+      // Actual API call in production
+      return apiRequest<{success: boolean, user: any}>('/auth/google', 'POST', { token });
+    }
   }
 };
 
