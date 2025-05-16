@@ -65,6 +65,15 @@ await api.annotations.save({
   taskId: 1,
   data: { relevance: true }
 });
+
+// For pod leads: Override an annotator's annotation
+await api.annotations.podLeadOverride(
+  'podlead1',    // Pod lead's user ID
+  'annotator2',  // Annotator's user ID
+  'github-123',  // Discussion ID
+  1,             // Task ID
+  { relevance: true }  // New annotation data
+);
 ```
 
 ### Managing Consensus
@@ -91,3 +100,20 @@ await api.consensus.save({
 3. **Caching**: Consider caching responses for frequently accessed data
 4. **Type Safety**: Utilize TypeScript interfaces for API responses
 
+## Role-Based Features
+
+### For Annotators
+- Create and update their own annotations
+- View discussions assigned to them
+
+### For Pod Leads
+- All annotator capabilities
+- Create/update consensus annotations
+- Override individual annotator submissions when necessary
+- View annotator submissions
+
+### For Admins
+- All pod lead capabilities
+- Upload discussions
+- Manage tasks (lock/unlock)
+- Manage user access

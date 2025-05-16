@@ -1,3 +1,4 @@
+
 // This is a new file that we'll create to fix the annotation loading issue
 import { useState } from 'react';
 import { SubTask, SubTaskStatus } from '@/components/dashboard/TaskCard';
@@ -19,6 +20,7 @@ interface AnnotationHandlersProps {
   getAnnotationsForTask: (discussionId: string, taskId: number) => Annotation[];
   getConsensusAnnotation: (discussionId: string, taskId: number) => Annotation | undefined;
   updateStepCompletionStatus: (stepIndex: number, completed: boolean) => void;
+  overrideAnnotation?: (podLeadId: string, annotatorId: string, discussionId: string, taskId: number, data: Record<string, string | boolean>) => Promise<boolean>;
 }
 
 export function useAnnotationHandlers({
@@ -34,7 +36,8 @@ export function useAnnotationHandlers({
   getUserAnnotation,
   getAnnotationsForTask,
   getConsensusAnnotation,
-  updateStepCompletionStatus
+  updateStepCompletionStatus,
+  overrideAnnotation
 }: AnnotationHandlersProps) {
   const [loading, setLoading] = useState(false);
 
@@ -83,6 +86,52 @@ export function useAnnotationHandlers({
     } catch (error) {
       console.error('Failed to load annotation:', error);
       toast.error('Failed to load your annotation');
+      return null;
+    }
+  };
+
+  // Load specific annotator's annotation (for pod leads to view/edit)
+  const loadAnnotatorAnnotation = (discussionId: string, annotatorId: string, taskId: number): SubTask[] | null => {
+    try {
+      const annotation = getUserAnnotation(discussionId, annotatorId, taskId);
+      
+      if (!annotation) return null;
+      
+      // Create a deep copy of the tasks based on which task we're loading
+      let tasksCopy: SubTask[] = [];
+      if (taskId === 1) {
+        tasksCopy = JSON.parse(JSON.stringify(task1SubTasks));
+      } else if (taskId === 2) {
+        tasksCopy = JSON.parse(JSON.stringify(task2SubTasks));
+      } else if (taskId === 3) {
+        tasksCopy = JSON.parse(JSON.stringify(task3SubTasks));
+      }
+      
+      // Map the saved data back to the form fields
+      return tasksCopy.map(task => {
+        const savedValue = annotation.data[task.id];
+        const savedTextValue = annotation.data[`${task.id}_text`];
+        
+        if (savedValue !== undefined) {
+          if (typeof savedValue === 'boolean') {
+            return {
+              ...task,
+              selectedOption: savedValue ? 'True' : 'False',
+              textValue: typeof savedTextValue === 'string' ? savedTextValue : (task.textValue || '')
+            };
+          } else if (typeof savedValue === 'string') {
+            return {
+              ...task,
+              selectedOption: savedValue,
+              textValue: typeof savedTextValue === 'string' ? savedTextValue : (task.textValue || '')
+            };
+          }
+        }
+        return task;
+      });
+    } catch (error) {
+      console.error('Failed to load annotator annotation:', error);
+      toast.error('Failed to load annotator annotation');
       return null;
     }
   };
@@ -351,6 +400,68 @@ export function useAnnotationHandlers({
     }
   };
   
+  // New function to handle pod lead overriding an annotator's annotation
+  const handleOverrideAnnotation = async (
+    discussionId: string | null,
+    annotatorId: string,
+    taskId: number,
+    subTasks: SubTask[],
+    onComplete: () => void
+  ) => {
+    if (!discussionId || !user || !isPodLead(user) || !overrideAnnotation) {
+      toast.error(isPodLead(user) ? 'Missing information' : 'Only pod leads can override annotations');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      
+      // Prepare data based on current task
+      let taskData: Record<string, any> = {};
+      
+      // Convert form data to API format
+      subTasks.forEach(task => {
+        if (task.selectedOption) {
+          // Convert string options to actual boolean for boolean fields if needed
+          if (task.selectedOption === 'True' || task.selectedOption === 'False' ||
+              task.selectedOption === 'Yes' || task.selectedOption === 'No') {
+            taskData[task.id] = (task.selectedOption === 'True' || task.selectedOption === 'Yes');
+          } else {
+            taskData[task.id] = task.selectedOption;
+          }
+          
+          // Add text value if present
+          if (task.textValue) {
+            taskData[`${task.id}_text`] = task.textValue;
+          }
+        }
+      });
+      
+      // Add override metadata
+      taskData._overridden_by_pod_lead = true;
+      taskData._override_timestamp = new Date().toISOString();
+      
+      // Save override
+      const success = await overrideAnnotation(
+        user.id,
+        annotatorId,
+        discussionId,
+        taskId,
+        taskData
+      );
+      
+      if (success) {
+        toast.success(`Successfully overrode annotator's submission`);
+        onComplete();
+      }
+    } catch (error) {
+      console.error('Failed to override annotation:', error);
+      toast.error('Failed to override annotation');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
   // Helper function to check if user is pod lead
   const isPodLead = (user: User): boolean => {
     return user.role === 'pod_lead';
@@ -358,8 +469,10 @@ export function useAnnotationHandlers({
 
   return {
     loadUserAnnotation,
+    loadAnnotatorAnnotation,
     prepareConsensusView,
     handleSaveAnnotation,
+    handleOverrideAnnotation,
     loading
   };
 }

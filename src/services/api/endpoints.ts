@@ -44,7 +44,16 @@ export const api = {
       return apiRequest<{fileUrl: string}>('/files/upload', 'POST', formData, {
         'Content-Type': undefined as any
       });
-    }
+    },
+    // New method for pod leads to override annotations
+    podLeadOverride: (podLeadId: string, annotatorId: string, discussionId: string, taskId: number, data: Record<string, string | boolean>) => 
+      apiRequest<Annotation>('/pod-lead/annotations/override', 'POST', {
+        discussion_id: discussionId,
+        annotator_id: annotatorId,
+        task_id: taskId,
+        data,
+        pod_lead_id: podLeadId
+      }),
   },
 
   // Consensus endpoints

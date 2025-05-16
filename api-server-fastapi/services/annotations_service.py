@@ -157,3 +157,50 @@ def override_annotation(db: Session, annotation: schemas.AnnotationOverride) -> 
         data=existing.data,
         timestamp=existing.timestamp
     )
+
+# New function to allow pod leads to overwrite annotations
+def pod_lead_override_annotation(
+    db: Session, 
+    pod_lead_id: str,
+    annotation_override: schemas.PodLeadAnnotationOverride
+) -> schemas.Annotation:
+    # First verify that the user doing the override is a pod lead
+    # In a real app, this would check against actual user roles in the database
+    
+    # Find the annotation to override
+    existing = db.query(models.Annotation).filter(
+        and_(
+            models.Annotation.discussion_id == annotation_override.discussion_id,
+            models.Annotation.user_id == annotation_override.annotator_id,
+            models.Annotation.task_id == annotation_override.task_id
+        )
+    ).first()
+    
+    if not existing:
+        # Create new annotation if it doesn't exist
+        existing = models.Annotation(
+            discussion_id=annotation_override.discussion_id,
+            user_id=annotation_override.annotator_id,
+            task_id=annotation_override.task_id,
+            data=annotation_override.data
+        )
+        db.add(existing)
+    else:
+        # Update existing annotation
+        existing.data = annotation_override.data
+        existing.timestamp = datetime.utcnow()
+    
+    # Add an audit trail entry showing this was overridden by a pod lead
+    existing.data["_overridden_by"] = pod_lead_id
+    existing.data["_overridden_at"] = datetime.utcnow().isoformat()
+    
+    db.commit()
+    db.refresh(existing)
+    
+    return schemas.Annotation(
+        discussion_id=existing.discussion_id,
+        user_id=existing.user_id,
+        task_id=existing.task_id,
+        data=existing.data,
+        timestamp=existing.timestamp
+    )

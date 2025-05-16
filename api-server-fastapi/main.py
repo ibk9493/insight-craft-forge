@@ -1,3 +1,4 @@
+
 import os
 import uuid
 from datetime import datetime
@@ -16,7 +17,7 @@ from dotenv import load_dotenv
 from database import engine, SessionLocal
 import models
 import schemas
-from services import discussions_service, annotations_service, consensus_service, auth_service
+from services import discussions_service, annotations_service, consensus_service, auth_service, summary_service
 
 # Load environment variables
 load_dotenv()
@@ -110,6 +111,15 @@ def update_annotation(
 ):
     return annotations_service.update_annotation(db, discussion_id, user_id, task_id, annotation_update)
 
+# New endpoint for pod leads to override annotations
+@app.post("/api/pod-lead/annotations/override", response_model=schemas.Annotation, dependencies=[Depends(verify_api_key)])
+def pod_lead_override_annotation(
+    override_data: schemas.PodLeadAnnotationOverride, 
+    pod_lead_id: str,
+    db: Session = Depends(get_db)
+):
+    return annotations_service.pod_lead_override_annotation(db, pod_lead_id, override_data)
+
 # Consensus endpoints
 @app.get("/api/consensus", response_model=schemas.Annotation, dependencies=[Depends(verify_api_key)])
 def get_consensus(discussion_id: str, task_id: int, db: Session = Depends(get_db)):
@@ -201,6 +211,11 @@ def add_authorized_user(user_data: schemas.AuthorizedUserCreate, db: Session = D
 def remove_authorized_user(email: str, db: Session = Depends(get_db)):
     auth_service.remove_authorized_user(db, email)
     return {"success": True}
+
+# Summary endpoints
+@app.get("/api/summary/stats", dependencies=[Depends(verify_api_key)])
+def get_summary_stats(db: Session = Depends(get_db)):
+    return summary_service.get_summary_stats(db)
 
 # Run the app
 if __name__ == "__main__":

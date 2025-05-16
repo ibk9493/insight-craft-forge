@@ -1,18 +1,8 @@
 
-from datetime import datetime
+from pydantic import BaseModel
 from typing import Dict, List, Optional, Any, Union
-from pydantic import BaseModel, Field
+from datetime import datetime
 
-# Task schemas
-class TaskState(BaseModel):
-    status: str
-    annotators: int
-    user_annotated: Optional[bool] = None
-
-    class Config:
-        orm_mode = True
-
-# Discussion schemas
 class DiscussionBase(BaseModel):
     title: str
     url: str
@@ -22,19 +12,18 @@ class DiscussionBase(BaseModel):
 class DiscussionCreate(DiscussionBase):
     id: str
 
-class TasksDict(BaseModel):
-    task1: Optional[TaskState] = None
-    task2: Optional[TaskState] = None 
-    task3: Optional[TaskState] = None
+class TaskState(BaseModel):
+    status: str
+    annotators: int
+    userAnnotated: Optional[bool] = None
 
 class Discussion(DiscussionBase):
     id: str
-    tasks: TasksDict
+    tasks: Dict[str, TaskState]
 
     class Config:
         orm_mode = True
 
-# Annotation schemas
 class AnnotationBase(BaseModel):
     discussion_id: str
     user_id: str
@@ -47,67 +36,37 @@ class AnnotationCreate(AnnotationBase):
 class AnnotationUpdate(BaseModel):
     data: Dict[str, Any]
 
+class AnnotationOverride(AnnotationBase):
+    timestamp: Optional[datetime] = None
+
+class PodLeadAnnotationOverride(BaseModel):
+    discussion_id: str
+    annotator_id: str  # The ID of the annotator whose annotation is being overridden
+    task_id: int
+    data: Dict[str, Any]
+
 class Annotation(AnnotationBase):
     timestamp: datetime
 
     class Config:
         orm_mode = True
 
-class AnnotationOverride(AnnotationBase):
-    timestamp: Optional[datetime] = None
-
-# Consensus schemas
-class ConsensusOverride(BaseModel):
+class ConsensusBase(BaseModel):
     discussion_id: str
     task_id: int
     data: Dict[str, Any]
 
-# File schemas
-class FileUpload(BaseModel):
-    discussion_id: str
-    file: bytes = Field(..., description="The file content")
-    filename: str = Field(..., description="Original filename")
+class ConsensusCreate(ConsensusBase):
+    pass
 
-# Admin schemas
-class GitHubDiscussionTask(BaseModel):
-    status: Optional[str] = "locked"
-    annotators: Optional[int] = 0
+class ConsensusOverride(ConsensusBase):
+    pass
 
-class GitHubDiscussionTasks(BaseModel):
-    task1: Optional[GitHubDiscussionTask] = None
-    task2: Optional[GitHubDiscussionTask] = None
-    task3: Optional[GitHubDiscussionTask] = None
+class Consensus(ConsensusBase):
+    timestamp: datetime
 
-class GitHubDiscussion(BaseModel):
-    id: str
-    title: str
-    url: str
-    repository: Optional[str] = None
-    created_at: str
-    tasks: Optional[GitHubDiscussionTasks] = None
-
-class DiscussionUpload(BaseModel):
-    discussions: List[GitHubDiscussion]
-
-class TaskStatusUpdate(BaseModel):
-    discussion_id: str
-    task_id: int
-    status: str
-
-class TaskManagementResult(BaseModel):
-    success: bool
-    message: str
-    discussion: Optional[Discussion] = None
-
-class UploadResult(BaseModel):
-    success: bool
-    message: str
-    discussions_added: int
-    errors: Optional[List[str]] = None
-
-# Auth schemas
-class GoogleToken(BaseModel):
-    token: str
+    class Config:
+        orm_mode = True
 
 class AuthorizedUserBase(BaseModel):
     email: str
@@ -121,3 +80,14 @@ class AuthorizedUser(AuthorizedUserBase):
 
     class Config:
         orm_mode = True
+
+class GoogleToken(BaseModel):
+    token: str
+
+class TaskStatusUpdate(BaseModel):
+    discussion_id: str
+    task_id: int
+    status: str
+
+class DiscussionUpload(BaseModel):
+    discussions: List[Dict[str, Any]]
