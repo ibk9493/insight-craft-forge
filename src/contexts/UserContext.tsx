@@ -32,7 +32,7 @@ export const useUser = () => {
   return context;
 };
 
-// Mock users for demonstration
+// Mock users for demonstration - clear distinction between Pod Lead and Admin
 const MOCK_USERS = [
   { id: '1', username: 'annotator1', password: 'password', role: 'annotator' as const },
   { id: '2', username: 'annotator2', password: 'password', role: 'annotator' as const },
@@ -68,6 +68,16 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const { password: _, ...userWithoutPassword } = foundUser;
       setUser({...userWithoutPassword, provider: 'local'});
       localStorage.setItem('user', JSON.stringify({...userWithoutPassword, provider: 'local'}));
+      
+      // Show toast based on user role
+      if (userWithoutPassword.role === 'admin') {
+        toast.success('Logged in as Administrator');
+      } else if (userWithoutPassword.role === 'pod_lead') {
+        toast.success('Logged in as Pod Lead');
+      } else {
+        toast.success('Logged in as Annotator');
+      }
+      
       return true;
     }
     
@@ -101,6 +111,8 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             provider: 'google'
           }));
           
+          toast.success(`Logged in as ${mockGoogleUser.role === 'admin' ? 'Administrator' : mockGoogleUser.role === 'pod_lead' ? 'Pod Lead' : 'Annotator'}`);
+          
           return true;
         }
       }
@@ -115,6 +127,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const logout = () => {
     setUser(null);
     localStorage.removeItem('user');
+    toast.info('Logged out successfully');
   };
 
   const value = {

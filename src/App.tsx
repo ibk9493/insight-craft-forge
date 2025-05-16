@@ -9,6 +9,7 @@ import Login from "./pages/Login";
 import Discussions from "./pages/Discussions";
 import Dashboard from "./pages/Dashboard";
 import Admin from "./pages/Admin";
+import ApiDocs from "./pages/ApiDocs";
 import NotFound from "./pages/NotFound";
 import { UserProvider } from "./contexts/UserContext";
 
@@ -36,6 +37,7 @@ function App() {
               <Route path="/discussions" element={<Discussions />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/admin" element={<Admin />} />
+              <Route path="/api-docs" element={<ApiDocs />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

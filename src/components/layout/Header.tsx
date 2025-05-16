@@ -1,7 +1,9 @@
 
 import React from 'react';
-import { Github, ChevronDown, LogOut, User, Home, Settings } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
 import { useUser } from '@/contexts/UserContext';
+import { Separator } from '@/components/ui/separator';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,135 +11,115 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Link, useLocation } from 'react-router-dom';
+} from '@/components/ui/dropdown-menu';
+import { User, File, Settings, LogOut } from 'lucide-react';
 
-const Header = () => {
-  const { user, logout, isAdmin, isPodLead } = useUser();
+const Header: React.FC = () => {
+  const { user, logout, isAuthenticated, isPodLead, isAdmin } = useUser();
   const location = useLocation();
-  
-  // Helper to generate breadcrumbs based on current path
-  const getBreadcrumbs = () => {
-    const path = location.pathname;
-    
-    if (path === '/') return null;
-    
-    if (path === '/dashboard') {
-      return <span className="text-sm text-gray-500">Dashboard</span>;
-    }
-    
-    if (path === '/discussions') {
-      return <span className="text-sm text-gray-500">Discussions</span>;
-    }
-    
-    if (path === '/admin') {
-      return <span className="text-sm text-gray-500">Admin</span>;
-    }
-    
-    const queryParams = new URLSearchParams(location.search);
-    const discussionId = queryParams.get('discussionId');
-    const taskId = queryParams.get('task');
-    
-    if (path === '/dashboard' && discussionId) {
-      if (taskId) {
-        return (
-          <div className="flex items-center text-sm text-gray-500">
-            <Link to="/dashboard" className="hover:text-dashboard-blue">Dashboard</Link>
-            <span className="mx-2">•</span>
-            <Link to={`/dashboard?discussionId=${discussionId}`} className="hover:text-dashboard-blue">Tasks</Link>
-            <span className="mx-2">•</span>
-            <span>Task {taskId}</span>
-          </div>
-        );
-      }
-      
-      return (
-        <div className="flex items-center text-sm text-gray-500">
-          <Link to="/dashboard" className="hover:text-dashboard-blue">Dashboard</Link>
-          <span className="mx-2">•</span>
-          <span>Tasks</span>
-        </div>
-      );
-    }
-    
-    return null;
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
   };
-  
+
+  if (!isAuthenticated) {
+    return null;
+  }
+
   return (
-    <header className="bg-white border-b border-gray-200 py-4 px-6 flex justify-between items-center">
-      <div className="flex items-center space-x-6">
-        <Link to="/" className="flex items-center hover:text-dashboard-blue transition-colors">
-          <Github className="h-6 w-6 text-dashboard-blue mr-2" />
-          <h1 className="text-xl font-semibold">GitHub Discussion Evaluator</h1>
-        </Link>
-        
-        {getBreadcrumbs()}
-      </div>
-      <div className="flex items-center space-x-4">
-        {user && (
-          <div className="flex items-center space-x-4">
-            <Link to="/dashboard" className="flex items-center text-dashboard-blue hover:underline">
-              <Home className="h-4 w-4 mr-1" />
-              <span>Dashboard</span>
+    <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+      <div className="container max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-8">
+          <Link to="/" className="font-bold text-xl text-dashboard-blue flex items-center">
+            <span>SWE-QA</span>
+          </Link>
+
+          {/* Navigation Links */}
+          <nav className="hidden md:flex items-center space-x-4">
+            <Link
+              to="/discussions"
+              className={`text-sm font-medium transition-colors hover:text-dashboard-blue ${
+                location.pathname === '/discussions' ? 'text-dashboard-blue' : 'text-gray-600'
+              }`}
+            >
+              Discussions
             </Link>
-            <Link to="/discussions" className="text-dashboard-blue hover:underline">
-              All Discussions
+
+            <Link
+              to="/dashboard"
+              className={`text-sm font-medium transition-colors hover:text-dashboard-blue ${
+                location.pathname === '/dashboard' ? 'text-dashboard-blue' : 'text-gray-600'
+              }`}
+            >
+              Dashboard
             </Link>
-            {(isAdmin || isPodLead) && (
-              <Link to="/admin" className="flex items-center text-dashboard-blue hover:underline">
-                <Settings className="h-4 w-4 mr-1" />
-                <span>Admin</span>
+
+            {/* Pod Lead and Admin Links */}
+            {(isPodLead || isAdmin) && (
+              <Link
+                to="/admin"
+                className={`text-sm font-medium transition-colors hover:text-dashboard-blue ${
+                  location.pathname === '/admin' ? 'text-dashboard-blue' : 'text-gray-600'
+                }`}
+              >
+                Admin Panel
               </Link>
             )}
-          </div>
-        )}
-        
-        <span className="text-sm text-gray-500 ml-4">Dashboard v1.0</span>
-        
-        {user && (
+
+            {/* API Documentation link */}
+            <Link
+              to="/api-docs"
+              className={`text-sm font-medium transition-colors hover:text-dashboard-blue ${
+                location.pathname === '/api-docs' ? 'text-dashboard-blue' : 'text-gray-600'
+              }`}
+            >
+              API Docs
+            </Link>
+          </nav>
+        </div>
+
+        {/* User menu */}
+        <div className="flex items-center">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="flex items-center gap-2">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-dashboard-blue text-white">
-                    {user.username.substring(0, 2).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <span>{user.username}</span>
-                <ChevronDown className="h-4 w-4 opacity-50" />
+              <Button variant="ghost" className="relative h-9 w-9 rounded-full">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100">
+                  <User className="h-5 w-5 text-gray-600" />
+                </div>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>My Account</DropdownMenuLabel>
+              <DropdownMenuLabel>
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-medium leading-none">{user?.username}</p>
+                  <p className="text-xs leading-none text-gray-500">
+                    {user?.role === 'annotator' && 'Annotator'}
+                    {user?.role === 'pod_lead' && 'Pod Lead'}
+                    {user?.role === 'admin' && 'Administrator'}
+                  </p>
+                </div>
+              </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="flex items-center gap-2">
-                <User className="h-4 w-4" />
-                <span>Role: {user.role === 'pod_lead' ? 'Pod Lead' : user.role === 'admin' ? 'Administrator' : 'Annotator'}</span>
+              <DropdownMenuItem onClick={() => navigate('/discussions')}>
+                <File className="mr-2 h-4 w-4" />
+                <span>Discussions</span>
               </DropdownMenuItem>
-              {(isAdmin || isPodLead) && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                    <Link to="/admin" className="flex items-center gap-2 cursor-pointer">
-                      <Settings className="h-4 w-4" />
-                      <span>Admin Panel</span>
-                    </Link>
-                  </DropdownMenuItem>
-                </>
+              {(isPodLead || isAdmin) && (
+                <DropdownMenuItem onClick={() => navigate('/admin')}>
+                  <Settings className="mr-2 h-4 w-4" />
+                  <span>Admin Panel</span>
+                </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
-              <DropdownMenuItem 
-                onClick={logout}
-                className="text-red-600 cursor-pointer flex items-center gap-2"
-              >
-                <LogOut className="h-4 w-4" />
-                <span>Logout</span>
+              <DropdownMenuItem onClick={handleLogout}>
+                <LogOut className="mr-2 h-4 w-4" />
+                <span>Log out</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        )}
+        </div>
       </div>
     </header>
   );
