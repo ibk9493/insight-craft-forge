@@ -1,13 +1,18 @@
 
 import { toast } from 'sonner';
+import { TASK_CONFIG } from '@/config';
 
 /**
  * API Service for SWE-QA Annotation System
  * 
- * This file implements the API layer for the annotation system, with
- * both real API calls and a mock implementation for development.
+ * This file implements the API layer for the annotation system, making calls to our backend.
  * 
- * For detailed API documentation and expected endpoints, see api-docs.md
+ * API Documentation:
+ * - Discussions API: CRUD operations for GitHub discussions
+ * - Annotations API: Create, read, update annotations made by users
+ * - Consensus API: Calculate and save consensus annotations
+ * - Files API: Upload and retrieve files (screenshots, etc.)
+ * - Code API: Download repository code for annotation tasks
  */
 
 // Types for API responses
@@ -48,7 +53,7 @@ export interface TaskState {
 }
 
 // API base configuration
-const API_URL = import.meta.env.VITE_API_URL || 'https://api-mock.example.com';
+const API_URL = import.meta.env.VITE_API_URL || '';
 
 // Helper function to handle API responses
 const handleResponse = async <T>(response: Response): Promise<T> => {
@@ -98,13 +103,39 @@ const apiRequest = async <T>(
   }
 };
 
+/**
+ * API Documentation:
+ * 
+ * Discussions Endpoints:
+ * - GET /discussions - Get all discussions
+ * - GET /discussions/:id - Get a specific discussion by ID
+ * - GET /discussions?status=:status - Get discussions by status
+ * 
+ * Annotations Endpoints:
+ * - GET /annotations?discussionId=:id - Get all annotations for a discussion
+ * - GET /annotations?discussionId=:id&taskId=:taskId - Get annotations for a specific task of a discussion
+ * - GET /annotations?discussionId=:id&userId=:userId&taskId=:taskId - Get a specific annotation
+ * - POST /annotations - Save an annotation
+ * 
+ * Files Endpoints:
+ * - POST /files/upload - Upload a file with discussionId
+ * 
+ * Consensus Endpoints:
+ * - GET /consensus?discussionId=:id&taskId=:taskId - Get consensus for a specific task
+ * - POST /consensus - Save a consensus annotation
+ * - GET /consensus/calculate?discussionId=:id&taskId=:taskId - Calculate consensus based on existing annotations
+ * 
+ * Code Endpoints:
+ * - GET /code/download?discussionId=:id&repo=:repo - Get code download URL
+ */
+
 // API endpoint functions
 export const api = {
   // Discussion endpoints
   discussions: {
     getAll: () => apiRequest<Discussion[]>('/discussions'),
     getById: (id: string) => apiRequest<Discussion>(`/discussions/${id}`),
-    getByStatus: (status: 'locked' | 'unlocked' | 'completed') => 
+    getByStatus: (status: TaskStatus) => 
       apiRequest<Discussion[]>(`/discussions?status=${status}`),
   },
 
@@ -146,202 +177,9 @@ export const api = {
   }
 };
 
-// Mock API implementation for development when API_URL is not set
-export const useMockApi = !import.meta.env.VITE_API_URL;
-
-// Mock data - will be used when API_URL is not available
-export const mockData = {
-  discussions: [
-    {
-      id: '1',
-      title: 'How to implement feature X?',
-      url: 'https://github.com/org/repo/discussions/123',
-      repository: 'org/repo',
-      createdAt: '2025-05-01',
-      tasks: {
-        task1: { status: 'unlocked', annotators: 1 },
-        task2: { status: 'locked', annotators: 0 },
-        task3: { status: 'locked', annotators: 0 }
-      }
-    },
-    {
-      id: '2',
-      title: 'Bug in module Y',
-      url: 'https://github.com/org/repo/discussions/456',
-      repository: 'org/repo',
-      createdAt: '2025-05-05',
-      tasks: {
-        task1: { status: 'completed', annotators: 3 },
-        task2: { status: 'unlocked', annotators: 1 },
-        task3: { status: 'locked', annotators: 0 }
-      }
-    },
-    {
-      id: '3',
-      title: 'Documentation update for Z',
-      url: 'https://github.com/org/repo/discussions/789',
-      repository: 'org/repo',
-      createdAt: '2025-05-10',
-      tasks: {
-        task1: { status: 'completed', annotators: 3 },
-        task2: { status: 'completed', annotators: 3 },
-        task3: { status: 'unlocked', annotators: 2 }
-      }
-    },
-    {
-      id: '4',
-      title: 'Processing logic in Sensors',
-      url: 'https://github.com/apache/airflow/discussions/43579',
-      repository: 'apache/airflow',
-      createdAt: '2024-11-01',
-      tasks: {
-        task1: { status: 'completed', annotators: 3 },
-        task2: { status: 'completed', annotators: 3 },
-        task3: { status: 'unlocked', annotators: 3 }
-      }
-    }
-  ],
-  annotations: [
-    // User 1 annotations
-    {
-      discussionId: '1',
-      userId: '1',
-      taskId: 1,
-      data: { relevance: 'Yes', learning_value: 'Yes', clarity: 'No' },
-      timestamp: new Date().toISOString()
-    },
-    {
-      discussionId: '2',
-      userId: '1',
-      taskId: 1,
-      data: { relevance: 'Yes', learning_value: 'Yes', clarity: 'Yes' },
-      timestamp: new Date().toISOString()
-    },
-    {
-      discussionId: '2',
-      userId: '1',
-      taskId: 2,
-      data: { aspects: 'Yes', explanation: 'Yes', execution: 'N/A' },
-      timestamp: new Date().toISOString()
-    },
-    
-    // User 2 annotations
-    {
-      discussionId: '2',
-      userId: '2',
-      taskId: 1,
-      data: { relevance: 'Yes', learning_value: 'Yes', clarity: 'Yes' },
-      timestamp: new Date().toISOString()
-    },
-    {
-      discussionId: '3',
-      userId: '2',
-      taskId: 1,
-      data: { relevance: 'Yes', learning_value: 'Yes', clarity: 'Yes' },
-      timestamp: new Date().toISOString()
-    },
-    {
-      discussionId: '3',
-      userId: '2',
-      taskId: 2,
-      data: { aspects: 'Yes', explanation: 'Yes', execution: 'Executable' },
-      timestamp: new Date().toISOString()
-    },
-    
-    // User 3 annotations
-    {
-      discussionId: '2',
-      userId: '3',
-      taskId: 1,
-      data: { relevance: 'Yes', learning_value: 'No', clarity: 'Yes' },
-      timestamp: new Date().toISOString()
-    },
-    {
-      discussionId: '3',
-      userId: '3',
-      taskId: 1,
-      data: { relevance: 'Yes', learning_value: 'Yes', clarity: 'Yes' },
-      timestamp: new Date().toISOString()
-    },
-    {
-      discussionId: '3',
-      userId: '3',
-      taskId: 2,
-      data: { aspects: 'Yes', explanation: 'Yes', execution: 'Executable' },
-      timestamp: new Date().toISOString()
-    },
-    {
-      discussionId: '3',
-      userId: '3',
-      taskId: 3,
-      data: { rewrite: 'Completed', classify: 'Search' },
-      timestamp: new Date().toISOString()
-    },
-    {
-      discussionId: '4',
-      userId: '1',
-      taskId: 1,
-      data: { relevance: 'Yes', learning_value: 'Yes', clarity: 'Yes' },
-      timestamp: new Date().toISOString()
-    },
-    {
-      discussionId: '4',
-      userId: '2',
-      taskId: 1,
-      data: { relevance: 'Yes', learning_value: 'Yes', clarity: 'Yes' },
-      timestamp: new Date().toISOString()
-    },
-    {
-      discussionId: '4',
-      userId: '3',
-      taskId: 1,
-      data: { relevance: 'Yes', learning_value: 'Yes', clarity: 'Yes' },
-      timestamp: new Date().toISOString()
-    },
-    {
-      discussionId: '4',
-      userId: '1',
-      taskId: 2,
-      data: { aspects: 'Yes', explanation: 'Yes', execution: 'Executable' },
-      timestamp: new Date().toISOString()
-    },
-    {
-      discussionId: '4',
-      userId: '2',
-      taskId: 2,
-      data: { aspects: 'Yes', explanation: 'Yes', execution: 'Executable' },
-      timestamp: new Date().toISOString()
-    },
-    {
-      discussionId: '4',
-      userId: '3',
-      taskId: 2,
-      data: { aspects: 'Yes', explanation: 'Yes', execution: 'Executable' },
-      timestamp: new Date().toISOString()
-    },
-    {
-      discussionId: '4',
-      userId: '1',
-      taskId: 3,
-      data: { rewrite: 'Completed', classify: 'Reasoning' },
-      timestamp: new Date().toISOString()
-    },
-    {
-      discussionId: '4',
-      userId: '2',
-      taskId: 3,
-      data: { rewrite: 'Completed', classify: 'Reasoning' },
-      timestamp: new Date().toISOString()
-    },
-    {
-      discussionId: '4',
-      userId: '3',
-      taskId: 3,
-      data: { rewrite: 'Completed', classify: 'Reasoning' },
-      timestamp: new Date().toISOString()
-    }
-  ],
-  consensus: []
+// API fallback implementation in case of network issues or dev environment
+export const createFallbackResponse = (entity: string, error: ApiError): never => {
+  toast.error(`Failed to fetch ${entity}: ${error.message}`);
+  console.error(`API Error: ${error.message}`);
+  throw new Error(`API Error: Failed to fetch ${entity}`);
 };
-
-// Removed the duplicate type definitions that were at the end of the file
