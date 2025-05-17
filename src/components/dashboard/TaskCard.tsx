@@ -71,6 +71,11 @@ const TaskCard: React.FC<TaskCardProps> = ({
     );
   };
 
+  // Handle textarea change separately to prevent closing
+  const handleTextChange = (taskId: string, value: string) => {
+    onSubTaskChange(taskId, undefined, value);
+  };
+
   return (
     <div className={cn(
       'border rounded-lg overflow-hidden transition-all duration-300 mb-4',
@@ -133,9 +138,10 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   <div className="mt-3">
                     <Textarea
                       value={task.textValue || ''}
-                      onChange={(e) => onSubTaskChange(task.id, undefined, e.target.value)}
+                      onChange={(e) => handleTextChange(task.id, e.target.value)}
                       placeholder={`Enter ${task.textInput ? task.title.toLowerCase() : 'remarks or justification'}`}
                       className="min-h-[100px] text-sm"
+                      onClick={(e) => e.stopPropagation()} // Prevent click from closing the card
                     />
                   </div>
                 )}
