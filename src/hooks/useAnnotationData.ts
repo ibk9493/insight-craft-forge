@@ -25,12 +25,14 @@ export function useAnnotationData() {
       try {
         setLoading(true);
         const data = await api.discussions.getAll();
-        setDiscussions(data);
+        setDiscussions(data || []);
         setError(null);
       } catch (err) {
         const errorMessage = (err as ApiError).message || 'Failed to fetch discussions';
         setError(errorMessage);
         toast.error(errorMessage);
+        // Set empty array on error to prevent UI breaks
+        setDiscussions([]);
       } finally {
         setLoading(false);
       }
@@ -43,12 +45,14 @@ export function useAnnotationData() {
   useEffect(() => {
     const fetchAnnotations = async () => {
       try {
-        if (discussions.length === 0) return;
+        if (discussions.length === 0) {
+          setAnnotations([]);
+          return;
+        }
         
         setLoading(true);
         
         // In a real app, we might want to limit this to only relevant discussions
-        // For simplicity, we're fetching all annotations for now
         const promises = discussions.map(discussion => 
           api.annotations.getByDiscussionId(discussion.id)
         );
@@ -58,7 +62,7 @@ export function useAnnotationData() {
           .filter((result): result is PromiseFulfilledResult<Annotation[]> => 
             result.status === 'fulfilled'
           )
-          .flatMap(result => result.value);
+          .flatMap(result => result.value || []);
         
         setAnnotations(data);
         setError(null);
@@ -66,6 +70,8 @@ export function useAnnotationData() {
         const errorMessage = (err as ApiError).message || 'Failed to fetch annotations';
         setError(errorMessage);
         toast.error(errorMessage);
+        // Set empty array on error to prevent UI breaks
+        setAnnotations([]);
       } finally {
         setLoading(false);
       }
@@ -73,6 +79,8 @@ export function useAnnotationData() {
 
     if (discussions.length > 0) {
       fetchAnnotations();
+    } else {
+      setAnnotations([]);
     }
   }, [discussions]);
 
@@ -85,6 +93,8 @@ export function useAnnotationData() {
 
   // Check if a user has annotated a specific discussion task
   const getUserAnnotationStatus = useCallback((discussionId: string, userId: string): UserAnnotationStatus => {
+    if (!discussionId || !userId) return { task1: false, task2: false, task3: false };
+    
     return {
       task1: annotations.some(a => a.discussionId === discussionId && a.userId === userId && a.taskId === 1),
       task2: annotations.some(a => a.discussionId === discussionId && a.userId === userId && a.taskId === 2),
@@ -94,6 +104,8 @@ export function useAnnotationData() {
 
   // Get user's annotation for a specific discussion and task
   const getUserAnnotation = useCallback((discussionId: string, userId: string, taskId: number) => {
+    if (!discussionId || !userId) return null;
+    
     return annotations.find(
       a => a.discussionId === discussionId && a.userId === userId && a.taskId === taskId
     );
@@ -102,10 +114,16 @@ export function useAnnotationData() {
   // Save an annotation with proper type signature to return a Promise
   const saveAnnotation = useCallback(async (annotation: Omit<Annotation, 'timestamp'>): Promise<boolean> => {
     try {
+      if (!annotation.discussionId || !annotation.userId) return false;
+      
       setLoading(true);
       
       // Call API to save annotation
       const newAnnotation = await api.annotations.save(annotation);
+      
+      if (!newAnnotation) {
+        throw new Error('Failed to save annotation');
+      }
       
       // Update local state with the new annotation
       setAnnotations(prev => {
@@ -127,9 +145,11 @@ export function useAnnotationData() {
       // Fetch updated discussion status
       try {
         const updatedDiscussion = await api.discussions.getById(annotation.discussionId);
-        setDiscussions(prev => 
-          prev.map(d => d.id === updatedDiscussion.id ? updatedDiscussion : d)
-        );
+        if (updatedDiscussion) {
+          setDiscussions(prev => 
+            prev.map(d => d.id === updatedDiscussion.id ? updatedDiscussion : d)
+          );
+        }
       } catch (err) {
         console.error('Failed to fetch updated discussion status:', err);
       }
@@ -148,6 +168,8 @@ export function useAnnotationData() {
   // Calculate consensus for a discussion task
   const calculateConsensus = useCallback(async (discussionId: string, taskId: number) => {
     try {
+      if (!discussionId) return null;
+      
       setLoading(true);
       
       // Call API to calculate consensus
@@ -157,7 +179,7 @@ export function useAnnotationData() {
     } catch (err) {
       const errorMessage = (err as ApiError).message || 'Failed to calculate consensus';
       toast.error(errorMessage);
-      throw err;
+      return { result: '', agreement: false };
     } finally {
       setLoading(false);
     }
@@ -166,6 +188,10 @@ export function useAnnotationData() {
   // Save consensus annotation with proper type signature
   const saveConsensusAnnotation = useCallback(async (consensusAnnotation: Omit<Annotation, 'timestamp'>): Promise<boolean> => {
     try {
+      if (!consensusAnnotation.discussionId || !user || user.role !== 'pod_lead') {
+        return false;
+      }
+      
       setLoading(true);
       
       // Validate that this is coming from a pod lead
@@ -176,6 +202,10 @@ export function useAnnotationData() {
       
       // Call API to save consensus annotation
       const newConsensusAnnotation = await api.consensus.save(consensusAnnotation);
+      
+      if (!newConsensusAnnotation) {
+        throw new Error('Failed to save consensus annotation');
+      }
       
       // Update local state with the new consensus annotation
       setConsensusAnnotations(prev => {
@@ -205,11 +235,13 @@ export function useAnnotationData() {
 
   // Get all annotations for a discussion
   const getDiscussionAnnotations = useCallback((discussionId: string) => {
+    if (!discussionId) return [];
     return annotations.filter(a => a.discussionId === discussionId);
   }, [annotations]);
 
   // Get consensus annotation for a discussion task
   const getConsensusAnnotation = useCallback((discussionId: string, taskId: number) => {
+    if (!discussionId) return null;
     return consensusAnnotations.find(
       a => a.discussionId === discussionId && a.taskId === taskId
     );
@@ -218,18 +250,20 @@ export function useAnnotationData() {
   // Filter discussions by their status
   const getDiscussionsByStatus = useCallback((status: TaskStatus) => {
     return discussions.filter(d => {
+      if (!d || !d.tasks) return false;
+      
       if (status === 'completed') {
-        return d.tasks.task1.status === 'completed' && 
-               d.tasks.task2.status === 'completed' && 
-               d.tasks.task3.status === 'completed';
+        return d.tasks.task1?.status === 'completed' && 
+               d.tasks.task2?.status === 'completed' && 
+               d.tasks.task3?.status === 'completed';
       } else if (status === 'unlocked') {
-        return d.tasks.task1.status === 'unlocked' || 
-               d.tasks.task2.status === 'unlocked' || 
-               d.tasks.task3.status === 'unlocked';
+        return d.tasks.task1?.status === 'unlocked' || 
+               d.tasks.task2?.status === 'unlocked' || 
+               d.tasks.task3?.status === 'unlocked';
       } else {
-        return d.tasks.task1.status === 'locked' && 
-               d.tasks.task2.status === 'locked' && 
-               d.tasks.task3.status === 'locked';
+        return d.tasks.task1?.status === 'locked' && 
+               d.tasks.task2?.status === 'locked' && 
+               d.tasks.task3?.status === 'locked';
       }
     });
   }, [discussions]);

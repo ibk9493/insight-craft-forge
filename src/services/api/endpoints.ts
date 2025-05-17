@@ -19,20 +19,21 @@ import { mockDiscussions } from './mockData';
 export const api = {
   // Discussion endpoints
   discussions: {
-    getAll: () => apiRequest<Discussion[]>('/discussions'),
-    getById: (id: string) => apiRequest<Discussion>(`/discussions/${id}`),
+    getAll: () => apiRequest<Discussion[]>('/discussions').catch(() => []),
+    getById: (id: string) => apiRequest<Discussion>(`/discussions/${id}`).catch(() => null),
     getByStatus: (status: TaskStatus) => 
-      apiRequest<Discussion[]>(`/discussions?status=${status}`),
+      apiRequest<Discussion[]>(`/discussions?status=${status}`).catch(() => []),
   },
 
   // Annotation endpoints
   annotations: {
     getByDiscussionId: (discussionId: string) => 
-      apiRequest<Annotation[]>(`/annotations?discussionId=${discussionId}`),
+      apiRequest<Annotation[]>(`/annotations?discussionId=${discussionId}`).catch(() => []),
     getByTaskAndDiscussion: (discussionId: string, taskId: number) => 
-      apiRequest<Annotation[]>(`/annotations?discussionId=${discussionId}&taskId=${taskId}`),
+      apiRequest<Annotation[]>(`/annotations?discussionId=${discussionId}&taskId=${taskId}`).catch(() => []),
     getUserAnnotation: (discussionId: string, userId: string, taskId: number) => 
-      apiRequest<Annotation>(`/annotations?discussionId=${discussionId}&userId=${userId}&taskId=${taskId}`),
+      apiRequest<Annotation>(`/annotations?discussionId=${discussionId}&userId=${userId}&taskId=${taskId}`)
+        .catch(() => null),
     save: (annotation: Omit<Annotation, 'timestamp'>) => 
       apiRequest<Annotation>('/annotations', 'POST', annotation),
     update: (annotation: Annotation) => 
@@ -43,7 +44,7 @@ export const api = {
       formData.append('discussionId', discussionId);
       return apiRequest<{fileUrl: string}>('/files/upload', 'POST', formData, {
         'Content-Type': undefined as any
-      });
+      }).catch(() => ({ fileUrl: '' }));
     },
     // New method for pod leads to override annotations
     podLeadOverride: (podLeadId: string, annotatorId: string, discussionId: string, taskId: number, data: Record<string, string | boolean>) => 
@@ -53,25 +54,28 @@ export const api = {
         task_id: taskId,
         data,
         pod_lead_id: podLeadId
-      }),
+      }).catch(() => null),
   },
 
   // Consensus endpoints
   consensus: {
     get: (discussionId: string, taskId: number) => 
-      apiRequest<Annotation>(`/consensus?discussionId=${discussionId}&taskId=${taskId}`),
+      apiRequest<Annotation>(`/consensus?discussionId=${discussionId}&taskId=${taskId}`).catch(() => null),
     save: (consensus: Omit<Annotation, 'timestamp'>) => 
-      apiRequest<Annotation>('/consensus', 'POST', consensus),
+      apiRequest<Annotation>('/consensus', 'POST', consensus).catch(() => null),
     calculate: (discussionId: string, taskId: number) => 
-      apiRequest<{result: string, agreement: boolean}>(`/consensus/calculate?discussionId=${discussionId}&taskId=${taskId}`),
+      apiRequest<{result: string, agreement: boolean}>(`/consensus/calculate?discussionId=${discussionId}&taskId=${taskId}`)
+        .catch(() => ({ result: '', agreement: false })),
     override: (discussionId: string, taskId: number, data: Record<string, string | boolean>) =>
-      apiRequest<Annotation>('/consensus/override', 'POST', { discussionId, taskId, data }),
+      apiRequest<Annotation>('/consensus/override', 'POST', { discussionId, taskId, data })
+        .catch(() => null),
   },
   
   // Code download endpoint
   code: {
     getDownloadUrl: (discussionId: string, repo: string) => 
       apiRequest<{downloadUrl: string}>(`/code/download?discussionId=${discussionId}&repo=${repo}`)
+        .catch(() => ({ downloadUrl: '' }))
   },
   
   // Authentication endpoints
@@ -80,54 +84,28 @@ export const api = {
       // In a real app, this would send the token to your backend
       console.log('Verifying Google token:', token);
       
-      // Simulate API response for development/testing
-      if (import.meta.env.DEV) {
-        console.log('DEV mode: Simulating Google authentication success');
-        return Promise.resolve({
-          success: true,
-          user: {
-            id: '5',
-            username: 'google.user@example.com',
-            email: 'google.user@example.com',
-            role: 'annotator',
-            provider: 'google'
-          }
-        });
-      }
-      
-      // Actual API call in production
-      return apiRequest<{success: boolean, user: any}>('/auth/google', 'POST', { token });
+      // Return empty user object if verification fails
+      return apiRequest<{success: boolean, user: any}>('/auth/google', 'POST', { token })
+        .catch(() => ({ success: false, user: null }));
     },
     
     // New endpoint to get authorized users (in real app)
     getAuthorizedUsers: () => {
-      // In development, we use localStorage instead
-      if (import.meta.env.DEV) {
-        console.log('DEV mode: Using localStorage for authorized users');
-        const users = localStorage.getItem('authorizedUsers') || '[]';
-        return Promise.resolve(JSON.parse(users));
-      }
-      
-      // Actual API call in production
-      return apiRequest<{email: string, role: string}[]>('/auth/authorized-users');
+      // In production, always make the API call
+      return apiRequest<{email: string, role: string}[]>('/auth/authorized-users')
+        .catch(() => []);
     },
     
     // New endpoint to add authorized user (in real app)
     addAuthorizedUser: (email: string, role: string) => {
-      // In a real app, this would send to your backend
-      console.log('Adding authorized user:', email, role);
-      
-      // Actual API call in production
-      return apiRequest<{success: boolean}>('/auth/authorized-users', 'POST', { email, role });
+      return apiRequest<{success: boolean}>('/auth/authorized-users', 'POST', { email, role })
+        .catch(() => ({ success: false }));
     },
     
     // New endpoint to remove authorized user (in real app)
     removeAuthorizedUser: (email: string) => {
-      // In a real app, this would send to your backend
-      console.log('Removing authorized user:', email);
-      
-      // Actual API call in production
-      return apiRequest<{success: boolean}>(`/auth/authorized-users/${encodeURIComponent(email)}`, 'DELETE');
+      return apiRequest<{success: boolean}>(`/auth/authorized-users/${encodeURIComponent(email)}`, 'DELETE')
+        .catch(() => ({ success: false }));
     }
   },
   
@@ -135,87 +113,31 @@ export const api = {
   admin: {
     // Upload GitHub discussions from JSON
     uploadDiscussions: (discussions: GitHubDiscussion[]) => {
-      console.log('Processing discussions:', discussions);
-
-      // Simulate API call in development
-      if (import.meta.env.DEV) {
-        // Process the discussions and add to mock data
-        try {
-          const processedDiscussions = discussions.map(disc => {
-            const repository = disc.repository || extractRepositoryFromUrl(disc.url);
-            return {
-              ...disc,
-              repository,
-              tasks: {
-                task1: disc.tasks?.task1 || { status: 'locked', annotators: 0 },
-                task2: disc.tasks?.task2 || { status: 'locked', annotators: 0 },
-                task3: disc.tasks?.task3 || { status: 'locked', annotators: 0 }
-              }
-            } as Discussion;
-          });
-          
-          // In a real app, this would be saved to the database
-          // For this mock, we're just logging
-          console.log('Processed discussions:', processedDiscussions);
-          
-          // Add to mock data
-          mockDiscussions.push(...processedDiscussions);
-          
-          return Promise.resolve({
-            success: true,
-            message: `Successfully uploaded ${processedDiscussions.length} discussions`,
-            discussionsAdded: processedDiscussions.length
-          });
-        } catch (error) {
-          console.error('Error processing discussions:', error);
-          return Promise.resolve({
-            success: false,
-            message: 'Error processing discussions',
-            discussionsAdded: 0,
-            errors: [(error as Error).message]
-          });
-        }
-      }
-      
       // Actual API call in production
-      return apiRequest<UploadResult>('/admin/discussions/upload', 'POST', { discussions });
+      return apiRequest<UploadResult>('/admin/discussions/upload', 'POST', { discussions })
+        .catch(() => ({ 
+          success: false, 
+          message: 'Failed to upload discussions', 
+          discussionsAdded: 0,
+          errors: ['API request failed'] 
+        }));
     },
     
     // Update task status
     updateTaskStatus: (discussionId: string, taskId: number, status: TaskStatus): Promise<TaskManagementResult> => {
-      console.log(`Updating task ${taskId} of discussion ${discussionId} to ${status}`);
-      
-      // Simulate API call in development
-      if (import.meta.env.DEV) {
-        const discussionIndex = mockDiscussions.findIndex(d => d.id === discussionId);
-        if (discussionIndex === -1) {
-          return Promise.resolve({
-            success: false,
-            message: 'Discussion not found'
-          });
-        }
-        
-        // Update the task status
-        const taskKey = `task${taskId}` as keyof typeof mockDiscussions[0]['tasks'];
-        mockDiscussions[discussionIndex].tasks[taskKey].status = status;
-        
-        return Promise.resolve({
-          success: true,
-          message: `Task ${taskId} status updated to ${status}`,
-          discussion: mockDiscussions[discussionIndex]
-        });
-      }
-      
       // Actual API call in production
-      return apiRequest<TaskManagementResult>('/admin/tasks/status', 'PUT', { discussionId, taskId, status });
+      return apiRequest<TaskManagementResult>('/admin/tasks/status', 'PUT', { discussionId, taskId, status })
+        .catch(() => ({
+          success: false,
+          message: 'Failed to update task status'
+        }));
     },
     
     // Override annotation values
     overrideAnnotation: (annotation: Annotation) => {
-      console.log('Overriding annotation:', annotation);
-      
       // Actual API call in production
-      return apiRequest<Annotation>('/admin/annotations/override', 'PUT', annotation);
+      return apiRequest<Annotation>('/admin/annotations/override', 'PUT', annotation)
+        .catch(() => null);
     }
   }
 };
