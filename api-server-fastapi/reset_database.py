@@ -32,14 +32,32 @@ def reset_database():
         return False
 
 if __name__ == "__main__":
+    print("=" * 60)
+    print("DATABASE RESET UTILITY")
+    print("=" * 60)
     print("WARNING: This will delete all data in the database!")
+    print("This action is needed when the database schema has changed.")
+    print("You're seeing database errors because new columns were added.")
+    print("-" * 60)
+    print("Common errors that require database reset:")
+    print(" - 'no such column: discussions.repository_language'")
+    print(" - Table structure has changed")
+    print(" - SqlAlchemy OperationalError")
+    print("-" * 60)
+    
     confirm = input("Are you sure you want to proceed? (y/n): ")
     
     if confirm.lower() == 'y':
         if reset_database():
-            print("Database has been reset successfully.")
-            print("You can now restart your application.")
+            print("\n✅ Database has been reset successfully.")
+            print("\nNext steps:")
+            print("1. Restart your FastAPI server")
+            print("2. Upload your discussions JSON again")
+            print("\nYou can now restart your application.")
         else:
-            print("Failed to reset database. Check the logs for details.")
+            print("\n❌ Failed to reset database. Check the logs for details.")
     else:
-        print("Database reset cancelled.")
+        print("\n⚠️ Database reset cancelled.")
+        print("\nTo fix database errors, you'll need to:")
+        print("1. Delete the swe_qa.db file manually, or")
+        print("2. Run this script again and confirm with 'y'")

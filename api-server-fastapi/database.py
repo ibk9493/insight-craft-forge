@@ -9,6 +9,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler("database.log")
+    ]
+)
 logger = logging.getLogger("database")
 
 # Get database URL from environment or use SQLite default
@@ -33,39 +41,57 @@ def check_and_create_tables():
     from models import Discussion, Annotation, ConsensusAnnotation, AuthorizedUser
     
     try:
+        logger.info("Checking database schema...")
         inspector = inspect(engine)
         
-        # Check if discussions table exists
-        if 'discussions' in inspector.get_table_names():
-            columns = [col['name'] for col in inspector.get_columns('discussions')]
-            required_columns = ['repository_language', 'release_tag', 'release_url', 'release_date']
+        # Required columns for the discussions table
+        required_columns = {
+            'discussions': [
+                'id', 'title', 'url', 'repository', 'created_at', 
+                'repository_language', 'release_tag', 'release_url', 'release_date'
+            ]
+        }
+        
+        needs_update = False
+        
+        # Check if tables exist
+        for table_name, columns in required_columns.items():
+            if table_name in inspector.get_table_names():
+                existing_columns = [col['name'] for col in inspector.get_columns(table_name)]
+                missing_columns = [col for col in columns if col not in existing_columns]
+                
+                if missing_columns:
+                    logger.warning(f"Missing columns in {table_name} table: {missing_columns}")
+                    needs_update = True
+                    break
+            else:
+                logger.warning(f"Missing table: {table_name}")
+                needs_update = True
+                break
+        
+        if needs_update:
+            logger.warning("Database schema needs to be updated")
+            logger.warning("Please run reset_database.py to recreate the schema")
+            logger.warning("Command: python reset_database.py")
             
-            # Check if all required columns exist
-            missing_columns = [col for col in required_columns if col not in columns]
-            
-            if missing_columns:
-                logger.warning(f"Missing columns in discussions table: {missing_columns}")
-                logger.warning("Will recreate the database schema")
-                # Recreate all tables
-                Base.metadata.drop_all(bind=engine)
-                Base.metadata.create_all(bind=engine)
-                logger.info("Database schema recreated successfully")
-                return True
-        else:
-            # If discussions table doesn't exist, create all tables
-            Base.metadata.create_all(bind=engine)
-            logger.info("Database tables created successfully")
-            return True
-            
-        return False
-    except Exception as e:
-        logger.error(f"Error checking or creating database tables: {str(e)}")
-        # In case of error, attempt to recreate tables
-        try:
-            Base.metadata.drop_all(bind=engine)
-            Base.metadata.create_all(bind=engine)
-            logger.info("Database schema recreated after error")
-            return True
-        except Exception as e2:
-            logger.error(f"Failed to recreate database schema: {str(e2)}")
+            # Don't auto-recreate tables to prevent data loss
             return False
+        else:
+            logger.info("Database schema is up to date")
+            return True
+            
+    except Exception as e:
+        logger.error(f"Error checking database schema: {str(e)}")
+        return False
+
+def get_db():
+    """
+    Get a database session
+    
+    Used as a dependency in FastAPI endpoints
+    """
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

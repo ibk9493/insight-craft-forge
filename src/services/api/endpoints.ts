@@ -141,7 +141,7 @@ export const api = {
     },
     
     // Update task status
-    updateTaskStatus: (discussionId: string, taskId: number, status: TaskStatus): Promise<TaskManagementResult> => {
+    updateTaskStatus: (discussionId: string, taskId: number, status: TaskStatus) => {
       console.log(`[Admin] Updating task status: ${discussionId}, Task ${taskId} to ${status}`);
       return safeApiRequest<TaskManagementResult>('/admin/tasks/status', 'PUT', { discussionId, taskId, status }, undefined, {
         success: false,

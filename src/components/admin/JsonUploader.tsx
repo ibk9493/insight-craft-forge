@@ -15,37 +15,78 @@ const JsonUploader: React.FC = () => {
   const [jsonErrors, setJsonErrors] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const validateJSON = (json: any): { isValid: boolean, errors: string[] } => {
+  const validateJSON = (json: any): { isValid: boolean, errors: string[], validItems: any[] } => {
     const errors: string[] = [];
+    const validItems: any[] = [];
     
     if (!Array.isArray(json)) {
+      console.error('[JsonUploader] JSON is not an array:', typeof json);
       errors.push('JSON structure must be an array of discussions');
-      return { isValid: false, errors };
+      return { isValid: false, errors, validItems };
     }
+    
+    console.log(`[JsonUploader] Validating ${json.length} items in JSON array`);
     
     // Validate each discussion object
     json.forEach((item, index) => {
-      if (!item.id) errors.push(`Item #${index + 1}: Missing required 'id' field`);
-      if (!item.title) errors.push(`Item #${index + 1}: Missing required 'title' field`);
-      if (!item.url) errors.push(`Item #${index + 1}: Missing required 'url' field`);
+      let isItemValid = true;
+      const validationErrors: string[] = [];
+      
+      // Check for required fields
+      if (!item.id) {
+        console.warn(`[JsonUploader] Item #${index + 1} missing ID`);
+        validationErrors.push(`Item #${index + 1}: Missing required 'id' field`);
+        isItemValid = false;
+      }
+      
+      if (!item.title) {
+        console.warn(`[JsonUploader] Item #${index + 1} missing title`);
+        validationErrors.push(`Item #${index + 1}: Missing required 'title' field`);
+        isItemValid = false;
+      }
+      
+      if (!item.url) {
+        console.warn(`[JsonUploader] Item #${index + 1} missing URL`);
+        validationErrors.push(`Item #${index + 1}: Missing required 'url' field`);
+        isItemValid = false;
+      }
       
       // Optional field validations (if present)
       if (item.repository_language !== undefined && typeof item.repository_language !== 'string') {
-        errors.push(`Item #${index + 1}: repository_language must be a string`);
+        console.warn(`[JsonUploader] Item #${index + 1} has invalid repository_language`);
+        validationErrors.push(`Item #${index + 1}: repository_language must be a string`);
+        isItemValid = false;
       }
+      
       if (item.releaseTag !== undefined && typeof item.releaseTag !== 'string') {
-        errors.push(`Item #${index + 1}: releaseTag must be a string`);
+        console.warn(`[JsonUploader] Item #${index + 1} has invalid releaseTag`);
+        validationErrors.push(`Item #${index + 1}: releaseTag must be a string`);
+        isItemValid = false;
       }
+      
       if (item.releaseDate !== undefined) {
         try {
           new Date(item.releaseDate);
         } catch (e) {
-          errors.push(`Item #${index + 1}: releaseDate must be a valid date string`);
+          console.warn(`[JsonUploader] Item #${index + 1} has invalid releaseDate`);
+          validationErrors.push(`Item #${index + 1}: releaseDate must be a valid date string`);
+          isItemValid = false;
         }
+      }
+
+      // Add validation errors to the main errors array
+      errors.push(...validationErrors);
+      
+      // If the item is valid, add it to the validItems array
+      if (isItemValid) {
+        validItems.push(item);
+      } else {
+        console.error(`[JsonUploader] Item #${index + 1} has validation errors:`, validationErrors);
       }
     });
     
-    return { isValid: errors.length === 0, errors };
+    console.log(`[JsonUploader] Found ${validItems.length} valid items out of ${json.length}`);
+    return { isValid: validItems.length > 0, errors, validItems };
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -79,37 +120,33 @@ const JsonUploader: React.FC = () => {
           const parsed = JSON.parse(content);
           
           // Validate the JSON structure
-          const { isValid, errors } = validateJSON(parsed);
-          if (!isValid) {
-            console.error('[JsonUploader] JSON validation errors:', errors);
+          const { isValid, errors, validItems } = validateJSON(parsed);
+          
+          if (errors.length > 0) {
+            console.warn('[JsonUploader] JSON validation warnings:', errors);
             setJsonErrors(errors);
+          }
+          
+          if (!isValid || validItems.length === 0) {
+            console.error('[JsonUploader] JSON validation failed - no valid discussions found');
             toast.error(`Invalid JSON format: ${errors[0]}`, {
               description: 'Check console for complete error details'
             });
             return;
           }
           
-          // Validate each discussion has required fields
-          const validDiscussions = parsed.filter((item: any) => {
-            return item.id && item.title && item.url;
-          });
-          
-          if (validDiscussions.length === 0) {
-            toast.error('No valid discussions found in JSON');
-            console.error('[JsonUploader] No valid discussions found');
-            return;
-          }
-          
-          if (validDiscussions.length !== parsed.length) {
-            toast.warning(`Found ${validDiscussions.length} valid discussions out of ${parsed.length}`);
-            console.warn(`[JsonUploader] Found ${validDiscussions.length} valid discussions out of ${parsed.length}`);
-          }
-          
-          // Format dates consistently
-          const processedDiscussions = validDiscussions.map((disc: any) => {
+          // Format dates consistently and ensure all required fields
+          const processedDiscussions = validItems.map((disc: any) => {
+            // Auto-generate missing fields where possible
+            if (!disc.repository && disc.url) {
+              disc.repository = extractRepositoryFromUrl(disc.url);
+              console.info(`[JsonUploader] Auto-generated repository: ${disc.repository} for URL ${disc.url}`);
+            }
+            
             // Ensure createdAt exists
             if (!disc.createdAt) {
               disc.createdAt = new Date().toISOString();
+              console.info(`[JsonUploader] Auto-generated createdAt: ${disc.createdAt}`);
             }
             
             // Process release data if available
@@ -123,12 +160,29 @@ const JsonUploader: React.FC = () => {
               }
             }
             
+            // Ensure task structure exists
+            if (!disc.tasks) {
+              disc.tasks = {
+                task1: { status: 'locked', annotators: 0 },
+                task2: { status: 'locked', annotators: 0 },
+                task3: { status: 'locked', annotators: 0 }
+              };
+              console.info(`[JsonUploader] Auto-generated tasks structure for ID ${disc.id}`);
+            }
+            
             return disc;
           });
           
           setParsedData(processedDiscussions);
-          console.log(`[JsonUploader] Successfully parsed ${processedDiscussions.length} discussions`);
-          toast.success(`Successfully parsed ${processedDiscussions.length} discussions`);
+          console.log(`[JsonUploader] Successfully processed ${processedDiscussions.length} discussions`);
+          
+          if (errors.length > 0) {
+            toast.warning(`Processed with ${errors.length} warnings`, {
+              description: `Found ${processedDiscussions.length} valid discussions`
+            });
+          } else {
+            toast.success(`Successfully parsed ${processedDiscussions.length} discussions`);
+          }
           
         } catch (parseError) {
           console.error('[JsonUploader] Error parsing JSON:', parseError);
@@ -148,7 +202,7 @@ const JsonUploader: React.FC = () => {
   };
 
   const handleUpload = async () => {
-    if (!parsedData) {
+    if (!parsedData || parsedData.length === 0) {
       toast.error('No valid data to upload');
       return;
     }
@@ -269,9 +323,11 @@ const JsonUploader: React.FC = () => {
               </div>
               
               {jsonErrors.length > 0 && (
-                <div className="border border-red-300 bg-red-50 rounded-md p-3">
-                  <p className="font-medium text-red-700 mb-2">JSON Validation Errors:</p>
-                  <ul className="list-disc pl-5 text-sm text-red-700 max-h-40 overflow-y-auto">
+                <div className={`border rounded-md p-3 ${jsonErrors.some(err => err.includes('Missing required')) ? 'border-amber-300 bg-amber-50' : 'border-red-300 bg-red-50'}`}>
+                  <p className={`font-medium mb-2 ${jsonErrors.some(err => err.includes('Missing required')) ? 'text-amber-700' : 'text-red-700'}`}>
+                    {jsonErrors.some(err => err.includes('Missing required')) ? 'Validation Warnings:' : 'JSON Validation Errors:'}
+                  </p>
+                  <ul className={`list-disc pl-5 text-sm max-h-40 overflow-y-auto ${jsonErrors.some(err => err.includes('Missing required')) ? 'text-amber-700' : 'text-red-700'}`}>
                     {jsonErrors.map((error, idx) => (
                       <li key={idx}>{error}</li>
                     ))}
@@ -347,7 +403,7 @@ const JsonUploader: React.FC = () => {
           </Button>
           <Button 
             onClick={handleUpload} 
-            disabled={!parsedData || isUploading || jsonErrors.length > 0}
+            disabled={!parsedData || parsedData.length === 0 || isUploading}
           >
             {isUploading ? 'Uploading...' : 'Upload Discussions'}
           </Button>

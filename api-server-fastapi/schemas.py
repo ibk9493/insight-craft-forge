@@ -1,4 +1,5 @@
-from pydantic import BaseModel
+
+from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any, Union
 from datetime import datetime
 
@@ -27,6 +28,29 @@ class Discussion(DiscussionBase):
 
     class Config:
         orm_mode = True
+        
+# Improved schema for frontend-to-backend compatibility
+class GitHubDiscussionTaskState(BaseModel):
+    status: str = Field(default="locked")
+    annotators: int = Field(default=0)
+
+class GitHubDiscussionTasks(BaseModel):
+    task1: Optional[GitHubDiscussionTaskState] = Field(default_factory=lambda: GitHubDiscussionTaskState(status="locked", annotators=0))
+    task2: Optional[GitHubDiscussionTaskState] = Field(default_factory=lambda: GitHubDiscussionTaskState(status="locked", annotators=0))
+    task3: Optional[GitHubDiscussionTaskState] = Field(default_factory=lambda: GitHubDiscussionTaskState(status="locked", annotators=0))
+
+class GitHubDiscussion(BaseModel):
+    id: str
+    title: str
+    url: str
+    repository: Optional[str] = None
+    createdAt: str = Field(default_factory=lambda: datetime.now().isoformat())
+    # Metadata fields
+    repositoryLanguage: Optional[str] = None
+    releaseTag: Optional[str] = None
+    releaseUrl: Optional[str] = None
+    releaseDate: Optional[str] = None
+    tasks: Optional[GitHubDiscussionTasks] = None
 
 class AnnotationBase(BaseModel):
     discussion_id: str
@@ -94,7 +118,7 @@ class TaskStatusUpdate(BaseModel):
     status: str
 
 class DiscussionUpload(BaseModel):
-    discussions: List[Dict[str, Any]]
+    discussions: List[GitHubDiscussion]
 
 # Adding the missing UploadResult schema class
 class UploadResult(BaseModel):

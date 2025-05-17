@@ -1,3 +1,4 @@
+
 // API types for the annotation system
 
 export interface Discussion {
@@ -57,20 +58,27 @@ export interface TaskManagementResult {
 }
 
 // GitHub Discussion format from JSON upload
+export interface GitHubDiscussionTaskState {
+  status?: TaskStatus;
+  annotators?: number;
+}
+
+export interface GitHubDiscussionTasks {
+  task1?: GitHubDiscussionTaskState;
+  task2?: GitHubDiscussionTaskState;
+  task3?: GitHubDiscussionTaskState;
+}
+
 export interface GitHubDiscussion {
   id: string;
   title: string;
   url: string;
   repository?: string;
   createdAt: string;
-  // Add metadata fields from Python script
+  // Add metadata fields
   repositoryLanguage?: string;
   releaseTag?: string;
   releaseUrl?: string;
   releaseDate?: string;
-  tasks?: {
-    task1?: Partial<TaskState>;
-    task2?: Partial<TaskState>;
-    task3?: Partial<TaskState>;
-  };
+  tasks?: GitHubDiscussionTasks;
 }
