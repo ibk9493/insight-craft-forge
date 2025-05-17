@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Header from '@/components/layout/Header';
@@ -26,6 +25,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Badge } from "@/components/ui/badge";
 import DiscussionDetailsModal from '@/components/dashboard/DiscussionDetailsModal';
+import { useAppDispatch } from '@/hooks';
+import { openModal } from '@/store/discussionModalSlice';
+import { fetchDiscussions } from '@/store/discussionsSlice';
 
 // Discussion type imported from api service
 import { Discussion, TaskState } from '@/services/api';
@@ -42,14 +44,21 @@ const Discussions = () => {
   const { isAuthenticated, user, isPodLead } = useUser();
   const navigate = useNavigate();
   const location = useLocation();
+  const dispatch = useAppDispatch();
+  
+  // Fetch discussions from the API with caching handled by the slice
+  useEffect(() => {
+    if (isAuthenticated) {
+      dispatch(fetchDiscussions());
+    }
+  }, [dispatch, isAuthenticated]);
+  
   const { discussions, getUserAnnotationStatus, getDiscussionsByStatus, loading, error } = useAnnotationData();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filteredDiscussions, setFilteredDiscussions] = useState<EnhancedDiscussion[]>([]);
   const [showMyAnnotations, setShowMyAnnotations] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
-  const [selectedDiscussion, setSelectedDiscussion] = useState<Discussion | null>(null);
-  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   
   // Parse URL query parameters
   useEffect(() => {
@@ -225,8 +234,7 @@ const Discussions = () => {
   };
 
   const viewDiscussionDetails = (discussion: Discussion) => {
-    setSelectedDiscussion(discussion);
-    setIsDetailsModalOpen(true);
+    dispatch(openModal(discussion));
   };
 
   // Stats summary for quick overview
@@ -487,12 +495,8 @@ const Discussions = () => {
           </div>
         )}
         
-        {/* Discussion Details Modal */}
-        <DiscussionDetailsModal 
-          isOpen={isDetailsModalOpen}
-          onClose={() => setIsDetailsModalOpen(false)}
-          discussion={selectedDiscussion}
-        />
+        {/* Global Discussion Details Modal - controlled by Redux */}
+        <DiscussionDetailsModal discussion={null} />
       </div>
     </div>
   );

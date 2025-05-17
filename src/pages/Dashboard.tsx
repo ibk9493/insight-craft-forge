@@ -1,4 +1,3 @@
-
 import React, { useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import UrlInput from '@/components/dashboard/UrlInput';
@@ -9,7 +8,7 @@ import Summary from '@/components/dashboard/Summary';
 import DashboardNavigation from '@/components/dashboard/DashboardNavigation';
 import DashboardBreadcrumb from '@/components/dashboard/DashboardBreadcrumb';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, FileText } from 'lucide-react';
+import { CheckCircle, FileText, Eye } from 'lucide-react';
 import AnnotatorView from '@/components/dashboard/AnnotatorView';
 import { useDashboardState } from '@/hooks/useDashboardState';
 import { useTaskSubtasks } from '@/hooks/useTaskSubtasks';
@@ -17,6 +16,8 @@ import { useTaskProgress } from '@/hooks/useTaskProgress';
 import { useAnnotationHandlers } from '@/hooks/useAnnotationHandlers';
 import { TaskId } from '@/hooks/annotations/useAnnotationTypes';
 import DiscussionDetailsModal from '@/components/dashboard/DiscussionDetailsModal';
+import { useAppDispatch } from '@/hooks';
+import { openModal } from '@/store/discussionModalSlice';
 
 const Dashboard = () => {
   // Use the dashboard state hook
@@ -47,6 +48,8 @@ const Dashboard = () => {
     discussions,
     currentDiscussion
   } = useDashboardState();
+
+  const dispatch = useAppDispatch();
 
   // Use the task subtasks hook
   const {
@@ -162,6 +165,13 @@ const Dashboard = () => {
     );
   };
 
+  // Handle opening the discussion details modal
+  const handleViewDiscussion = () => {
+    if (currentDiscussion) {
+      dispatch(openModal(currentDiscussion));
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <Header />
@@ -189,7 +199,14 @@ const Dashboard = () => {
               </p>
               {currentDiscussion && (
                 <div className="mt-2">
-                  <DiscussionDetailsModal discussion={currentDiscussion} />
+                  <Button 
+                    variant="outline" 
+                    className="flex items-center gap-2"
+                    onClick={handleViewDiscussion}
+                  >
+                    <Eye className="h-4 w-4" />
+                    <span>View Discussion Details</span>
+                  </Button>
                 </div>
               )}
             </div>
@@ -211,7 +228,14 @@ const Dashboard = () => {
             <div className="mb-4 flex justify-between items-center">
               {/* Discussion details button */}
               {currentDiscussion && (
-                <DiscussionDetailsModal discussion={currentDiscussion} />
+                <Button 
+                  variant="outline" 
+                  className="flex items-center gap-2"
+                  onClick={handleViewDiscussion}
+                >
+                  <Eye className="h-4 w-4" />
+                  <span>View Discussion Details</span>
+                </Button>
               )}
               
               {/* Consensus mode toggle button */}
@@ -348,6 +372,9 @@ const Dashboard = () => {
           currentDiscussion={currentDiscussion}
         />
       </div>
+      
+      {/* Global Discussion Details Modal - controlled by Redux */}
+      <DiscussionDetailsModal discussion={null} />
     </div>
   );
 };

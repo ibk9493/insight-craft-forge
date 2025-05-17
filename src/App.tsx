@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -12,6 +11,9 @@ import Admin from "./pages/Admin";
 import ApiDocs from "./pages/ApiDocs";
 import NotFound from "./pages/NotFound";
 import { UserProvider } from "./contexts/UserContext";
+import { Provider } from 'react-redux';
+import { store } from './store/store';
+import { GoogleOAuthProvider } from 'react-google-oauth2';
 
 function App() {
   // Create a client once per component render
@@ -25,25 +27,30 @@ function App() {
     },
   }));
 
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <UserProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Login />} />
-              <Route path="/discussions" element={<Discussions />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/admin" element={<Admin />} />
-              <Route path="/api-docs" element={<ApiDocs />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </TooltipProvider>
-      </UserProvider>
-    </QueryClientProvider>
+    <GoogleOAuthProvider clientId={clientId}>
+      <Provider store={store}>
+        <QueryClientProvider client={queryClient}>
+          <UserProvider>
+            <TooltipProvider>
+              <BrowserRouter>
+                <Routes>
+                  <Route path="/" element={<Login />} />
+                  <Route path="/discussions" element={<Discussions />} />
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/admin" element={<Admin />} />
+                  <Route path="/api-docs" element={<ApiDocs />} />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+                <Toaster />
+              </BrowserRouter>
+            </TooltipProvider>
+          </UserProvider>
+        </QueryClientProvider>
+      </Provider>
+    </GoogleOAuthProvider>
   );
 }
 

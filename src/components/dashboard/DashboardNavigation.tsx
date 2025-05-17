@@ -1,12 +1,13 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Home, Upload, Download, ListFilter, CheckCircle, XCircle, Tag } from 'lucide-react';
+import { ArrowLeft, Home, Upload, Download, ListFilter, CheckCircle, XCircle, Tag, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Discussion } from '@/services/api';
 import DiscussionDetailsModal from './DiscussionDetailsModal';
+import { useAppDispatch } from '@/hooks';
+import { openModal } from '@/store/discussionModalSlice';
 
 interface DashboardNavigationProps {
   viewMode: 'grid' | 'detail' | 'consensus';
@@ -38,6 +39,7 @@ const DashboardNavigation = ({
   currentDiscussion
 }: DashboardNavigationProps) => {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const [useAutomaticUrl, setUseAutomaticUrl] = useState<boolean>(true);
   
   // Handle file input change
@@ -55,6 +57,13 @@ const DashboardNavigation = ({
   // Navigate to dashboard home
   const handleGoToDashboard = () => {
     navigate('/dashboard');
+  };
+
+  // Function to open the discussion details modal
+  const handleViewDiscussionDetails = () => {
+    if (currentDiscussion) {
+      dispatch(openModal(currentDiscussion));
+    }
   };
 
   // Handle code URL input change
@@ -124,14 +133,14 @@ const DashboardNavigation = ({
             
             {/* Add Discussion Details Modal button */}
             {currentDiscussion && (
-              <DiscussionDetailsModal 
-                discussion={currentDiscussion} 
-                trigger={
-                  <Button variant="outline" className="flex items-center gap-2">
-                    View Discussion
-                  </Button>
-                }
-              />
+              <Button
+                variant="outline"
+                className="flex items-center gap-2"
+                onClick={handleViewDiscussionDetails}
+              >
+                <Eye className="h-4 w-4" />
+                <span>View Discussion</span>
+              </Button>
             )}
           </div>
         )}
