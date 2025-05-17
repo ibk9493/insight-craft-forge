@@ -54,6 +54,9 @@ export function useAnnotationHandlers({
     user,
     saveAnnotation,
     saveConsensusAnnotation,
+    getUserAnnotation,
+    getAnnotationsForTask,
+    getConsensusAnnotation,
     updateStepCompletionStatus,
     overrideAnnotation
   });

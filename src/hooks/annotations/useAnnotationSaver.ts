@@ -18,6 +18,9 @@ export function useAnnotationSaver({
   user,
   saveAnnotation,
   saveConsensusAnnotation,
+  getUserAnnotation,
+  getAnnotationsForTask,
+  getConsensusAnnotation,
   updateStepCompletionStatus,
   overrideAnnotation
 }: AnnotationSaverProps) {

@@ -1,4 +1,3 @@
-
 import React, { useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import UrlInput from '@/components/dashboard/UrlInput';
@@ -41,7 +40,8 @@ const Dashboard = () => {
     getAnnotationsForTask,
     saveAnnotation,
     saveConsensusAnnotation,
-    getConsensusAnnotation
+    getConsensusAnnotation,
+    discussions
   } = useDashboardState();
 
   // Use the task subtasks hook
@@ -76,7 +76,7 @@ const Dashboard = () => {
     consensusTask3
   );
 
-  // Use the annotation handlers hook
+  // Use the annotation handlers hook with all required props
   const {
     loadUserAnnotation,
     prepareConsensusView,
@@ -94,7 +94,8 @@ const Dashboard = () => {
     getUserAnnotation,
     getAnnotationsForTask,
     getConsensusAnnotation,
-    updateStepCompletionStatus
+    updateStepCompletionStatus,
+    overrideAnnotation: undefined // If there's no implementation yet
   });
 
   // Initialize data when task changes
