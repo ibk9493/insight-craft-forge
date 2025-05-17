@@ -1,3 +1,4 @@
+
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -13,7 +14,7 @@ import NotFound from "./pages/NotFound";
 import { UserProvider } from "./contexts/UserContext";
 import { Provider } from 'react-redux';
 import { store } from './store/store';
-import { GoogleOAuthProvider } from 'react-google-oauth2';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 
 function App() {
   // Create a client once per component render
@@ -45,6 +46,7 @@ function App() {
                   <Route path="*" element={<NotFound />} />
                 </Routes>
                 <Toaster />
+                <Sonner />
               </BrowserRouter>
             </TooltipProvider>
           </UserProvider>

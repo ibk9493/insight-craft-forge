@@ -1,4 +1,3 @@
-
 import { apiRequest } from './helpers';
 import { Discussion, Annotation, TaskStatus, GitHubDiscussion, UploadResult, TaskManagementResult, UserRole } from './types';
 
@@ -37,6 +36,11 @@ const safeApiRequest = async <T>(
       return (Array.isArray(fallback) ? [] : {}) as T;
     }
   }
+};
+
+// Define the fetchDiscussions function to be used in the redux slice
+export const fetchDiscussions = async (): Promise<Discussion[]> => {
+  return await safeApiRequest<Discussion[]>('/discussions', 'GET', undefined, undefined, []);
 };
 
 export const api = {
