@@ -1,36 +1,25 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Header from '@/components/layout/Header';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Github, ExternalLink, Filter, Code, Calendar, Tag, Eye } from 'lucide-react';
+import { Search, Github, ExternalLink, Code, Calendar, Tag, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { useUser } from '@/contexts/UserContext';
 import { useAnnotationData } from '@/hooks/useAnnotationData';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { 
-  Popover,
-  PopoverContent,
-  PopoverTrigger 
-} from '@/components/ui/popover';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
 import { Badge } from "@/components/ui/badge";
 import DiscussionDetailsModal from '@/components/dashboard/DiscussionDetailsModal';
 import { useAppDispatch } from '@/hooks';
 import { openModal } from '@/store/discussionModalSlice';
 import { fetchDiscussions } from '@/store/discussionsSlice';
+import DiscussionFilters from '@/components/discussions/DiscussionFilters';
+import { api } from '@/services/api/endpoints';
 
 // Discussion type imported from api service
-import { Discussion, TaskState } from '@/services/api';
+import { Discussion, TaskState, BatchUpload } from '@/services/api';
 
 interface EnhancedDiscussion extends Discussion {
   tasks: {
@@ -38,6 +27,16 @@ interface EnhancedDiscussion extends Discussion {
     task2: TaskState & { userAnnotated?: boolean };
     task3: TaskState & { userAnnotated?: boolean };
   };
+}
+
+interface FilterValues {
+  status: string;
+  showMyAnnotations: boolean;
+  repositoryLanguage: string[];
+  releaseTag: string[];
+  fromDate: Date | undefined;
+  toDate: Date | undefined;
+  batchId: string;
 }
 
 const Discussions = () => {
@@ -55,10 +54,60 @@ const Discussions = () => {
   
   const { discussions, getUserAnnotationStatus, getDiscussionsByStatus, loading, error } = useAnnotationData();
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterValues, setFilterValues] = useState<FilterValues>({
+    status: 'all',
+    showMyAnnotations: false,
+    repositoryLanguage: [],
+    releaseTag: [],
+    fromDate: undefined,
+    toDate: undefined,
+    batchId: ''
+  });
   const [filteredDiscussions, setFilteredDiscussions] = useState<EnhancedDiscussion[]>([]);
-  const [showMyAnnotations, setShowMyAnnotations] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  
+  // State for available filter options
+  const [availableLanguages, setAvailableLanguages] = useState<string[]>([]);
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
+  const [availableBatches, setAvailableBatches] = useState<{ id: number, name: string }[]>([]);
+  
+  // Extract available filter options from discussions
+  useEffect(() => {
+    if (discussions.length > 0) {
+      // Extract unique languages
+      const languages = Array.from(new Set(
+        discussions
+          .map(d => d.repositoryLanguage)
+          .filter(Boolean) as string[]
+      ));
+      
+      // Extract unique tags
+      const tags = Array.from(new Set(
+        discussions
+          .map(d => d.releaseTag)
+          .filter(Boolean) as string[]
+      ));
+      
+      setAvailableLanguages(languages);
+      setAvailableTags(tags);
+    }
+  }, [discussions]);
+  
+  // Fetch available batches
+  useEffect(() => {
+    const fetchBatches = async () => {
+      if (isAuthenticated) {
+        try {
+          const batches = await api.batches.getAllBatches();
+          setAvailableBatches(batches.map(batch => ({ id: batch.id, name: batch.name })));
+        } catch (error) {
+          console.error('Failed to fetch batches:', error);
+        }
+      }
+    };
+    
+    fetchBatches();
+  }, [isAuthenticated]);
   
   // Parse URL query parameters
   useEffect(() => {
@@ -66,10 +115,23 @@ const Discussions = () => {
     const filter = params.get('filter');
     const search = params.get('search');
     const myAnnotations = params.get('mine') === 'true';
+    const lang = params.get('lang')?.split(',').filter(Boolean) || [];
+    const tag = params.get('tag')?.split(',').filter(Boolean) || [];
+    const from = params.get('from');
+    const to = params.get('to');
+    const batch = params.get('batch');
     
-    if (filter) setFilterStatus(filter);
+    setFilterValues({
+      status: filter || 'all',
+      showMyAnnotations: myAnnotations,
+      repositoryLanguage: lang,
+      releaseTag: tag,
+      fromDate: from ? new Date(from) : undefined,
+      toDate: to ? new Date(to) : undefined,
+      batchId: batch || ''
+    });
+    
     if (search) setSearchQuery(search);
-    if (myAnnotations) setShowMyAnnotations(true);
     
     setIsMounted(true);
   }, [location.search]);
@@ -79,14 +141,35 @@ const Discussions = () => {
     if (!isMounted) return;
     
     const params = new URLSearchParams();
-    if (filterStatus !== 'all') params.set('filter', filterStatus);
+    if (filterValues.status !== 'all') params.set('filter', filterValues.status);
     if (searchQuery) params.set('search', searchQuery);
-    if (showMyAnnotations) params.set('mine', 'true');
+    if (filterValues.showMyAnnotations) params.set('mine', 'true');
+    
+    if (filterValues.repositoryLanguage.length > 0) {
+      params.set('lang', filterValues.repositoryLanguage.join(','));
+    }
+    
+    if (filterValues.releaseTag.length > 0) {
+      params.set('tag', filterValues.releaseTag.join(','));
+    }
+    
+    if (filterValues.fromDate) {
+      params.set('from', filterValues.fromDate.toISOString());
+    }
+    
+    if (filterValues.toDate) {
+      params.set('to', filterValues.toDate.toISOString());
+    }
+    
+    if (filterValues.batchId) {
+      params.set('batch', filterValues.batchId);
+    }
     
     const newUrl = params.toString() ? `?${params.toString()}` : '';
     navigate(`/discussions${newUrl}`, { replace: true });
-  }, [filterStatus, searchQuery, showMyAnnotations, navigate, isMounted]);
+  }, [filterValues, searchQuery, navigate, isMounted]);
   
+  // Apply filters to discussions
   useEffect(() => {
     if (!isAuthenticated) {
       navigate('/');
@@ -101,11 +184,11 @@ const Discussions = () => {
     let filtered = [...discussions];
     
     // Filter by status
-    if (filterStatus === 'completed') {
+    if (filterValues.status === 'completed') {
       filtered = getDiscussionsByStatus('completed');
-    } else if (filterStatus === 'unlocked') {
+    } else if (filterValues.status === 'unlocked') {
       filtered = getDiscussionsByStatus('unlocked');
-    } else if (filterStatus === 'locked') {
+    } else if (filterValues.status === 'locked') {
       filtered = getDiscussionsByStatus('locked');
     }
     
@@ -119,11 +202,50 @@ const Discussions = () => {
     }
     
     // Filter for user's annotations
-    if (showMyAnnotations && user) {
+    if (filterValues.showMyAnnotations && user) {
       filtered = filtered.filter(discussion => {
         const userAnnotationStatus = getUserAnnotationStatus(discussion.id, user.id);
         return userAnnotationStatus.task1 || userAnnotationStatus.task2 || userAnnotationStatus.task3;
       });
+    }
+    
+    // Filter by repository language
+    if (filterValues.repositoryLanguage.length > 0) {
+      filtered = filtered.filter(discussion => 
+        discussion.repositoryLanguage && 
+        filterValues.repositoryLanguage.includes(discussion.repositoryLanguage)
+      );
+    }
+    
+    // Filter by release tag
+    if (filterValues.releaseTag.length > 0) {
+      filtered = filtered.filter(discussion => 
+        discussion.releaseTag && 
+        filterValues.releaseTag.includes(discussion.releaseTag)
+      );
+    }
+    
+    // Filter by date range
+    if (filterValues.fromDate) {
+      filtered = filtered.filter(discussion => {
+        const discussionDate = new Date(discussion.createdAt);
+        return discussionDate >= filterValues.fromDate!;
+      });
+    }
+    
+    if (filterValues.toDate) {
+      filtered = filtered.filter(discussion => {
+        const discussionDate = new Date(discussion.createdAt);
+        return discussionDate <= filterValues.toDate!;
+      });
+    }
+    
+    // Filter by batch ID
+    if (filterValues.batchId) {
+      filtered = filtered.filter(discussion => 
+        discussion.batchId && 
+        discussion.batchId.toString() === filterValues.batchId
+      );
     }
     
     // Update discussions with user annotation status
@@ -149,11 +271,20 @@ const Discussions = () => {
     });
     
     setFilteredDiscussions(updatedDiscussions);
-  }, [discussions, isAuthenticated, navigate, getUserAnnotationStatus, user, filterStatus, searchQuery, showMyAnnotations, getDiscussionsByStatus]);
+  }, [discussions, isAuthenticated, navigate, getUserAnnotationStatus, user, filterValues, searchQuery, getDiscussionsByStatus]);
+
+  // Handle search input change
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value);
+  };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     // URL update will happen via useEffect
+  };
+
+  const handleFilterChange = (newFilters: FilterValues) => {
+    setFilterValues(newFilters);
   };
 
   const startTask = (discussionId: string, taskNumber: number) => {
@@ -278,54 +409,30 @@ const Discussions = () => {
             </p>
           </div>
           
-          <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
-            <form onSubmit={handleSearchSubmit} className="flex gap-2 w-full md:w-auto">
-              <div className="relative flex-grow">
-                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  type="text"
-                  placeholder="Search discussions..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8 w-full"
-                />
-              </div>
-              <Button type="submit" variant="outline">Search</Button>
-            </form>
-            
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Discussions</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="unlocked">In Progress</SelectItem>
-                <SelectItem value="locked">Not Started</SelectItem>
-              </SelectContent>
-            </Select>
-            
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="min-w-[100px]">
-                  <Filter className="h-4 w-4 mr-2" />
-                  Filter
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[200px] p-4">
-                <div className="space-y-4">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox 
-                      id="my-annotations" 
-                      checked={showMyAnnotations} 
-                      onCheckedChange={(checked) => setShowMyAnnotations(checked === true)}
-                    />
-                    <Label htmlFor="my-annotations">My Annotations Only</Label>
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
-          </div>
+          <form onSubmit={handleSearchSubmit} className="flex gap-2 w-full md:w-auto">
+            <div className="relative flex-grow">
+              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                type="text"
+                placeholder="Search discussions..."
+                value={searchQuery}
+                onChange={handleSearchChange}
+                className="pl-8 w-full"
+              />
+            </div>
+            <Button type="submit" variant="outline">Search</Button>
+          </form>
+        </div>
+        
+        {/* Enhanced filters */}
+        <div className="mb-6">
+          <DiscussionFilters
+            onFilterChange={handleFilterChange}
+            availableLanguages={availableLanguages}
+            availableTags={availableTags}
+            availableBatches={availableBatches}
+            initialFilters={filterValues}
+          />
         </div>
         
         {loading ? (
@@ -355,8 +462,15 @@ const Discussions = () => {
               variant="outline" 
               onClick={() => {
                 setSearchQuery('');
-                setFilterStatus('all');
-                setShowMyAnnotations(false);
+                setFilterValues({
+                  status: 'all',
+                  showMyAnnotations: false,
+                  repositoryLanguage: [],
+                  releaseTag: [],
+                  fromDate: undefined,
+                  toDate: undefined,
+                  batchId: ''
+                });
               }}
             >
               Clear Filters
@@ -420,6 +534,12 @@ const Discussions = () => {
                         <Badge variant="outline" className="flex items-center gap-1 bg-gray-100">
                           <Calendar className="h-3.5 w-3.5" />
                           <span>{new Date(discussion.createdAt).toLocaleDateString()}</span>
+                        </Badge>
+                      )}
+                      
+                      {discussion.batchId !== undefined && (
+                        <Badge variant="outline" className="flex items-center gap-1 bg-blue-50">
+                          <span>Batch: {availableBatches.find(b => b.id === discussion.batchId)?.name || discussion.batchId}</span>
                         </Badge>
                       )}
                     </div>

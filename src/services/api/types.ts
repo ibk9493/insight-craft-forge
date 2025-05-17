@@ -12,12 +12,12 @@ export interface Discussion {
     task2: TaskState;
     task3: TaskState;
   };
-  // Add repository metadata fields
+  // Repository metadata fields
   repositoryLanguage?: string;
   releaseTag?: string;
   releaseUrl?: string;
   releaseDate?: string;
-  // Add batch ID
+  // Batch ID
   batchId?: number;
 }
 
@@ -53,6 +53,18 @@ export interface BatchUpload {
   created_at: string;
   created_by?: string;
   discussion_count: number;
+}
+
+// Filter interface for discussions
+export interface DiscussionFilter {
+  status?: TaskStatus;
+  userId?: string;
+  repositoryLanguage?: string[];
+  releaseTag?: string[];
+  fromDate?: string;
+  toDate?: string;
+  batchId?: number;
+  searchTerm?: string;
 }
 
 // JSON Upload types
