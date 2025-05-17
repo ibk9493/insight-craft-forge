@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
@@ -77,10 +76,17 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       // Try to load from API first
       const apiUsers = await api.auth.getAuthorizedUsers();
-      setAuthorizedUsers(apiUsers);
+      
+      // Ensure we cast the roles to UserRole type
+      const typedUsers: AuthorizedUser[] = apiUsers.map(user => ({
+        email: user.email,
+        role: user.role as UserRole
+      }));
+      
+      setAuthorizedUsers(typedUsers);
       
       // Cache in localStorage for offline use
-      localStorage.setItem(AUTH_CONFIG.STORAGE_KEYS.AUTHORIZED_USERS, JSON.stringify(apiUsers));
+      localStorage.setItem(AUTH_CONFIG.STORAGE_KEYS.AUTHORIZED_USERS, JSON.stringify(typedUsers));
     } catch (error) {
       console.error('Failed to load authorized users from API', error);
       
