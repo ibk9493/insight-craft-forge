@@ -24,7 +24,7 @@ const safeApiRequest = async <T>(
   fallback?: T
 ): Promise<T> => {
   try {
-    console.log(`[API Request] ${method} ${url}`, data || '');
+    console.log(`[API Request] ${method} ${url}`, data ? JSON.stringify(data).substring(0, 100) + '...' : '');
     const response = await apiRequest<T>(url, method, data, headers);
     console.log(`[API Response] ${method} ${url} - Success:`, response);
     return response;
@@ -72,11 +72,11 @@ export const api = {
     // Method for pod leads to override annotations
     podLeadOverride: (podLeadId: string, annotatorId: string, discussionId: string, taskId: number, data: Record<string, string | boolean>) => 
       safeApiRequest<Annotation>('/pod-lead/annotations/override', 'POST', {
-        discussion_id: discussionId,
+        pod_lead_id: podLeadId,
         annotator_id: annotatorId,
+        discussion_id: discussionId,
         task_id: taskId,
-        data,
-        pod_lead_id: podLeadId
+        data
       }, undefined, {} as Annotation),
   },
 
@@ -102,25 +102,25 @@ export const api = {
   auth: {
     verifyGoogleToken: (token: string) => {
       // In a real app, this would send the token to your backend
-      console.log('[Auth] Verifying Google token:', token);
+      console.log('[Auth] Verifying Google token:', token.substring(0, 20) + '...');
       
       return safeApiRequest<{success: boolean, user: any}>('/auth/google', 'POST', { token }, undefined, { success: false, user: null });
     },
     
-    // New endpoint to get authorized users (in real app)
+    // Get authorized users endpoint
     getAuthorizedUsers: () => {
       console.log('[Auth] Getting authorized users');
       // In production, always make the API call
       return safeApiRequest<{email: string, role: UserRole}[]>('/auth/authorized-users', 'GET', undefined, undefined, []);
     },
     
-    // New endpoint to add authorized user (in real app)
+    // Add authorized user endpoint
     addAuthorizedUser: (email: string, role: UserRole) => {
       console.log('[Auth] Adding authorized user:', email, role);
       return safeApiRequest<{success: boolean}>('/auth/authorized-users', 'POST', { email, role }, undefined, { success: false });
     },
     
-    // New endpoint to remove authorized user (in real app)
+    // Remove authorized user endpoint
     removeAuthorizedUser: (email: string) => {
       console.log('[Auth] Removing authorized user:', email);
       return safeApiRequest<{success: boolean}>(`/auth/authorized-users/${encodeURIComponent(email)}`, 'DELETE', undefined, undefined, { success: false });

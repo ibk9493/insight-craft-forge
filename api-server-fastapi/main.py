@@ -1,4 +1,3 @@
-
 import os
 import uuid
 import json
@@ -18,7 +17,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError, OperationalError
 from dotenv import load_dotenv
 
-from database import engine, SessionLocal
+from database import engine, SessionLocal, check_and_create_tables
 import models
 import schemas
 from services import discussions_service, annotations_service, consensus_service, auth_service, summary_service
@@ -37,13 +36,16 @@ logger = logging.getLogger("api_server")
 # Load environment variables
 load_dotenv()
 
-# Create database tables
+# Check database tables and recreate if necessary
 try:
-    logger.info("Creating database tables if they don't exist")
-    models.Base.metadata.create_all(bind=engine)
-    logger.info("Database tables initialized successfully")
+    logger.info("Checking database tables")
+    schema_recreated = check_and_create_tables()
+    if schema_recreated:
+        logger.info("Database schema has been created or updated")
+    else:
+        logger.info("Database schema is up-to-date")
 except Exception as e:
-    logger.error(f"Error creating database tables: {str(e)}")
+    logger.error(f"Error checking database tables: {str(e)}")
     logger.error(traceback.format_exc())
 
 # Initialize FastAPI app
@@ -137,10 +139,19 @@ def get_discussions(status: Optional[str] = None, db: Session = Depends(get_db))
         discussions = discussions_service.get_discussions(db, status)
         logger.info(f"Found {len(discussions)} discussions")
         return discussions
+    except OperationalError as e:
+        logger.error(f"Database operational error: {str(e)}")
+        logger.error(traceback.format_exc())
+        # Check if it's a missing column error
+        if "no such column" in str(e):
+            logger.info("Attempting to recreate database schema due to missing columns")
+            check_and_create_tables()
+            logger.info("Please restart the application to apply schema changes")
+        return []
     except Exception as e:
         logger.error(f"Error fetching discussions: {str(e)}")
         logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error fetching discussions: {str(e)}")
+        return []
 
 @app.get("/api/discussions/{discussion_id}", response_model=schemas.Discussion, dependencies=[Depends(verify_api_key)])
 def get_discussion(discussion_id: str, db: Session = Depends(get_db)):

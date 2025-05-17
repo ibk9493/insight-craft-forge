@@ -1,5 +1,5 @@
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Download, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -13,6 +13,8 @@ interface SummaryProps {
 }
 
 const Summary: React.FC<SummaryProps> = ({ results }) => {
+  const [isGenerating, setIsGenerating] = useState(false);
+  
   useEffect(() => {
     // Log the results for debugging
     console.log('[Summary] Displaying results:', results);
@@ -24,20 +26,30 @@ const Summary: React.FC<SummaryProps> = ({ results }) => {
     
     if (!hasTask1Data && !hasTask2Data && !hasTask3Data) {
       console.warn('[Summary] No data available to display');
+    } else {
+      console.info('[Summary] Data found for display:', { 
+        task1Count: Object.keys(results.task1Results).length,
+        task2Count: Object.keys(results.task2Results).length,
+        task3Count: Object.keys(results.task3Results).length
+      });
     }
   }, [results]);
   
-  const generateJson = () => {
+  const generateJson = async () => {
     try {
       console.log('[Summary] Generating JSON export');
+      setIsGenerating(true);
       
       // Add timestamp and metadata to the exported file
       const exportData = {
         metadata: {
           timestamp: new Date().toISOString(),
-          version: '1.0'
+          version: '1.0',
+          exportedAt: new Date().toLocaleString()
         },
-        ...results
+        results: {
+          ...results
+        }
       };
       
       const json = JSON.stringify(exportData, null, 2);
@@ -60,11 +72,15 @@ const Summary: React.FC<SummaryProps> = ({ results }) => {
       toast.success("Export completed", {
         description: `Saved as ${filename}`
       });
+      
+      console.log('[Summary] Export completed, file saved as:', filename);
     } catch (error) {
       console.error('[Summary] Error generating JSON export:', error);
       toast.error("Failed to export data", {
         description: "An error occurred while generating the JSON file"
       });
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -81,10 +97,10 @@ const Summary: React.FC<SummaryProps> = ({ results }) => {
           onClick={generateJson} 
           variant="outline" 
           className="flex items-center gap-2"
-          disabled={hasNoData}
+          disabled={hasNoData || isGenerating}
         >
           <Download className="h-4 w-4" />
-          <span>Export JSON</span>
+          <span>{isGenerating ? 'Generating...' : 'Export JSON'}</span>
         </Button>
       </div>
       
