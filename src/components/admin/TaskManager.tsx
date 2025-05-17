@@ -65,10 +65,17 @@ const TaskManager: React.FC<TaskManagerProps> = ({ discussions, onTaskUpdated })
     setIsUpdating(updateKey);
     
     try {
+      // Log the data being sent for debugging
+      console.log('Sending task update request:', {
+        discussionId,
+        taskId,
+        status
+      });
+      
       const result = await api.admin.updateTaskStatus(discussionId, taskId, status);
       
       if (result.success && result.discussion) {
-        toast.success(result.message);
+        toast.success(result.message || 'Task status updated successfully');
         onTaskUpdated(result.discussion);
       } else {
         toast.error(result.message || 'Failed to update task status');

@@ -1,3 +1,4 @@
+
 import os
 import uuid
 import json
@@ -181,7 +182,7 @@ def get_annotations(
 @app.post("/api/annotations", response_model=schemas.Annotation, dependencies=[Depends(verify_api_key)])
 def create_annotation(annotation: schemas.AnnotationCreate, db: Session = Depends(get_db)):
     try:
-        logger.info(f"Creating annotation for discussion: {annotation.discussionId}, user: {annotation.userId}, task: {annotation.taskId}")
+        logger.info(f"Creating annotation for discussion: {annotation.discussion_id}, user: {annotation.user_id}, task: {annotation.task_id}")
         result = annotations_service.create_or_update_annotation(db, annotation)
         logger.info(f"Annotation created successfully")
         return result
@@ -245,7 +246,7 @@ def get_consensus(discussion_id: str, task_id: int, db: Session = Depends(get_db
 @app.post("/api/consensus", response_model=schemas.Annotation, dependencies=[Depends(verify_api_key)])
 def create_consensus(consensus: schemas.AnnotationCreate, db: Session = Depends(get_db)):
     try:
-        logger.info(f"Creating consensus for discussion: {consensus.discussionId}, task: {consensus.taskId}")
+        logger.info(f"Creating consensus for discussion: {consensus.discussion_id}, task: {consensus.task_id}")
         result = consensus_service.create_or_update_consensus(db, consensus)
         logger.info(f"Consensus created successfully")
         return result
@@ -269,7 +270,7 @@ def calculate_consensus(discussion_id: str, task_id: int, db: Session = Depends(
 @app.post("/api/consensus/override", response_model=schemas.Annotation, dependencies=[Depends(verify_api_key)])
 def override_consensus(override_data: schemas.ConsensusOverride, db: Session = Depends(get_db)):
     try:
-        logger.info(f"Overriding consensus for discussion: {override_data.discussionId}, task: {override_data.taskId}")
+        logger.info(f"Overriding consensus for discussion: {override_data.discussion_id}, task: {override_data.task_id}")
         result = consensus_service.override_consensus(db, override_data)
         logger.info(f"Consensus override successful")
         return result
@@ -337,10 +338,11 @@ def upload_discussions(discussions_data: schemas.DiscussionUpload, db: Session =
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Error uploading discussions: {str(e)}")
 
+# Update the task status endpoint to use the updated TaskStatusUpdate schema
 @app.put("/api/admin/tasks/status", dependencies=[Depends(verify_api_key)])
 def update_task_status(task_update: schemas.TaskStatusUpdate, db: Session = Depends(get_db)):
     try:
-        logger.info(f"Updating task status for discussion: {task_update.discussionId}, task: {task_update.taskId}, status: {task_update.status}")
+        logger.info(f"Updating task status for discussion: {task_update.discussion_id}, task: {task_update.task_id}, status: {task_update.status}")
         result = discussions_service.update_task_status(db, task_update)
         logger.info(f"Task status updated successfully")
         return result
@@ -352,7 +354,7 @@ def update_task_status(task_update: schemas.TaskStatusUpdate, db: Session = Depe
 @app.put("/api/admin/annotations/override", response_model=schemas.Annotation, dependencies=[Depends(verify_api_key)])
 def override_annotation(annotation: schemas.AnnotationOverride, db: Session = Depends(get_db)):
     try:
-        logger.info(f"Admin overriding annotation for discussion: {annotation.discussionId}, task: {annotation.taskId}")
+        logger.info(f"Admin overriding annotation for discussion: {annotation.discussion_id}, task: {annotation.task_id}")
         result = annotations_service.override_annotation(db, annotation)
         logger.info(f"Annotation override successful")
         return result

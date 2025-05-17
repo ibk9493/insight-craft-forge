@@ -1,3 +1,4 @@
+
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any, Union
 from datetime import datetime
@@ -111,10 +112,15 @@ class AuthorizedUser(AuthorizedUserBase):
 class GoogleToken(BaseModel):
     token: str
 
+# Update the TaskStatusUpdate to match frontend field names
 class TaskStatusUpdate(BaseModel):
-    discussion_id: str
-    task_id: int
+    discussion_id: str = Field(alias="discussionId")
+    task_id: int = Field(alias="taskId")
     status: str
+
+    class Config:
+        populate_by_name = True
+        allow_population_by_field_name = True
 
 class DiscussionUpload(BaseModel):
     discussions: List[GitHubDiscussion]
@@ -123,8 +129,12 @@ class DiscussionUpload(BaseModel):
 class UploadResult(BaseModel):
     success: bool
     message: str
-    discussions_added: int
+    discussions_added: int = Field(alias="discussionsAdded")
     errors: Optional[List[str]] = None
+
+    class Config:
+        populate_by_name = True
+        allow_population_by_field_name = True
 
 # Adding the TaskManagementResult schema class that might be needed
 class TaskManagementResult(BaseModel):
