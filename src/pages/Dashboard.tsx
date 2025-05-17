@@ -6,6 +6,7 @@ import TaskGrid from '@/components/dashboard/TaskGrid';
 import ProgressStepper from '@/components/dashboard/ProgressStepper';
 import Summary from '@/components/dashboard/Summary';
 import DashboardNavigation from '@/components/dashboard/DashboardNavigation';
+import DashboardBreadcrumb from '@/components/dashboard/DashboardBreadcrumb';
 import { Button } from '@/components/ui/button';
 import { CheckCircle } from 'lucide-react';
 import AnnotatorView from '@/components/dashboard/AnnotatorView';
@@ -41,7 +42,8 @@ const Dashboard = () => {
     saveAnnotation,
     saveConsensusAnnotation,
     getConsensusAnnotation,
-    discussions
+    discussions,
+    currentDiscussion
   } = useDashboardState();
 
   // Use the task subtasks hook
@@ -163,6 +165,15 @@ const Dashboard = () => {
       <Header />
       
       <div className="container max-w-4xl mx-auto px-4 py-6 flex-grow">
+        {/* Add breadcrumb component */}
+        {(url || discussionId) && (
+          <DashboardBreadcrumb 
+            discussionId={discussionId || undefined} 
+            currentStep={currentStep} 
+            discussionTitle={currentDiscussion?.title || 'Discussion'}
+          />
+        )}
+        
         {currentStep === 0 && !discussionId && (
           <UrlInput onSubmit={handleUrlSubmit} />
         )}
@@ -179,6 +190,9 @@ const Dashboard = () => {
               tasks={tasks} 
               onSelectTask={handleSelectTask} 
               githubUrl={url}
+              repositoryLanguage={currentDiscussion?.repositoryLanguage}
+              releaseTag={currentDiscussion?.releaseTag}
+              releaseDate={currentDiscussion?.releaseDate}
             />
           </>
         )}

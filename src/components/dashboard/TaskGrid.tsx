@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Lock, CheckCircle, Users } from 'lucide-react';
+import { Lock, CheckCircle, Users, Code, Tag, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -17,9 +17,19 @@ interface TaskGridProps {
   }[];
   onSelectTask: (taskId: number) => void;
   githubUrl?: string;
+  repositoryLanguage?: string;
+  releaseTag?: string;
+  releaseDate?: string;
 }
 
-const TaskGrid: React.FC<TaskGridProps> = ({ tasks, onSelectTask, githubUrl }) => {
+const TaskGrid: React.FC<TaskGridProps> = ({ 
+  tasks, 
+  onSelectTask, 
+  githubUrl,
+  repositoryLanguage,
+  releaseTag,
+  releaseDate
+}) => {
   return (
     <div className="space-y-6">
       {/* Display GitHub URL if provided */}
@@ -34,6 +44,31 @@ const TaskGrid: React.FC<TaskGridProps> = ({ tasks, onSelectTask, githubUrl }) =
           >
             {githubUrl}
           </a>
+          
+          {/* Display repository metadata */}
+          <div className="mt-3 flex flex-wrap gap-3">
+            {repositoryLanguage && (
+              <div className="flex items-center text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-md">
+                <Code className="w-3 h-3 mr-1" />
+                <span>Language: {repositoryLanguage}</span>
+              </div>
+            )}
+            
+            {releaseTag && (
+              <div className="flex items-center text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded-md">
+                <Tag className="w-3 h-3 mr-1" />
+                <span>Release: {releaseTag}</span>
+              </div>
+            )}
+            
+            {releaseDate && (
+              <div className="flex items-center text-xs bg-green-50 text-green-700 px-2 py-1 rounded-md">
+                <Calendar className="w-3 h-3 mr-1" />
+                <span>Date: {new Date(releaseDate).toLocaleDateString()}</span>
+              </div>
+            )}
+          </div>
+          
           <p className="text-gray-600 text-sm mt-4">
             Task 1 requires 3 annotators, Task 2 requires 3 annotators, Task 3 requires 5 annotators.
           </p>
