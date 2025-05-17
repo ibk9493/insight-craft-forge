@@ -1,10 +1,11 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Header from '@/components/layout/Header';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Github, ExternalLink, Filter, Code, Calendar, Tag } from 'lucide-react';
+import { Search, Github, ExternalLink, Filter, Code, Calendar, Tag, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { useUser } from '@/contexts/UserContext';
 import { useAnnotationData } from '@/hooks/useAnnotationData';
@@ -24,6 +25,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Badge } from "@/components/ui/badge";
+import DiscussionDetailsModal from '@/components/dashboard/DiscussionDetailsModal';
 
 // Discussion type imported from api service
 import { Discussion, TaskState } from '@/services/api';
@@ -46,6 +48,8 @@ const Discussions = () => {
   const [filteredDiscussions, setFilteredDiscussions] = useState<EnhancedDiscussion[]>([]);
   const [showMyAnnotations, setShowMyAnnotations] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [selectedDiscussion, setSelectedDiscussion] = useState<Discussion | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   
   // Parse URL query parameters
   useEffect(() => {
@@ -220,6 +224,11 @@ const Discussions = () => {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
+  const viewDiscussionDetails = (discussion: Discussion) => {
+    setSelectedDiscussion(discussion);
+    setIsDetailsModalOpen(true);
+  };
+
   // Stats summary for quick overview
   const stats = useMemo(() => {
     const total = discussions.length;
@@ -360,7 +369,15 @@ const Discussions = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       <Button 
-                        size="icon" 
+                        size="sm" 
+                        variant="ghost" 
+                        onClick={() => viewDiscussionDetails(discussion)}
+                        title="View Details"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        size="sm" 
                         variant="ghost" 
                         onClick={() => openExternalLink(discussion.url)}
                         title="Open in GitHub"
@@ -469,6 +486,13 @@ const Discussions = () => {
             ))}
           </div>
         )}
+        
+        {/* Discussion Details Modal */}
+        <DiscussionDetailsModal 
+          isOpen={isDetailsModalOpen}
+          onClose={() => setIsDetailsModalOpen(false)}
+          discussion={selectedDiscussion}
+        />
       </div>
     </div>
   );

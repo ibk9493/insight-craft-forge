@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Lock, CheckCircle, Users, Code, Tag, Calendar } from 'lucide-react';
+import { Lock, CheckCircle, Users, Code, Tag, Calendar, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -20,6 +20,7 @@ interface TaskGridProps {
   repositoryLanguage?: string;
   releaseTag?: string;
   releaseDate?: string;
+  onViewDetails?: () => void;
 }
 
 const TaskGrid: React.FC<TaskGridProps> = ({ 
@@ -28,14 +29,28 @@ const TaskGrid: React.FC<TaskGridProps> = ({
   githubUrl,
   repositoryLanguage,
   releaseTag,
-  releaseDate
+  releaseDate,
+  onViewDetails
 }) => {
   return (
     <div className="space-y-6">
       {/* Display GitHub URL if provided */}
       {githubUrl && (
         <div className="bg-white p-4 rounded-md shadow mb-6">
-          <h3 className="text-sm font-medium text-gray-600 mb-2">GitHub Discussion URL:</h3>
+          <div className="flex justify-between items-start mb-2">
+            <h3 className="text-sm font-medium text-gray-600">GitHub Discussion URL:</h3>
+            {onViewDetails && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={onViewDetails} 
+                className="text-dashboard-blue hover:text-dashboard-blue/80 -mt-1"
+              >
+                <Eye className="h-4 w-4 mr-1" />
+                View Details
+              </Button>
+            )}
+          </div>
           <a 
             href={githubUrl} 
             target="_blank" 
