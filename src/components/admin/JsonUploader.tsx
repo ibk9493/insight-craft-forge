@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,29 +31,19 @@ const JsonUploader: React.FC = () => {
       let isItemValid = true;
       const validationErrors: string[] = [];
       
-      // Check for required fields
-      if (!item.id) {
-        console.warn(`[JsonUploader] Item #${index + 1} missing ID`);
-        validationErrors.push(`Item #${index + 1}: Missing required 'id' field`);
-        isItemValid = false;
-      }
-      
-      if (!item.title) {
-        console.warn(`[JsonUploader] Item #${index + 1} missing title`);
-        validationErrors.push(`Item #${index + 1}: Missing required 'title' field`);
-        isItemValid = false;
-      }
-      
+      // URLs are required
       if (!item.url) {
         console.warn(`[JsonUploader] Item #${index + 1} missing URL`);
         validationErrors.push(`Item #${index + 1}: Missing required 'url' field`);
         isItemValid = false;
       }
       
+      // Other field validations can be less strict since we'll auto-generate missing fields
+      
       // Optional field validations (if present)
-      if (item.repository_language !== undefined && typeof item.repository_language !== 'string') {
-        console.warn(`[JsonUploader] Item #${index + 1} has invalid repository_language`);
-        validationErrors.push(`Item #${index + 1}: repository_language must be a string`);
+      if (item.repositoryLanguage !== undefined && typeof item.repositoryLanguage !== 'string') {
+        console.warn(`[JsonUploader] Item #${index + 1} has invalid repositoryLanguage`);
+        validationErrors.push(`Item #${index + 1}: repositoryLanguage must be a string`);
         isItemValid = false;
       }
       
@@ -160,14 +149,21 @@ const JsonUploader: React.FC = () => {
               }
             }
             
-            // Ensure task structure exists
+            // Ensure task structure exists with Task 1 unlocked by default
             if (!disc.tasks) {
               disc.tasks = {
-                task1: { status: 'locked', annotators: 0 },
+                task1: { status: 'unlocked', annotators: 0 },
                 task2: { status: 'locked', annotators: 0 },
                 task3: { status: 'locked', annotators: 0 }
               };
               console.info(`[JsonUploader] Auto-generated tasks structure for ID ${disc.id}`);
+            } else {
+              // Ensure Task 1 is unlocked by default if tasks exist but Task 1 is not specified
+              if (!disc.tasks.task1) {
+                disc.tasks.task1 = { status: 'unlocked', annotators: 0 };
+              } else {
+                disc.tasks.task1.status = 'unlocked';
+              }
             }
             
             return disc;
@@ -341,8 +337,8 @@ const JsonUploader: React.FC = () => {
                   <div className="max-h-40 overflow-y-auto space-y-2">
                     {parsedData.slice(0, 3).map((item, index) => (
                       <div key={index} className="bg-gray-50 p-2 rounded-md text-sm">
-                        <div><strong>ID:</strong> {item.id}</div>
-                        <div><strong>Title:</strong> {item.title}</div>
+                        <div><strong>ID:</strong> {item.id || 'Auto-generated'}</div>
+                        <div><strong>Title:</strong> {item.title || 'Auto-generated'}</div>
                         <div><strong>Repository:</strong> {item.repository || extractRepositoryFromUrl(item.url)}</div>
                         <div className="truncate"><strong>URL:</strong> {item.url}</div>
                         
@@ -369,6 +365,19 @@ const JsonUploader: React.FC = () => {
                             )}
                           </div>
                         )}
+                        
+                        {/* Show task statuses */}
+                        <div className="mt-1 pt-1 border-t border-gray-200">
+                          <div className="text-xs text-gray-600">
+                            <span className="font-medium">Task 1:</span> {item.tasks?.task1?.status || 'unlocked'}
+                          </div>
+                          <div className="text-xs text-gray-600">
+                            <span className="font-medium">Task 2:</span> {item.tasks?.task2?.status || 'locked'}
+                          </div>
+                          <div className="text-xs text-gray-600">
+                            <span className="font-medium">Task 3:</span> {item.tasks?.task3?.status || 'locked'}
+                          </div>
+                        </div>
                       </div>
                     ))}
                     {parsedData.length > 3 && (

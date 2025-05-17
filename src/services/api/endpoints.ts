@@ -143,6 +143,7 @@ export const api = {
     // Update task status
     updateTaskStatus: (discussionId: string, taskId: number, status: TaskStatus) => {
       console.log(`[Admin] Updating task status: ${discussionId}, Task ${taskId} to ${status}`);
+      // Use proper field names to match backend expectations
       return safeApiRequest<TaskManagementResult>('/admin/tasks/status', 'PUT', { 
         discussionId,
         taskId, 

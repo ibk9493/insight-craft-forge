@@ -31,11 +31,11 @@ class Discussion(DiscussionBase):
         
 # Improved schema for frontend-to-backend compatibility
 class GitHubDiscussionTaskState(BaseModel):
-    status: str = Field(default="locked")
+    status: str = Field(default="unlocked")  # Changed default from locked to unlocked
     annotators: int = Field(default=0)
 
 class GitHubDiscussionTasks(BaseModel):
-    task1: Optional[GitHubDiscussionTaskState] = Field(default_factory=lambda: GitHubDiscussionTaskState(status="locked", annotators=0))
+    task1: Optional[GitHubDiscussionTaskState] = Field(default_factory=lambda: GitHubDiscussionTaskState(status="unlocked", annotators=0))
     task2: Optional[GitHubDiscussionTaskState] = Field(default_factory=lambda: GitHubDiscussionTaskState(status="locked", annotators=0))
     task3: Optional[GitHubDiscussionTaskState] = Field(default_factory=lambda: GitHubDiscussionTaskState(status="locked", annotators=0))
 
@@ -112,7 +112,7 @@ class AuthorizedUser(AuthorizedUserBase):
 class GoogleToken(BaseModel):
     token: str
 
-# Update the TaskStatusUpdate to match frontend field names
+# Update the TaskStatusUpdate to match frontend field names with proper model config
 class TaskStatusUpdate(BaseModel):
     discussion_id: str = Field(alias="discussionId")
     task_id: int = Field(alias="taskId")

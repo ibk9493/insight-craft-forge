@@ -4,7 +4,7 @@ import Header from '@/components/layout/Header';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Github, ExternalLink, Filter, Code, Calendar } from 'lucide-react';
+import { Search, Github, ExternalLink, Filter, Code, Calendar, Tag } from 'lucide-react';
 import { toast } from 'sonner';
 import { useUser } from '@/contexts/UserContext';
 import { useAnnotationData } from '@/hooks/useAnnotationData';
@@ -372,19 +372,27 @@ const Discussions = () => {
                 </CardHeader>
                 
                 <CardContent>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="text-sm text-gray-600 truncate flex-grow">
+                  <div className="flex flex-wrap items-center justify-between mb-4">
+                    <div className="text-sm text-gray-600 truncate max-w-md mb-2 md:mb-0">
                       <span className="font-medium">URL:</span> {discussion.url}
                     </div>
-                    <div className="flex items-center gap-3 ml-4">
+                    <div className="flex flex-wrap items-center gap-2">
                       {discussion.repositoryLanguage && (
                         <Badge variant="outline" className="flex items-center gap-1">
                           <Code className="h-3.5 w-3.5" />
                           <span>{discussion.repositoryLanguage}</span>
                         </Badge>
                       )}
-                      {discussion.createdAt && (
+                      
+                      {discussion.releaseTag && (
                         <Badge variant="secondary" className="flex items-center gap-1">
+                          <Tag className="h-3.5 w-3.5" />
+                          <span>{discussion.releaseTag}</span>
+                        </Badge>
+                      )}
+                      
+                      {discussion.createdAt && (
+                        <Badge variant="outline" className="flex items-center gap-1 bg-gray-100">
                           <Calendar className="h-3.5 w-3.5" />
                           <span>{new Date(discussion.createdAt).toLocaleDateString()}</span>
                         </Badge>

@@ -252,6 +252,38 @@ export function getMockData<T>(endpoint: string): T {
     } as unknown as T;
   }
   
+  if (endpoint.startsWith('/admin/tasks/status')) {
+    // Mock task status update
+    return {
+      success: true,
+      message: 'Task status updated successfully',
+      discussion: {
+        id: 'mock-123',
+        title: 'Mock Discussion',
+        url: 'https://github.com/org/repo/discussions/1',
+        repository: 'org/repo',
+        createdAt: '2025-05-01T00:00:00Z',
+        repositoryLanguage: 'TypeScript',
+        releaseTag: 'v1.0.0',
+        tasks: {
+          task1: { status: 'unlocked', annotators: 0 },
+          task2: { status: 'locked', annotators: 0 },
+          task3: { status: 'locked', annotators: 0 }
+        }
+      }
+    } as unknown as T;
+  }
+  
+  if (endpoint.startsWith('/admin/discussions/upload')) {
+    // Mock upload discussions
+    return {
+      success: true,
+      message: 'Successfully uploaded 3 discussions',
+      discussionsAdded: 3,
+      errors: []
+    } as unknown as T;
+  }
+  
   if (endpoint.startsWith('/auth/authorized-users')) {
     console.log('[API Mock] Returning mock authorized users');
     return [
