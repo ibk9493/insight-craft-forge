@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Discussion } from '@/services/api';
+import DiscussionDetailsModal from './DiscussionDetailsModal';
 
 interface DashboardNavigationProps {
   viewMode: 'grid' | 'detail' | 'consensus';
@@ -120,6 +121,18 @@ const DashboardNavigation = ({
               <Home className="h-4 w-4" />
               <span>Dashboard Home</span>
             </Button>
+            
+            {/* Add Discussion Details Modal button */}
+            {currentDiscussion && (
+              <DiscussionDetailsModal 
+                discussion={currentDiscussion} 
+                trigger={
+                  <Button variant="outline" className="flex items-center gap-2">
+                    View Discussion
+                  </Button>
+                }
+              />
+            )}
           </div>
         )}
       </div>

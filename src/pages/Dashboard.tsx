@@ -1,3 +1,4 @@
+
 import React, { useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import UrlInput from '@/components/dashboard/UrlInput';
@@ -8,13 +9,14 @@ import Summary from '@/components/dashboard/Summary';
 import DashboardNavigation from '@/components/dashboard/DashboardNavigation';
 import DashboardBreadcrumb from '@/components/dashboard/DashboardBreadcrumb';
 import { Button } from '@/components/ui/button';
-import { CheckCircle } from 'lucide-react';
+import { CheckCircle, FileText } from 'lucide-react';
 import AnnotatorView from '@/components/dashboard/AnnotatorView';
 import { useDashboardState } from '@/hooks/useDashboardState';
 import { useTaskSubtasks } from '@/hooks/useTaskSubtasks';
 import { useTaskProgress } from '@/hooks/useTaskProgress';
 import { useAnnotationHandlers } from '@/hooks/useAnnotationHandlers';
 import { TaskId } from '@/hooks/annotations/useAnnotationTypes';
+import DiscussionDetailsModal from '@/components/dashboard/DiscussionDetailsModal';
 
 const Dashboard = () => {
   // Use the dashboard state hook
@@ -185,6 +187,11 @@ const Dashboard = () => {
               <p className="text-gray-600 text-sm">
                 GitHub Discussion URL: <span className="text-dashboard-blue">{url}</span>
               </p>
+              {currentDiscussion && (
+                <div className="mt-2">
+                  <DiscussionDetailsModal discussion={currentDiscussion} />
+                </div>
+              )}
             </div>
             <TaskGrid 
               tasks={tasks} 
@@ -201,8 +208,14 @@ const Dashboard = () => {
           <>
             <ProgressStepper steps={steps} currentStep={currentStep} />
             
-            {isPodLead && currentStep > 0 && (
-              <div className="mb-4 flex justify-end">
+            <div className="mb-4 flex justify-between items-center">
+              {/* Discussion details button */}
+              {currentDiscussion && (
+                <DiscussionDetailsModal discussion={currentDiscussion} />
+              )}
+              
+              {/* Consensus mode toggle button */}
+              {isPodLead && currentStep > 0 && (
                 <Button 
                   onClick={toggleConsensusMode} 
                   variant="outline"
@@ -211,8 +224,8 @@ const Dashboard = () => {
                   <CheckCircle className="h-4 w-4" />
                   {viewMode === 'detail' ? 'Create Consensus' : 'View Annotator Form'}
                 </Button>
-              </div>
-            )}
+              )}
+            </div>
             
             {/* Task cards for different steps */}
             {currentStep === TaskId.QUESTION_QUALITY && viewMode === 'detail' && (
@@ -332,6 +345,7 @@ const Dashboard = () => {
           discussionId={discussionId || undefined}
           onCodeUrlChange={handleCodeUrlChange}
           onCodeUrlVerify={validateGitHubCodeUrl}
+          currentDiscussion={currentDiscussion}
         />
       </div>
     </div>
