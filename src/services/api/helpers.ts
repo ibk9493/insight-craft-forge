@@ -1,4 +1,3 @@
-
 import { toast } from 'sonner';
 import { ApiError } from './types';
 import { mockDiscussions, mockAnnotations } from './mockData';
@@ -19,7 +18,17 @@ export const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA === 'true';
 export const handleResponse = async <T>(response: Response): Promise<T> => {
   // Check if response is OK
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
+    let errorData;
+    try {
+      // Try to parse error as JSON
+      errorData = await response.json();
+    } catch (e) {
+      // If it's not JSON, get text content for debugging
+      const textContent = await response.text();
+      console.error('Non-JSON error response:', textContent.substring(0, 500) + (textContent.length > 500 ? '...' : ''));
+      errorData = { message: 'Server returned a non-JSON error' };
+    }
+    
     const error: ApiError = {
       message: errorData.message || `Error ${response.status}: ${response.statusText}`,
       status: response.status
@@ -29,14 +38,35 @@ export const handleResponse = async <T>(response: Response): Promise<T> => {
   
   // Check content type to ensure we're getting JSON
   const contentType = response.headers.get('content-type');
+  
   if (!contentType || !contentType.includes('application/json')) {
+    try {
+      // Try to get the first 500 chars of the response for debugging
+      const textContent = await response.text();
+      console.error('Expected JSON but got:', contentType || 'no content type');
+      console.error('Response preview:', textContent.substring(0, 500) + (textContent.length > 500 ? '...' : ''));
+      
+      throw {
+        message: `Invalid response format: Expected JSON but got ${contentType || 'unknown format'}`,
+        status: response.status
+      };
+    } catch (error) {
+      throw {
+        message: 'Invalid response format: Expected JSON',
+        status: response.status
+      };
+    }
+  }
+  
+  try {
+    return await response.json() as T;
+  } catch (error) {
+    console.error('Failed to parse JSON response:', error);
     throw {
-      message: 'Invalid response format: Expected JSON',
+      message: 'Failed to parse JSON response',
       status: response.status
     };
   }
-  
-  return response.json() as Promise<T>;
 };
 
 /**

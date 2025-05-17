@@ -93,6 +93,24 @@ await api.consensus.save({
 });
 ```
 
+## Troubleshooting API Integration
+
+### Common Issues
+
+1. **Receiving HTML instead of JSON**: If your API calls return HTML content instead of JSON:
+   - Check that the API server is running correctly
+   - Verify your API URL in `.env` (should end with `/api` for the FastAPI server)
+   - Ensure CORS is configured properly on the server
+   - Try using `VITE_USE_MOCK_DATA=true` for development
+
+2. **Authentication Issues**:
+   - Verify that API keys are correctly set in your environment
+   - Check that cookies are being properly sent for authenticated requests
+
+3. **Fallback Mechanism**:
+   - The application automatically falls back to mock data when `USE_MOCK_DATA=true` or in development mode
+   - Check browser console for API errors and fallback messages
+
 ## Best Practices
 
 1. **Error Handling**: Always handle potential API errors in UI components
