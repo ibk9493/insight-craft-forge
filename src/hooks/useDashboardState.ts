@@ -1,9 +1,11 @@
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useUser } from '@/contexts/UserContext';
 import { useAnnotationData } from '@/hooks/useAnnotationData';
 import { SubTask } from '@/components/dashboard/TaskCard';
+import { TaskId } from './annotations/useAnnotationTypes';
 
 export function useDashboardState() {
   const navigate = useNavigate();
@@ -20,6 +22,7 @@ export function useDashboardState() {
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [codeDownloadUrl, setCodeDownloadUrl] = useState<string | null>(null);
+  const [isCodeUrlValid, setIsCodeUrlValid] = useState<boolean>(false);
   
   // Prevent infinite render cycles
   const initialLoadRef = useRef(false);
@@ -46,7 +49,7 @@ export function useDashboardState() {
   // Tasks for grid view
   const [tasks, setTasks] = useState([
     {
-      id: 1,
+      id: TaskId.QUESTION_QUALITY,
       title: "Question Quality Assessment",
       description: "Evaluate the quality of the question based on relevance, learning value, clarity, and image grounding.",
       status: 'locked' as 'locked' | 'unlocked' | 'completed',
@@ -54,7 +57,7 @@ export function useDashboardState() {
       currentAnnotators: 0
     },
     {
-      id: 2,
+      id: TaskId.ANSWER_QUALITY,
       title: "Answer Quality Assessment",
       description: "Evaluate the quality of the answer based on comprehensiveness, explanation, code execution, and completeness.",
       status: 'locked' as 'locked' | 'unlocked' | 'completed',
@@ -62,7 +65,7 @@ export function useDashboardState() {
       currentAnnotators: 0
     },
     {
-      id: 3,
+      id: TaskId.REWRITE,
       title: "Rewrite Question and Answer",
       description: "Rewrite the question and answer to improve clarity, conciseness, and coherence.",
       status: 'locked' as 'locked' | 'unlocked' | 'completed',
@@ -70,6 +73,12 @@ export function useDashboardState() {
       currentAnnotators: 0
     }
   ]);
+
+  // GitHub URL validation
+  const validateGitHubCodeUrl = (url: string): boolean => {
+    return url.includes('github.com') && 
+      (url.includes('/archive/refs/tags/') || url.includes('/archive/refs/heads/'));
+  };
 
   const handleUrlSubmit = (url: string) => {
     setUrl(url);
@@ -120,6 +129,11 @@ export function useDashboardState() {
     };
     reader.readAsDataURL(file);
   };
+  
+  const handleCodeUrlChange = (url: string) => {
+    setCodeDownloadUrl(url);
+    setIsCodeUrlValid(validateGitHubCodeUrl(url));
+  };
 
   const updateStepCompletionStatus = (stepIndex: number, completed: boolean) => {
     setSteps(steps.map((step, index) => 
@@ -137,16 +151,20 @@ export function useDashboardState() {
 
   // Load code download URL from user's saved annotation if available
   useEffect(() => {
-    if (discussionId && user && currentStep === 2) {
+    if (discussionId && user && currentStep === TaskId.ANSWER_QUALITY) {
       const annotation = getUserAnnotation(discussionId, user.id, currentStep);
       if (annotation && annotation.data.codeDownloadUrl) {
-        setCodeDownloadUrl(annotation.data.codeDownloadUrl as string);
+        const url = annotation.data.codeDownloadUrl as string;
+        setCodeDownloadUrl(url);
+        setIsCodeUrlValid(validateGitHubCodeUrl(url));
       } else if (!codeDownloadUrl) {
         // If no URL in annotation, set a default from repository info
         const discussion = discussions.find(d => d.id === discussionId);
         if (discussion && discussion.repository) {
           const repoName = discussion.repository;
-          setCodeDownloadUrl(`https://github.com/${repoName}/archive/refs/tags/latest.tar.gz`);
+          const defaultUrl = `https://github.com/${repoName}/archive/refs/tags/latest.tar.gz`;
+          setCodeDownloadUrl(defaultUrl);
+          setIsCodeUrlValid(validateGitHubCodeUrl(defaultUrl));
         }
       }
     }
@@ -242,6 +260,7 @@ export function useDashboardState() {
     setUploadedImage,
     codeDownloadUrl,
     setCodeDownloadUrl,
+    isCodeUrlValid,
     steps,
     setSteps,
     tasks,
@@ -250,6 +269,8 @@ export function useDashboardState() {
     handleSelectTask,
     handleBackToGrid,
     handleFileUpload,
+    handleCodeUrlChange,
+    validateGitHubCodeUrl,
     updateStepCompletionStatus,
     toggleConsensusMode,
     discussionId,

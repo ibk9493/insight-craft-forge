@@ -34,17 +34,6 @@ const DashboardNavigation = ({
   onCodeUrlVerify
 }: DashboardNavigationProps) => {
   const navigate = useNavigate();
-  const [codeUrl, setCodeUrl] = useState('');
-  const [codeUrlVerified, setCodeUrlVerified] = useState(false);
-  
-  // Initialize codeUrl from props when component mounts or when codeDownloadUrl changes
-  useEffect(() => {
-    if (codeDownloadUrl) {
-      setCodeUrl(codeDownloadUrl);
-      const isValid = onCodeUrlVerify ? onCodeUrlVerify(codeDownloadUrl) : isValidGithubUrl(codeDownloadUrl);
-      setCodeUrlVerified(isValid);
-    }
-  }, [codeDownloadUrl, onCodeUrlVerify]);
   
   // Handle file input change
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -65,27 +54,15 @@ const DashboardNavigation = ({
 
   // Handle code URL input change
   const handleCodeUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const url = e.target.value;
-    setCodeUrl(url);
-    
-    // If there's a handler for URL changes, call it
     if (onCodeUrlChange) {
-      onCodeUrlChange(url);
-    }
-    
-    // Check if URL is valid
-    if (url) {
-      const isValid = onCodeUrlVerify ? onCodeUrlVerify(url) : isValidGithubUrl(url);
-      setCodeUrlVerified(isValid);
-    } else {
-      setCodeUrlVerified(false);
+      onCodeUrlChange(e.target.value);
     }
   };
   
-  // Simple Github URL validation
-  const isValidGithubUrl = (url: string): boolean => {
-    return url.includes('github.com') && 
-      (url.includes('/archive/refs/tags/') || url.includes('/archive/refs/heads/'));
+  // Validate if URL is correct GitHub URL format
+  const isValidGitHubUrl = (url: string | null | undefined): boolean => {
+    if (!url) return false;
+    return onCodeUrlVerify ? onCodeUrlVerify(url) : false;
   };
 
   return (
@@ -154,13 +131,13 @@ const DashboardNavigation = ({
                   <Input
                     id="code-url"
                     type="text"
-                    value={codeUrl}
+                    value={codeDownloadUrl || ''}
                     onChange={handleCodeUrlChange}
                     placeholder="https://github.com/owner/repo/archive/refs/tags/version.tar.gz"
                     className="flex-1"
                   />
-                  {codeUrl && (
-                    codeUrlVerified ? 
+                  {codeDownloadUrl && (
+                    isValidGitHubUrl(codeDownloadUrl) ? 
                       <CheckCircle className="h-5 w-5 text-green-500" /> : 
                       <XCircle className="h-5 w-5 text-red-500" />
                   )}
@@ -169,21 +146,23 @@ const DashboardNavigation = ({
               <div className="flex items-center gap-2 mt-6">
                 <Checkbox 
                   id="url-verified" 
-                  checked={codeUrlVerified}
+                  checked={isValidGitHubUrl(codeDownloadUrl)}
                   className="data-[state=checked]:bg-green-500"
                   disabled
                 />
                 <label htmlFor="url-verified" className="text-sm">
-                  {codeUrlVerified ? 'URL Valid' : 'URL Invalid'}
+                  {isValidGitHubUrl(codeDownloadUrl) ? 'URL Valid' : 'URL Invalid'}
                 </label>
               </div>
             </div>
             
-            {codeUrl && codeUrlVerified && (
+            {codeDownloadUrl && isValidGitHubUrl(codeDownloadUrl) && (
               <a
-                href={codeUrl}
+                href={codeDownloadUrl}
                 download
                 className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded w-fit"
+                target="_blank"
+                rel="noopener noreferrer"
               >
                 <Download className="h-4 w-4" />
                 <span>Download Code</span>

@@ -103,8 +103,9 @@ export const apiRequest = async <T>(
   body?: unknown,
   headers?: Record<string, string>
 ): Promise<T> => {
-  // If mock data is specifically enabled, use mock data directly 
-  // without attempting an API call to improve performance
+  console.info(`Making API request to ${endpoint}. Mock data enabled: ${USE_MOCK_DATA}`);
+  
+  // Check if we should use mock data based on config
   if (USE_MOCK_DATA) {
     console.info(`Using mock data for: ${endpoint}`);
     return getMockData<T>(endpoint);
@@ -134,18 +135,19 @@ export const apiRequest = async <T>(
 
     // Format the API URL properly
     const formattedUrl = formatApiUrl(endpoint);
-    console.debug(`Making API request to: ${formattedUrl}`);
+    console.debug(`Making actual API request to: ${formattedUrl}`);
     
-    // Try to make the actual API call
+    // Make the actual API call
+    const response = await fetch(formattedUrl, config);
+    
     try {
-      const response = await fetch(formattedUrl, config);
       return await handleResponse<T>(response);
     } catch (apiError) {
       console.error('API Error:', apiError);
       
-      // If we're in development mode, fall back to mock data
+      // Only fall back to mock data if API call failed and we're in dev mode
       if (import.meta.env.DEV) {
-        console.warn('Falling back to mock data for:', endpoint);
+        console.warn('API call failed. Falling back to mock data for:', endpoint);
         return getMockData<T>(endpoint);
       }
       
@@ -170,6 +172,8 @@ export const apiRequest = async <T>(
 
 // Helper function to get mock data based on endpoint
 export function getMockData<T>(endpoint: string): T {
+  console.log('Getting mock data for endpoint:', endpoint);
+  
   // Parse the endpoint to determine what data to return
   if (endpoint.startsWith('/discussions')) {
     // Return all discussions or a specific one
@@ -233,10 +237,3 @@ export function getMockData<T>(endpoint: string): T {
   // Default empty response
   return {} as T;
 }
-
-// API fallback implementation in case of network issues or dev environment
-export const createFallbackResponse = (entity: string, error: ApiError): never => {
-  toast.error(`Failed to fetch ${entity}: ${error.message}`);
-  console.error(`API Error: ${error.message}`);
-  throw new Error(`API Error: Failed to fetch ${entity}`);
-};

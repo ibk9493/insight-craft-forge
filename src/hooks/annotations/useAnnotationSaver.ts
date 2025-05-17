@@ -4,20 +4,9 @@ import { SubTask } from '@/components/dashboard/TaskCard';
 import { Annotation } from '@/services/api';
 import { toast } from 'sonner';
 import { User } from '@/contexts/UserContext';
+import { AnnotationHandlersProps, isPodLead, TaskId } from './useAnnotationTypes';
 
-interface AnnotationSaverProps {
-  task1SubTasks: SubTask[];
-  task2SubTasks: SubTask[];
-  task3SubTasks: SubTask[];
-  consensusTask1: SubTask[];
-  consensusTask2: SubTask[];
-  consensusTask3: SubTask[];
-  user: User | null;
-  saveAnnotation: (annotation: Omit<Annotation, 'timestamp'>) => Promise<boolean>;
-  saveConsensusAnnotation: (annotation: Omit<Annotation, 'timestamp'>) => Promise<boolean>;
-  updateStepCompletionStatus: (stepIndex: number, completed: boolean) => void;
-  overrideAnnotation?: (podLeadId: string, annotatorId: string, discussionId: string, taskId: number, data: Record<string, string | boolean>) => Promise<boolean>;
-}
+type AnnotationSaverProps = AnnotationHandlersProps;
 
 export function useAnnotationSaver({
   task1SubTasks,
@@ -33,6 +22,26 @@ export function useAnnotationSaver({
   overrideAnnotation
 }: AnnotationSaverProps) {
   const [loading, setLoading] = useState(false);
+
+  // Convert tasks to data format
+  const convertTasksToData = (tasks: SubTask[], data: Record<string, any>) => {
+    tasks.forEach(task => {
+      if (task.selectedOption) {
+        // Convert string options to actual boolean for boolean fields if needed
+        if (task.selectedOption === 'True' || task.selectedOption === 'False' ||
+            task.selectedOption === 'Yes' || task.selectedOption === 'No') {
+          data[task.id] = (task.selectedOption === 'True' || task.selectedOption === 'Yes');
+        } else {
+          data[task.id] = task.selectedOption;
+        }
+        
+        // Add text value if present
+        if (task.textValue) {
+          data[`${task.id}_text`] = task.textValue;
+        }
+      }
+    });
+  };
 
   // Save annotation or consensus
   const handleSaveAnnotation = async (
@@ -58,10 +67,10 @@ export function useAnnotationSaver({
       if (viewMode === 'detail') {
         // Regular annotation
         switch (taskId) {
-          case 1:
+          case TaskId.QUESTION_QUALITY:
             currentTasks = task1SubTasks;
             break;
-          case 2:
+          case TaskId.ANSWER_QUALITY:
             currentTasks = task2SubTasks;
             // Add screenshot and code download URL for task 2
             if (uploadedImage) {
@@ -71,7 +80,7 @@ export function useAnnotationSaver({
               taskData.codeDownloadUrl = codeDownloadUrl;
             }
             break;
-          case 3:
+          case TaskId.REWRITE:
             currentTasks = task3SubTasks;
             break;
           default:
@@ -82,7 +91,7 @@ export function useAnnotationSaver({
         // Convert form data to API format
         convertTasksToData(currentTasks, taskData);
         
-        // Save annotation
+        // Save annotation - force this to NOT use mock data
         const success = await saveAnnotation({
           userId: user.id,
           discussionId,
@@ -103,13 +112,13 @@ export function useAnnotationSaver({
         }
         
         switch (taskId) {
-          case 1:
+          case TaskId.QUESTION_QUALITY:
             currentTasks = consensusTask1;
             break;
-          case 2:
+          case TaskId.ANSWER_QUALITY:
             currentTasks = consensusTask2;
             break;
-          case 3:
+          case TaskId.REWRITE:
             currentTasks = consensusTask3;
             break;
           default:
@@ -142,27 +151,7 @@ export function useAnnotationSaver({
     }
   };
   
-  // Helper function to convert tasks to data format
-  const convertTasksToData = (tasks: SubTask[], data: Record<string, any>) => {
-    tasks.forEach(task => {
-      if (task.selectedOption) {
-        // Convert string options to actual boolean for boolean fields if needed
-        if (task.selectedOption === 'True' || task.selectedOption === 'False' ||
-            task.selectedOption === 'Yes' || task.selectedOption === 'No') {
-          data[task.id] = (task.selectedOption === 'True' || task.selectedOption === 'Yes');
-        } else {
-          data[task.id] = task.selectedOption;
-        }
-        
-        // Add text value if present
-        if (task.textValue) {
-          data[`${task.id}_text`] = task.textValue;
-        }
-      }
-    });
-  };
-  
-  // New function to handle pod lead overriding an annotator's annotation
+  // Handle pod lead overriding an annotator's annotation
   const handleOverrideAnnotation = async (
     discussionId: string | null,
     annotatorId: string,
@@ -215,8 +204,3 @@ export function useAnnotationSaver({
     loading
   };
 }
-
-// Helper function to check if user is pod lead
-export const isPodLead = (user: User): boolean => {
-  return user.role === 'pod_lead';
-};

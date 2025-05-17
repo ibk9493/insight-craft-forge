@@ -1,3 +1,4 @@
+
 import React, { useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import UrlInput from '@/components/dashboard/UrlInput';
@@ -13,6 +14,7 @@ import { useDashboardState } from '@/hooks/useDashboardState';
 import { useTaskSubtasks } from '@/hooks/useTaskSubtasks';
 import { useTaskProgress } from '@/hooks/useTaskProgress';
 import { useAnnotationHandlers } from '@/hooks/useAnnotationHandlers';
+import { TaskId } from '@/hooks/annotations/useAnnotationTypes';
 
 const Dashboard = () => {
   // Use the dashboard state hook
@@ -31,7 +33,8 @@ const Dashboard = () => {
     tasks,
     uploadedImage,
     codeDownloadUrl,
-    setCodeDownloadUrl,
+    handleCodeUrlChange,
+    validateGitHubCodeUrl,
     isPodLead,
     user,
     getUserAnnotation,
@@ -101,24 +104,32 @@ const Dashboard = () => {
         // Load user's existing annotation
         const updatedSubTasks = loadUserAnnotation(discussionId, currentStep);
         if (updatedSubTasks) {
-          if (currentStep === 1) {
-            setTask1SubTasks(updatedSubTasks);
-          } else if (currentStep === 2) {
-            setTask2SubTasks(updatedSubTasks);
-          } else if (currentStep === 3) {
-            setTask3SubTasks(updatedSubTasks);
+          switch (currentStep) {
+            case TaskId.QUESTION_QUALITY:
+              setTask1SubTasks(updatedSubTasks);
+              break;
+            case TaskId.ANSWER_QUALITY:
+              setTask2SubTasks(updatedSubTasks);
+              break;
+            case TaskId.REWRITE:
+              setTask3SubTasks(updatedSubTasks);
+              break;
           }
         }
       } else if (viewMode === 'consensus' && isPodLead) {
         // Prepare consensus view
         const consensusTasks = prepareConsensusView(discussionId, currentStep);
         if (consensusTasks && consensusTasks.length > 0) {
-          if (currentStep === 1) {
-            setConsensusTask1(consensusTasks);
-          } else if (currentStep === 2) {
-            setConsensusTask2(consensusTasks);
-          } else if (currentStep === 3) {
-            setConsensusTask3(consensusTasks);
+          switch (currentStep) {
+            case TaskId.QUESTION_QUALITY:
+              setConsensusTask1(consensusTasks);
+              break;
+            case TaskId.ANSWER_QUALITY:
+              setConsensusTask2(consensusTasks);
+              break;
+            case TaskId.REWRITE:
+              setConsensusTask3(consensusTasks);
+              break;
           }
         }
       }
@@ -144,17 +155,6 @@ const Dashboard = () => {
       codeDownloadUrl, 
       handleBackToGrid
     );
-  };
-  
-  // Handle code URL change
-  const handleCodeUrlChange = (url: string) => {
-    setCodeDownloadUrl(url);
-  };
-  
-  // Validate code URLs
-  const validateCodeUrl = (url: string): boolean => {
-    return url.includes('github.com') && 
-      (url.includes('/archive/refs/tags/') || url.includes('/archive/refs/heads/'));
   };
 
   return (
@@ -200,7 +200,7 @@ const Dashboard = () => {
             )}
             
             {/* Task cards for different steps */}
-            {currentStep === 1 && viewMode === 'detail' && (
+            {currentStep === TaskId.QUESTION_QUALITY && viewMode === 'detail' && (
               <TaskCard
                 title="Task 1: Question Quality Assessment"
                 description="Evaluate the quality of the question based on relevance, learning value, clarity, and image grounding."
@@ -213,7 +213,7 @@ const Dashboard = () => {
               />
             )}
             
-            {currentStep === 1 && viewMode === 'consensus' && isPodLead && (
+            {currentStep === TaskId.QUESTION_QUALITY && viewMode === 'consensus' && isPodLead && (
               <>
                 <TaskCard
                   title="Task 1: Question Quality Consensus"
@@ -233,7 +233,7 @@ const Dashboard = () => {
               </>
             )}
             
-            {currentStep === 2 && viewMode === 'detail' && (
+            {currentStep === TaskId.ANSWER_QUALITY && viewMode === 'detail' && (
               <TaskCard
                 title="Task 2: Answer Quality Assessment"
                 description="Evaluate the quality of the answer based on comprehensiveness, explanation, code execution, and completeness."
@@ -246,7 +246,7 @@ const Dashboard = () => {
               />
             )}
             
-            {currentStep === 2 && viewMode === 'consensus' && isPodLead && (
+            {currentStep === TaskId.ANSWER_QUALITY && viewMode === 'consensus' && isPodLead && (
               <>
                 <TaskCard
                   title="Task 2: Answer Quality Consensus"
@@ -266,7 +266,7 @@ const Dashboard = () => {
               </>
             )}
             
-            {currentStep === 3 && viewMode === 'detail' && (
+            {currentStep === TaskId.REWRITE && viewMode === 'detail' && (
               <TaskCard
                 title="Task 3: Rewrite Question and Answer"
                 description="Rewrite the question and answer to improve clarity, conciseness, and coherence."
@@ -279,7 +279,7 @@ const Dashboard = () => {
               />
             )}
             
-            {currentStep === 3 && viewMode === 'consensus' && isPodLead && (
+            {currentStep === TaskId.REWRITE && viewMode === 'consensus' && isPodLead && (
               <>
                 <TaskCard
                   title="Task 3: Rewrite Consensus"
@@ -299,7 +299,7 @@ const Dashboard = () => {
               </>
             )}
             
-            {currentStep === 4 && (
+            {currentStep === TaskId.SUMMARY && (
               <Summary results={getSummaryData()} />
             )}
           </>
@@ -316,7 +316,7 @@ const Dashboard = () => {
           codeDownloadUrl={codeDownloadUrl}
           discussionId={discussionId || undefined}
           onCodeUrlChange={handleCodeUrlChange}
-          onCodeUrlVerify={validateCodeUrl}
+          onCodeUrlVerify={validateGitHubCodeUrl}
         />
       </div>
     </div>

@@ -1,28 +1,12 @@
 
 // This is the main annotation handlers hook that combines the other hooks
 import { useState } from 'react';
-import { SubTask, SubTaskStatus } from '@/components/dashboard/TaskCard';
-import { Annotation } from '@/services/api';
+import { SubTask } from '@/components/dashboard/TaskCard';
 import { User } from '@/contexts/UserContext';
+import { Annotation } from '@/services/api';
 import { useAnnotationLoader } from './annotations/useAnnotationLoader';
-import { useAnnotationSaver, isPodLead } from './annotations/useAnnotationSaver';
-
-interface AnnotationHandlersProps {
-  task1SubTasks: SubTask[];
-  task2SubTasks: SubTask[];
-  task3SubTasks: SubTask[];
-  consensusTask1: SubTask[];
-  consensusTask2: SubTask[];
-  consensusTask3: SubTask[];
-  user: User | null;
-  saveAnnotation: (annotation: Omit<Annotation, 'timestamp'>) => Promise<boolean>;
-  saveConsensusAnnotation: (annotation: Omit<Annotation, 'timestamp'>) => Promise<boolean>;
-  getUserAnnotation: (discussionId: string, userId: string, taskId: number) => Annotation | undefined;
-  getAnnotationsForTask: (discussionId: string, taskId: number) => Annotation[];
-  getConsensusAnnotation: (discussionId: string, taskId: number) => Annotation | undefined;
-  updateStepCompletionStatus: (stepIndex: number, completed: boolean) => void;
-  overrideAnnotation?: (podLeadId: string, annotatorId: string, discussionId: string, taskId: number, data: Record<string, string | boolean>) => Promise<boolean>;
-}
+import { useAnnotationSaver } from './annotations/useAnnotationSaver';
+import { AnnotationHandlersProps, isPodLead } from './annotations/useAnnotationTypes';
 
 export function useAnnotationHandlers({
   task1SubTasks,
