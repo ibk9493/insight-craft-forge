@@ -17,6 +17,8 @@ export interface Discussion {
   releaseTag?: string;
   releaseUrl?: string;
   releaseDate?: string;
+  // Add batch ID
+  batchId?: number;
 }
 
 export interface Annotation {
@@ -43,11 +45,22 @@ export interface TaskState {
   userAnnotated?: boolean;
 }
 
+// Batch interface
+export interface BatchUpload {
+  id: number;
+  name: string;
+  description?: string;
+  created_at: string;
+  created_by?: string;
+  discussion_count: number;
+}
+
 // JSON Upload types
 export interface UploadResult {
   success: boolean;
   message: string;
   discussionsAdded: number;
+  batchId?: number;
   errors?: string[];
 }
 
@@ -55,6 +68,12 @@ export interface TaskManagementResult {
   success: boolean;
   message: string;
   discussion?: Discussion;
+}
+
+export interface BatchManagementResult {
+  success: boolean;
+  message: string;
+  batchId?: number;
 }
 
 // GitHub Discussion format from JSON upload
@@ -81,6 +100,8 @@ export interface GitHubDiscussion {
   releaseUrl?: string;
   releaseDate?: string;
   tasks?: GitHubDiscussionTasks;
+  // Add batch ID
+  batchId?: number;
 }
 
 // System summary types
@@ -92,6 +113,11 @@ export interface SystemSummary {
   totalTasksCompleted: number;
   totalAnnotations: number;
   uniqueAnnotators: number;
+  totalBatches: number;
+  batchesBreakdown: {
+    name: string;
+    discussions: number;
+  }[];
 }
 
 export interface UserSummary {

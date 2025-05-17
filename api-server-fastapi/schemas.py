@@ -27,6 +27,23 @@ class AuthorizedUser(AuthorizedUserBase):
     class Config:
         orm_mode = True
 
+# Batch Upload schemas
+class BatchUploadBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    created_by: Optional[str] = None
+
+class BatchUploadCreate(BatchUploadBase):
+    pass
+
+class BatchUpload(BatchUploadBase):
+    id: int
+    created_at: datetime
+    discussion_count: int
+
+    class Config:
+        orm_mode = True
+
 # Base class for Discussion
 class DiscussionBase(BaseModel):
     title: str
@@ -39,7 +56,7 @@ class DiscussionBase(BaseModel):
     release_date: Optional[str] = None
 
 class DiscussionCreate(DiscussionBase):
-    pass
+    batch_id: Optional[int] = None
 
 class Discussion(DiscussionBase):
     id: str
@@ -49,6 +66,7 @@ class Discussion(DiscussionBase):
     task2_annotators: int
     task3_status: str
     task3_annotators: int
+    batch_id: Optional[int] = None
 
     class Config:
         orm_mode = True
@@ -100,7 +118,7 @@ class ConsensusOverride(BaseModel):
     task_id: int
     data: Dict[str, Any]
 
-# Schema for GitHub Discussion upload
+# Schema for GitHub Discussion upload with batch_id
 class GitHubDiscussion(BaseModel):
     id: Optional[str] = None
     title: Optional[str] = None
@@ -112,6 +130,7 @@ class GitHubDiscussion(BaseModel):
     release_url: Optional[str] = None
     release_date: Optional[str] = None
     tasks: Optional[Dict[str, Dict[str, Any]]] = None
+    batch_id: Optional[int] = None
 
     @validator('created_at')
     def validate_created_at(cls, v):
@@ -129,7 +148,13 @@ class GitHubDiscussion(BaseModel):
 
 class DiscussionUpload(BaseModel):
     discussions: List[GitHubDiscussion]
+    batch_name: Optional[str] = None
+    batch_description: Optional[str] = None
 
     # Custom JSON serializer for the entire model
     def json(self, **kwargs):
         return json.dumps(self.dict(), default=str, **kwargs)
+
+# Schema for batch deletion
+class BatchDelete(BaseModel):
+    batch_id: int

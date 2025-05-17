@@ -1,6 +1,7 @@
-
 import { apiRequest } from './helpers';
-import { Discussion, Annotation, TaskStatus, GitHubDiscussion, UploadResult, TaskManagementResult, UserRole, SystemSummary, UserSummary } from './types';
+import { Discussion, Annotation, TaskStatus, GitHubDiscussion, UploadResult, 
+         TaskManagementResult, UserRole, SystemSummary, UserSummary, 
+         BatchUpload, BatchManagementResult } from './types';
 
 /**
  * API endpoint functions for the SWE-QA Annotation System
@@ -13,6 +14,7 @@ import { Discussion, Annotation, TaskStatus, GitHubDiscussion, UploadResult, Tas
  * - Code: Download repository code for annotation tasks
  * - Auth: Authentication-related endpoints
  * - Admin: Admin-specific endpoints for managing discussions and tasks
+ * - Batches: Batch management for uploaded discussions
  */
 
 // Custom error handler for API requests that returns empty fallbacks
@@ -51,6 +53,8 @@ export const api = {
     getById: (id: string) => safeApiRequest<Discussion>(`/discussions/${id}`, 'GET', undefined, undefined, {} as Discussion),
     getByStatus: (status: TaskStatus) => 
       safeApiRequest<Discussion[]>(`/discussions?status=${status}`, 'GET', undefined, undefined, []),
+    getByBatch: (batchId: number) => 
+      safeApiRequest<Discussion[]>(`/discussions?batchId=${batchId}`, 'GET', undefined, undefined, []),
   },
 
   // Annotation endpoints
@@ -141,9 +145,13 @@ export const api = {
   // Admin endpoints
   admin: {
     // Upload GitHub discussions from JSON
-    uploadDiscussions: (discussions: GitHubDiscussion[]) => {
+    uploadDiscussions: (discussions: GitHubDiscussion[], batchName?: string, batchDescription?: string) => {
       console.log('[Admin] Uploading discussions:', discussions.length);
-      return safeApiRequest<UploadResult>('/admin/discussions/upload', 'POST', { discussions }, undefined, { 
+      return safeApiRequest<UploadResult>('/admin/discussions/upload', 'POST', { 
+        discussions, 
+        batch_name: batchName, 
+        batch_description: batchDescription
+      }, undefined, { 
         success: false, 
         message: 'Failed to upload discussions', 
         discussionsAdded: 0,
@@ -172,6 +180,45 @@ export const api = {
     }
   },
   
+  // Batch management endpoints
+  batches: {
+    // Get all batches
+    getAllBatches: () => {
+      console.log('[Batches] Getting all batches');
+      return safeApiRequest<BatchUpload[]>('/batches', 'GET', undefined, undefined, []);
+    },
+
+    // Get batch by ID
+    getBatchById: (batchId: number) => {
+      console.log(`[Batches] Getting batch with ID: ${batchId}`);
+      return safeApiRequest<BatchUpload>(`/batches/${batchId}`, 'GET', undefined, undefined, {} as BatchUpload);
+    },
+
+    // Create a new batch
+    createBatch: (name: string, description?: string) => {
+      console.log(`[Batches] Creating new batch: ${name}`);
+      return safeApiRequest<BatchManagementResult>('/batches', 'POST', { name, description }, undefined, {
+        success: false,
+        message: 'Failed to create batch'
+      });
+    },
+
+    // Delete a batch
+    deleteBatch: (batchId: number) => {
+      console.log(`[Batches] Deleting batch with ID: ${batchId}`);
+      return safeApiRequest<BatchManagementResult>(`/batches/${batchId}`, 'DELETE', undefined, undefined, {
+        success: false,
+        message: 'Failed to delete batch'
+      });
+    },
+
+    // Get discussions in a batch
+    getBatchDiscussions: (batchId: number) => {
+      console.log(`[Batches] Getting discussions for batch ID: ${batchId}`);
+      return safeApiRequest<Discussion[]>(`/batches/${batchId}/discussions`, 'GET', undefined, undefined, []);
+    }
+  },
+  
   // System summary endpoints
   summary: {
     // Get system summary statistics
@@ -184,7 +231,9 @@ export const api = {
         task3Completed: 0,
         totalTasksCompleted: 0,
         totalAnnotations: 0,
-        uniqueAnnotators: 0
+        uniqueAnnotators: 0,
+        totalBatches: 0,
+        batchesBreakdown: []
       });
     },
     

@@ -1,3 +1,4 @@
+
 from sqlalchemy import Column, String, Integer, Boolean, JSON, ForeignKey, DateTime, Table, UniqueConstraint
 from sqlalchemy.orm import relationship
 import datetime
@@ -12,6 +13,19 @@ discussion_task_association = Table(
     Column('status', String, default='locked'),
     Column('annotators', Integer, default=0)
 )
+
+class BatchUpload(Base):
+    __tablename__ = "batch_uploads"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_by = Column(String, nullable=True)
+    discussion_count = Column(Integer, default=0)
+    
+    # Relationships
+    discussions = relationship("Discussion", back_populates="batch")
 
 class Discussion(Base):
     __tablename__ = "discussions"
@@ -28,9 +42,13 @@ class Discussion(Base):
     release_url = Column(String, nullable=True)
     release_date = Column(String, nullable=True)
     
+    # Add batch relationship
+    batch_id = Column(Integer, ForeignKey("batch_uploads.id"), nullable=True)
+    
     # Relationships
     annotations = relationship("Annotation", back_populates="discussion")
     consensus_annotations = relationship("ConsensusAnnotation", back_populates="discussion")
+    batch = relationship("BatchUpload", back_populates="discussions")
 
 class Annotation(Base):
     __tablename__ = "annotations"

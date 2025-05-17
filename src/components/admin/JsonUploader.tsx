@@ -3,8 +3,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { api, GitHubDiscussion } from '@/services/api';
-import { Upload, X, Check, Tag, Code, Calendar } from 'lucide-react';
+import { Upload, X, Check, Tag, Code, Calendar, Package } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 
 const JsonUploader: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -13,6 +16,10 @@ const JsonUploader: React.FC = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [jsonErrors, setJsonErrors] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Batch information
+  const [batchName, setBatchName] = useState<string>('');
+  const [batchDescription, setBatchDescription] = useState<string>('');
 
   const validateJSON = (json: any): { isValid: boolean, errors: string[], validItems: any[] } => {
     const errors: string[] = [];
@@ -95,6 +102,10 @@ const JsonUploader: React.FC = () => {
     
     setFile(selectedFile);
     console.log('[JsonUploader] File selected:', selectedFile.name, selectedFile.size);
+    
+    // Set default batch name from file name
+    const fileNameWithoutExt = selectedFile.name.replace(/\.json$/, '');
+    setBatchName(fileNameWithoutExt);
     
     // Read and parse the file
     const reader = new FileReader();
@@ -203,9 +214,15 @@ const JsonUploader: React.FC = () => {
       return;
     }
     
+    // Validate batch name
+    if (!batchName.trim()) {
+      toast.error('Batch name is required');
+      return;
+    }
+    
     try {
       setIsUploading(true);
-      console.log(`[JsonUploader] Starting upload of ${parsedData.length} discussions`);
+      console.log(`[JsonUploader] Starting upload of ${parsedData.length} discussions in batch: ${batchName}`);
       
       // Simulate progress
       const timer = setInterval(() => {
@@ -218,8 +235,8 @@ const JsonUploader: React.FC = () => {
         });
       }, 100);
       
-      // Upload to API
-      const result = await api.admin.uploadDiscussions(parsedData);
+      // Upload to API with batch information
+      const result = await api.admin.uploadDiscussions(parsedData, batchName, batchDescription);
       
       clearInterval(timer);
       setUploadProgress(100);
@@ -235,6 +252,8 @@ const JsonUploader: React.FC = () => {
           setIsUploading(false);
           setUploadProgress(0);
           setJsonErrors([]);
+          setBatchName('');
+          setBatchDescription('');
           if (fileInputRef.current) {
             fileInputRef.current.value = '';
           }
@@ -277,6 +296,41 @@ const JsonUploader: React.FC = () => {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
+          {/* Batch Information Section */}
+          {file && (
+            <div className="space-y-4 border rounded-md p-4 bg-gray-50">
+              <h3 className="font-medium flex items-center">
+                <Package className="h-4 w-4 mr-2" />
+                Batch Information
+              </h3>
+              
+              <div className="space-y-2">
+                <div className="grid gap-1">
+                  <Label htmlFor="batchName">Batch Name (required)</Label>
+                  <Input 
+                    id="batchName"
+                    value={batchName} 
+                    onChange={(e) => setBatchName(e.target.value)} 
+                    placeholder="Enter batch name" 
+                    disabled={isUploading}
+                  />
+                </div>
+                
+                <div className="grid gap-1">
+                  <Label htmlFor="batchDescription">Description (optional)</Label>
+                  <Textarea 
+                    id="batchDescription"
+                    value={batchDescription} 
+                    onChange={(e) => setBatchDescription(e.target.value)} 
+                    placeholder="Enter batch description" 
+                    rows={2}
+                    disabled={isUploading}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+          
           {!file ? (
             <div className="border-2 border-dashed border-gray-300 rounded-md p-8 text-center">
               <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
@@ -412,7 +466,7 @@ const JsonUploader: React.FC = () => {
           </Button>
           <Button 
             onClick={handleUpload} 
-            disabled={!parsedData || parsedData.length === 0 || isUploading}
+            disabled={!parsedData || parsedData.length === 0 || isUploading || !batchName.trim()}
           >
             {isUploading ? 'Uploading...' : 'Upload Discussions'}
           </Button>

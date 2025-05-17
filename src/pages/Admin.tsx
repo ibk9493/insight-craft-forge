@@ -7,9 +7,10 @@ import Header from '@/components/layout/Header';
 import JsonUploader from '@/components/admin/JsonUploader';
 import TaskManager from '@/components/admin/TaskManager';
 import SystemReports from '@/components/admin/SystemReports';
+import BatchManager from '@/components/admin/BatchManager';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"; 
 import { useAnnotationData } from '@/hooks/useAnnotationData';
-import { Loader, Settings, Upload, Users, FileText } from 'lucide-react';
+import { Loader, Settings, Upload, Users, FileText, Package } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import UserAccessManager from '@/components/admin/UserAccessManager';
@@ -115,6 +116,10 @@ const Admin = () => {
                   <Upload className="h-4 w-4" />
                   <span>Upload Discussions</span>
                 </Tab>
+                <Tab value="batch-management" className="flex items-center gap-2">
+                  <Package className="h-4 w-4" />
+                  <span>Batch Management</span>
+                </Tab>
                 <Tab value="user-management" className="flex items-center gap-2">
                   <Users className="h-4 w-4" />
                   <span>User Management</span>
@@ -185,6 +190,17 @@ const Admin = () => {
                   </p>
                 </div>
                 <JsonUploader />
+              </TabPanel>
+
+              {/* Batch Management Tab - Admin Only */}
+              <TabPanel value="batch-management">
+                <div className="mb-4">
+                  <h2 className="text-lg font-medium">Batch Management</h2>
+                  <p className="text-sm text-gray-500">
+                    Manage uploaded batches of discussions
+                  </p>
+                </div>
+                <BatchManager />
               </TabPanel>
 
               {/* User Management Tab - Admin Only */}
