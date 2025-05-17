@@ -1,11 +1,12 @@
 
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Annotation } from '@/services/api';
 
 interface AnnotatorViewProps {
   discussionId: string;
   currentStep: number;
-  getAnnotationsForTask: (discussionId: string, taskId: number) => any[];
+  getAnnotationsForTask: (discussionId: string, taskId: number) => Annotation[];
 }
 
 const AnnotatorView: React.FC<AnnotatorViewProps> = ({
@@ -16,6 +17,16 @@ const AnnotatorView: React.FC<AnnotatorViewProps> = ({
   if (!discussionId) return null;
   
   const annotations = getAnnotationsForTask(discussionId, currentStep);
+  
+  if (annotations.length === 0) {
+    return (
+      <div className="mt-6">
+        <div className="text-center py-8 bg-gray-50 border border-gray-200 rounded-md">
+          <p className="text-gray-500">No annotations available for this task yet.</p>
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div className="mt-6 space-y-4">

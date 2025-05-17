@@ -23,6 +23,7 @@ const DashboardBreadcrumb: React.FC<DashboardBreadcrumbProps> = ({
   currentStep,
   discussionTitle = 'Discussion'
 }) => {
+  // Get the accurate task name based on the current step
   const getTaskName = (taskId: number) => {
     switch (taskId) {
       case TaskId.QUESTION_QUALITY:
@@ -34,7 +35,7 @@ const DashboardBreadcrumb: React.FC<DashboardBreadcrumbProps> = ({
       case TaskId.SUMMARY:
         return 'Summary';
       default:
-        return 'Task';
+        return 'Tasks';
     }
   };
 
