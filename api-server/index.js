@@ -329,9 +329,29 @@ app.post('/api/admin/discussions/upload', (req, res) => {
   
   try {
     const processedDiscussions = discussions.map(disc => {
+      // Extract repository from URL if not provided
       const repository = disc.repository || extractRepositoryFromUrl(disc.url);
+      
+      // Generate ID if not provided (repoName + discussion number)
+      let id = disc.id;
+      if (!id) {
+        // Extract discussion number from URL
+        const discussionNumberMatch = disc.url.match(/\/discussions\/(\d+)/);
+        const discussionNumber = discussionNumberMatch ? discussionNumberMatch[1] : Date.now();
+        
+        // Get repo name part
+        const repoName = repository.split('/')[1] || 'unknown';
+        
+        id = `${repoName}_${discussionNumber}`;
+      }
+      
+      // Use repository name as fallback if title not provided
+      const title = disc.title || repository;
+      
       return {
         ...disc,
+        id,
+        title,
         repository,
         tasks: {
           task1: disc.tasks?.task1 || { status: 'locked', annotators: 0 },
@@ -341,18 +361,32 @@ app.post('/api/admin/discussions/upload', (req, res) => {
       };
     });
     
-    const newDiscussions = [...existingDiscussions, ...processedDiscussions];
+    // Filter out duplicates
+    const existingIds = existingDiscussions.map(d => d.id);
+    const uniqueDiscussions = processedDiscussions.filter(d => !existingIds.includes(d.id));
+    
+    if (uniqueDiscussions.length === 0) {
+      return res.json({
+        success: true,
+        message: "No new discussions to add",
+        discussionsAdded: 0,
+        errors: []
+      });
+    }
+    
+    const newDiscussions = [...existingDiscussions, ...uniqueDiscussions];
     
     if (writeDataFile(DISCUSSIONS_FILE, newDiscussions)) {
       res.json({
         success: true,
-        message: `Successfully uploaded ${processedDiscussions.length} discussions`,
-        discussionsAdded: processedDiscussions.length
+        message: `Successfully uploaded ${uniqueDiscussions.length} discussions`,
+        discussionsAdded: uniqueDiscussions.length
       });
     } else {
       throw new Error('Failed to write discussions to file');
     }
   } catch (error) {
+    console.error('Error processing discussions:', error);
     res.status(500).json({
       success: false,
       message: 'Error processing discussions',
@@ -477,6 +511,23 @@ app.delete('/api/auth/authorized-users/:email', (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to remove authorized user' });
   }
 });
+
+// Generate discussion ID from URL and repository
+function generateDiscussionId(repository, url) {
+  try {
+    // Extract discussion number from URL
+    const discussionNumberMatch = url.match(/\/discussions\/(\d+)/);
+    const discussionNumber = discussionNumberMatch ? discussionNumberMatch[1] : Date.now().toString().slice(-8);
+    
+    // Get repo name part
+    const repoName = repository.split('/')[1] || 'unknown';
+    
+    return `${repoName}_${discussionNumber}`;
+  } catch (error) {
+    console.error('Error generating discussion ID:', error);
+    return `discussion_${Date.now()}`;
+  }
+}
 
 // Utility function to extract repository name from GitHub URL
 function extractRepositoryFromUrl(url) {

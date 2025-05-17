@@ -156,15 +156,3 @@ export const api = {
     }
   }
 };
-
-// Utility function to extract repository name from GitHub URL
-function extractRepositoryFromUrl(url: string): string {
-  try {
-    const githubUrlPattern = /github\.com\/([^\/]+\/[^\/]+)/i;
-    const match = url.match(githubUrlPattern);
-    return match ? match[1] : 'unknown/repository';
-  } catch (error) {
-    console.error('Error extracting repository from URL:', error);
-    return 'unknown/repository';
-  }
-}

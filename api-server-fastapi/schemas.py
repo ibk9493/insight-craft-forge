@@ -40,8 +40,8 @@ class GitHubDiscussionTasks(BaseModel):
     task3: Optional[GitHubDiscussionTaskState] = Field(default_factory=lambda: GitHubDiscussionTaskState(status="locked", annotators=0))
 
 class GitHubDiscussion(BaseModel):
-    id: str
-    title: str
+    id: Optional[str] = None  # Now optional, will be generated if not provided
+    title: Optional[str] = None  # Now optional, will be generated if not provided
     url: str
     repository: Optional[str] = None
     createdAt: str = Field(default_factory=lambda: datetime.now().isoformat())

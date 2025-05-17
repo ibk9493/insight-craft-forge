@@ -70,8 +70,8 @@ export interface GitHubDiscussionTasks {
 }
 
 export interface GitHubDiscussion {
-  id: string;
-  title: string;
+  id?: string;  // Now optional, will be generated if not provided
+  title?: string;  // Now optional, will be generated if not provided
   url: string;
   repository?: string;
   createdAt: string;

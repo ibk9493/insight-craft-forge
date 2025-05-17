@@ -150,6 +150,87 @@ def get_discussion_by_id(db: Session, discussion_id: str) -> Optional[schemas.Di
         logger.error(f"Error fetching discussion {discussion_id}: {str(e)}")
         return None
 
+def generate_discussion_id(repository: str, discussion_url: str) -> str:
+    """
+    Generate a unique ID for a discussion based on repository and discussion URL
+    
+    Parameters:
+    - repository: Repository name
+    - discussion_url: URL of the discussion
+    
+    Returns:
+    - Generated ID string
+    """
+    try:
+        # Extract discussion number from the URL
+        discussion_number_match = re.search(r'/discussions/(\d+)', discussion_url)
+        if discussion_number_match:
+            discussion_number = discussion_number_match.group(1)
+        else:
+            # Fallback to URL hash if no number found
+            from hashlib import md5
+            discussion_number = md5(discussion_url.encode()).hexdigest()[:8]
+            
+        # Clean repository name for ID
+        repo_part = repository.split('/')[1] if '/' in repository else repository
+        repo_part = re.sub(r'[^a-zA-Z0-9]', '', repo_part)  # Remove non-alphanumeric chars
+        
+        return f"{repo_part}_{discussion_number}"
+    except Exception as e:
+        logger.error(f"Error generating discussion ID: {str(e)}")
+        # Fallback to hash of URL
+        from hashlib import md5
+        return f"discussion_{md5(discussion_url.encode()).hexdigest()[:10]}"
+
+def fetch_discussion_title(url: str) -> str:
+    """
+    Attempt to fetch a discussion title from GitHub
+    
+    Parameters:
+    - url: GitHub discussion URL
+    
+    Returns:
+    - Discussion title or repository name as fallback
+    """
+    try:
+        # This is a placeholder - in a real implementation, you would use GitHub API
+        # to fetch the actual title of the discussion
+        logger.info(f"Attempting to fetch discussion title from {url}")
+        
+        # Extract repository for fallback title
+        repository, _, _ = extract_repository_info_from_url(url)
+        
+        # Try to extract page title from GitHub
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
+        
+        # Add GitHub token if available
+        github_token = requests.get('https://github.com')
+        if github_token:
+            headers["Authorization"] = f"token {github_token}"
+            
+        logger.info(f"Making request to GitHub for discussion title: {url}")
+        response = requests.get(url, headers=headers, timeout=5)
+        
+        if response.status_code == 200:
+            # Simple title extraction using regex (basic approach)
+            title_match = re.search(r'<title>(.*?)</title>', response.text)
+            if title_match:
+                raw_title = title_match.group(1)
+                # Clean up title, typically GitHub titles are "Title · Discussion #123 · owner/repo"
+                cleaned_title = re.sub(r'·.*$', '', raw_title).strip()
+                if cleaned_title:
+                    logger.info(f"Successfully extracted title: {cleaned_title}")
+                    return cleaned_title
+        
+        logger.warning(f"Could not extract title, using repository as fallback: {repository}")
+        return repository  # Fallback to repository name
+    except Exception as e:
+        logger.error(f"Error fetching discussion title: {str(e)}")
+        repository, _, _ = extract_repository_info_from_url(url)
+        return repository  # Fallback to repository name
+
 def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> schemas.UploadResult:
     """
     Upload multiple GitHub discussions to the database.
@@ -175,20 +256,32 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
                     repository, owner, repo = extract_repository_info_from_url(disc.url)
                     logger.info(f"Extracted repository: {repository} from URL: {disc.url}")
                 
+                # Generate ID if not provided
+                discussion_id = disc.id
+                if not discussion_id:
+                    discussion_id = generate_discussion_id(repository, disc.url)
+                    logger.info(f"Generated discussion ID: {discussion_id}")
+                
                 # Check if discussion already exists
-                existing = db.query(models.Discussion).filter(models.Discussion.id == disc.id).first()
+                existing = db.query(models.Discussion).filter(models.Discussion.id == discussion_id).first()
                 if existing:
-                    errors.append(f"Discussion with ID {disc.id} already exists")
-                    logger.warning(f"Discussion with ID {disc.id} already exists")
+                    errors.append(f"Discussion with ID {discussion_id} already exists")
+                    logger.warning(f"Discussion with ID {discussion_id} already exists")
                     continue
+                
+                # Get title if not provided
+                title = disc.title
+                if not title:
+                    title = fetch_discussion_title(disc.url)
+                    logger.info(f"Generated discussion title: {title}")
                 
                 # Get repository language if possible
                 language = disc.repositoryLanguage
                 
                 # Create new discussion with enhanced metadata
                 new_discussion = models.Discussion(
-                    id=disc.id,
-                    title=disc.title,
+                    id=discussion_id,
+                    title=title,
                     url=disc.url,
                     repository=repository,
                     created_at=disc.createdAt,
@@ -231,7 +324,7 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
                 )
                 
                 discussions_added += 1
-                logger.info(f"Added discussion: {disc.id}")
+                logger.info(f"Added discussion: {discussion_id}")
             except Exception as e:
                 error_msg = f"Error processing discussion {getattr(disc, 'id', 'unknown')}: {str(e)}"
                 errors.append(error_msg)
