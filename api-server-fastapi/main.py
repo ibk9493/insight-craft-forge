@@ -139,18 +139,10 @@ def get_discussions(status: Optional[str] = None, db: Session = Depends(get_db))
         discussions = discussions_service.get_discussions(db, status)
         logger.info(f"Found {len(discussions)} discussions")
         return discussions
-    except OperationalError as e:
-        logger.error(f"Database operational error: {str(e)}")
-        logger.error(traceback.format_exc())
-        # Check if it's a missing column error
-        if "no such column" in str(e):
-            logger.info("Attempting to recreate database schema due to missing columns")
-            check_and_create_tables()
-            logger.info("Please restart the application to apply schema changes")
-        return []
     except Exception as e:
         logger.error(f"Error fetching discussions: {str(e)}")
         logger.error(traceback.format_exc())
+        # Return empty list instead of propagating the error
         return []
 
 @app.get("/api/discussions/{discussion_id}", response_model=schemas.Discussion, dependencies=[Depends(verify_api_key)])

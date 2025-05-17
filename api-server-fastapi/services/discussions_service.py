@@ -1,4 +1,3 @@
-
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 import models
@@ -12,7 +11,7 @@ from typing import List, Optional, Tuple, Dict, Any
 # Configure logging
 logger = logging.getLogger(__name__)
 
-def get_discussions(db: Session, status: Optional[str] = None) -> List[models.Discussion]:
+def get_discussions(db: Session, status: Optional[str] = None) -> List[schemas.Discussion]:
     """
     Retrieve discussions from the database, optionally filtered by task status.
     
@@ -44,7 +43,10 @@ def get_discussions(db: Session, status: Optional[str] = None) -> List[models.Di
                         completed_discussions.append(discussion)
                 
                 logger.info(f"Found {len(completed_discussions)} completed discussions")
-                return completed_discussions
+                discussions_with_tasks = []
+                for disc in completed_discussions:
+                    discussions_with_tasks.append(get_discussion_by_id(db, disc.id))
+                return discussions_with_tasks
                 
             elif status == 'unlocked':
                 # At least one task should be unlocked
@@ -61,7 +63,10 @@ def get_discussions(db: Session, status: Optional[str] = None) -> List[models.Di
                         unlocked_discussions.append(discussion)
                 
                 logger.info(f"Found {len(unlocked_discussions)} unlocked discussions")
-                return unlocked_discussions
+                discussions_with_tasks = []
+                for disc in unlocked_discussions:
+                    discussions_with_tasks.append(get_discussion_by_id(db, disc.id))
+                return discussions_with_tasks
                 
             elif status == 'locked':
                 # All tasks should be locked
@@ -78,11 +83,22 @@ def get_discussions(db: Session, status: Optional[str] = None) -> List[models.Di
                         locked_discussions.append(discussion)
                 
                 logger.info(f"Found {len(locked_discussions)} locked discussions")
-                return locked_discussions
+                discussions_with_tasks = []
+                for disc in locked_discussions:
+                    discussions_with_tasks.append(get_discussion_by_id(db, disc.id))
+                return discussions_with_tasks
         
-        # If no status filter or unknown status, return all
-        result = query.all()
-        logger.info(f"Found {len(result)} total discussions")
+        # If no status filter or unknown status, return all with tasks
+        all_discussions = query.all()
+        result = []
+        logger.info(f"Found {len(all_discussions)} total discussions")
+        
+        # Add tasks information to each discussion
+        for disc in all_discussions:
+            discussion_with_tasks = get_discussion_by_id(db, disc.id)
+            if discussion_with_tasks:
+                result.append(discussion_with_tasks)
+        
         return result
     except Exception as e:
         logger.error(f"Error fetching discussions: {str(e)}")
