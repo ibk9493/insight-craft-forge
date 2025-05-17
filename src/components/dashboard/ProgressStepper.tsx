@@ -27,9 +27,11 @@ const ProgressStepper: React.FC<ProgressStepperProps> = ({ steps, currentStep })
             <div className="flex items-center justify-center">
               <div className={cn(
                 "flex items-center justify-center w-8 h-8 rounded-full",
-                currentStep >= step.id 
+                step.id === currentStep 
                   ? "bg-dashboard-blue text-white" 
-                  : "bg-gray-200 text-gray-500"
+                  : step.completed || step.id < currentStep
+                    ? "bg-dashboard-blue text-white"
+                    : "bg-gray-200 text-gray-500"
               )}>
                 {step.completed ? (
                   <CheckCircle className="w-5 h-5" />
@@ -39,9 +41,11 @@ const ProgressStepper: React.FC<ProgressStepperProps> = ({ steps, currentStep })
               </div>
               <span className={cn(
                 "ml-2 text-sm font-medium",
-                currentStep >= step.id
+                step.id === currentStep
                   ? "text-dashboard-blue"
-                  : "text-gray-500"
+                  : step.completed || step.id < currentStep
+                    ? "text-dashboard-blue"
+                    : "text-gray-500"
               )}>
                 {step.title}
               </span>
@@ -50,7 +54,7 @@ const ProgressStepper: React.FC<ProgressStepperProps> = ({ steps, currentStep })
             {index < steps.length - 1 && (
               <div className={cn(
                 "flex-1 h-0.5 mx-4",
-                currentStep > step.id ? "bg-dashboard-blue" : "bg-gray-200"
+                step.id < currentStep ? "bg-dashboard-blue" : "bg-gray-200"
               )}></div>
             )}
           </li>
