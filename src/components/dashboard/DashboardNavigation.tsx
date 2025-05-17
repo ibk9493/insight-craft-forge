@@ -1,8 +1,10 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Home, Upload, Download, ListFilter } from 'lucide-react';
+import { ArrowLeft, Home, Upload, Download, ListFilter, CheckCircle, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface DashboardNavigationProps {
   viewMode: 'grid' | 'detail' | 'consensus';
@@ -14,6 +16,8 @@ interface DashboardNavigationProps {
   onFileUpload?: (file: File) => void;
   codeDownloadUrl?: string;
   discussionId?: string;
+  onCodeUrlChange?: (url: string) => void;
+  onCodeUrlVerify?: (url: string) => boolean;
 }
 
 const DashboardNavigation = ({
@@ -25,9 +29,13 @@ const DashboardNavigation = ({
   isConsensus,
   onFileUpload,
   codeDownloadUrl,
-  discussionId
+  discussionId,
+  onCodeUrlChange,
+  onCodeUrlVerify
 }: DashboardNavigationProps) => {
   const navigate = useNavigate();
+  const [codeUrl, setCodeUrl] = useState(codeDownloadUrl || '');
+  const [codeUrlVerified, setCodeUrlVerified] = useState(!!codeDownloadUrl);
   
   // Handle file input change
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -44,6 +52,31 @@ const DashboardNavigation = ({
   // Navigate to dashboard home
   const handleGoToDashboard = () => {
     navigate('/dashboard');
+  };
+
+  // Handle code URL input change
+  const handleCodeUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const url = e.target.value;
+    setCodeUrl(url);
+    
+    // If there's a handler for URL changes, call it
+    if (onCodeUrlChange) {
+      onCodeUrlChange(url);
+    }
+    
+    // Check if URL is valid
+    if (url) {
+      const isValid = onCodeUrlVerify ? onCodeUrlVerify(url) : isValidGithubUrl(url);
+      setCodeUrlVerified(isValid);
+    } else {
+      setCodeUrlVerified(false);
+    }
+  };
+  
+  // Simple Github URL validation
+  const isValidGithubUrl = (url: string): boolean => {
+    return url.includes('github.com') && 
+      (url.includes('/archive/refs/tags/') || url.includes('/archive/refs/heads/'));
   };
 
   return (
@@ -84,7 +117,7 @@ const DashboardNavigation = ({
       </div>
 
       {viewMode !== 'grid' && currentStep === 2 && (
-        <div className="flex flex-wrap gap-4 mt-2">
+        <div className="flex flex-col gap-4 mt-2">
           {/* File upload button for manual code execution check */}
           <div className="flex items-center">
             <input
@@ -103,17 +136,49 @@ const DashboardNavigation = ({
             </label>
           </div>
           
-          {/* Code download link */}
-          {codeDownloadUrl && (
-            <a
-              href={codeDownloadUrl}
-              download
-              className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
-            >
-              <Download className="h-4 w-4" />
-              <span>Download Code</span>
-            </a>
-          )}
+          {/* Code download URL input field with validation */}
+          <div className="flex flex-col space-y-2 w-full">
+            <div className="flex items-center gap-2">
+              <div className="flex-1">
+                <label htmlFor="code-url" className="text-sm font-medium text-gray-700 mb-1 block">Code Download URL</label>
+                <div className="flex gap-2 items-center">
+                  <Input
+                    id="code-url"
+                    type="text"
+                    value={codeUrl}
+                    onChange={handleCodeUrlChange}
+                    placeholder="https://github.com/owner/repo/archive/refs/tags/version.tar.gz"
+                    className="flex-1"
+                  />
+                  {codeUrlVerified ? 
+                    <CheckCircle className="h-5 w-5 text-green-500" /> : 
+                    codeUrl ? <XCircle className="h-5 w-5 text-red-500" /> : null
+                  }
+                </div>
+              </div>
+              <div className="flex items-center gap-2 mt-6">
+                <Checkbox 
+                  id="url-verified" 
+                  checked={codeUrlVerified}
+                  className="data-[state=checked]:bg-green-500"
+                />
+                <label htmlFor="url-verified" className="text-sm">
+                  {codeUrlVerified ? 'URL Valid' : 'URL Invalid'}
+                </label>
+              </div>
+            </div>
+            
+            {codeUrl && codeUrlVerified && (
+              <a
+                href={codeUrl}
+                download
+                className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded w-fit"
+              >
+                <Download className="h-4 w-4" />
+                <span>Download Code</span>
+              </a>
+            )}
+          </div>
         </div>
       )}
       

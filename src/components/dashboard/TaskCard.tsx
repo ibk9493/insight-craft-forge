@@ -76,6 +76,11 @@ const TaskCard: React.FC<TaskCardProps> = ({
     onSubTaskChange(taskId, undefined, value);
   };
 
+  // Separate handler for card header click to toggle expansion
+  const toggleExpand = () => {
+    setExpanded(!expanded);
+  };
+
   return (
     <div className={cn(
       'border rounded-lg overflow-hidden transition-all duration-300 mb-4',
@@ -84,7 +89,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
     )}>
       <div 
         className="flex items-center justify-between p-4 cursor-pointer"
-        onClick={() => setExpanded(!expanded)}
+        onClick={toggleExpand}
       >
         <div className="flex items-center">
           {expanded ? 
@@ -115,11 +120,14 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 
                 {/* Option buttons */}
                 {task.options && task.options.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-2">
+                  <div className="flex flex-wrap gap-2 mt-2" onClick={e => e.stopPropagation()}>
                     {task.options.map((option) => (
                       <button
                         key={option}
-                        onClick={() => onSubTaskChange(task.id, option)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSubTaskChange(task.id, option);
+                        }}
                         className={cn(
                           "text-xs py-1 px-3 rounded-full",
                           task.selectedOption === option
@@ -135,13 +143,15 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 
                 {/* Text input field - shown for explicit textInput or when a Yes/No/True/False option is selected */}
                 {shouldShowRemarks(task) && (
-                  <div className="mt-3">
+                  <div className="mt-3" onClick={e => e.stopPropagation()}>
                     <Textarea
                       value={task.textValue || ''}
                       onChange={(e) => handleTextChange(task.id, e.target.value)}
                       placeholder={`Enter ${task.textInput ? task.title.toLowerCase() : 'remarks or justification'}`}
                       className="min-h-[100px] text-sm"
-                      onClick={(e) => e.stopPropagation()} // Prevent click from closing the card
+                      onClick={(e) => e.stopPropagation()} 
+                      onFocus={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
                     />
                   </div>
                 )}
