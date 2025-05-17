@@ -91,3 +91,16 @@ class TaskStatusUpdate(BaseModel):
 
 class DiscussionUpload(BaseModel):
     discussions: List[Dict[str, Any]]
+
+# Adding the missing UploadResult schema class
+class UploadResult(BaseModel):
+    success: bool
+    message: str
+    discussions_added: int
+    errors: Optional[List[str]] = None
+
+# Adding the TaskManagementResult schema class that might be needed
+class TaskManagementResult(BaseModel):
+    success: bool
+    message: str
+    discussion: Optional[Discussion] = None
