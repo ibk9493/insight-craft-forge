@@ -12,76 +12,134 @@ const JsonUploader: React.FC = () => {
   const [parsedData, setParsedData] = useState<GitHubDiscussion[] | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [jsonErrors, setJsonErrors] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const validateJSON = (json: any): { isValid: boolean, errors: string[] } => {
+    const errors: string[] = [];
+    
+    if (!Array.isArray(json)) {
+      errors.push('JSON structure must be an array of discussions');
+      return { isValid: false, errors };
+    }
+    
+    // Validate each discussion object
+    json.forEach((item, index) => {
+      if (!item.id) errors.push(`Item #${index + 1}: Missing required 'id' field`);
+      if (!item.title) errors.push(`Item #${index + 1}: Missing required 'title' field`);
+      if (!item.url) errors.push(`Item #${index + 1}: Missing required 'url' field`);
+      
+      // Optional field validations (if present)
+      if (item.repository_language !== undefined && typeof item.repository_language !== 'string') {
+        errors.push(`Item #${index + 1}: repository_language must be a string`);
+      }
+      if (item.releaseTag !== undefined && typeof item.releaseTag !== 'string') {
+        errors.push(`Item #${index + 1}: releaseTag must be a string`);
+      }
+      if (item.releaseDate !== undefined) {
+        try {
+          new Date(item.releaseDate);
+        } catch (e) {
+          errors.push(`Item #${index + 1}: releaseDate must be a valid date string`);
+        }
+      }
+    });
+    
+    return { isValid: errors.length === 0, errors };
+  };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
+    setJsonErrors([]);
     
     if (!selectedFile) {
+      console.log('[JsonUploader] No file selected');
       return;
     }
     
     if (selectedFile.type !== 'application/json') {
       toast.error('Please select a valid JSON file');
+      console.error('[JsonUploader] Invalid file type:', selectedFile.type);
       return;
     }
     
     setFile(selectedFile);
+    console.log('[JsonUploader] File selected:', selectedFile.name, selectedFile.size);
     
     // Read and parse the file
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
+        console.log('[JsonUploader] File read complete');
         const content = e.target?.result as string;
-        const parsed = JSON.parse(content);
         
-        // Validate the JSON structure
-        if (!Array.isArray(parsed)) {
-          toast.error('JSON must contain an array of discussions');
-          return;
-        }
-        
-        // Validate each discussion has required fields
-        const validDiscussions = parsed.filter((item) => {
-          return item.id && item.title && item.url;
-        });
-        
-        if (validDiscussions.length === 0) {
-          toast.error('No valid discussions found in JSON');
-          return;
-        }
-        
-        if (validDiscussions.length !== parsed.length) {
-          toast.warning(`Found ${validDiscussions.length} valid discussions out of ${parsed.length}`);
-        }
-        
-        // Format dates consistently
-        const processedDiscussions = validDiscussions.map(disc => {
-          // Ensure createdAt exists
-          if (!disc.createdAt) {
-            disc.createdAt = new Date().toISOString();
+        try {
+          console.log('[JsonUploader] Parsing JSON...');
+          console.log('[JsonUploader] JSON preview:', content.substring(0, 200) + '...');
+          const parsed = JSON.parse(content);
+          
+          // Validate the JSON structure
+          const { isValid, errors } = validateJSON(parsed);
+          if (!isValid) {
+            console.error('[JsonUploader] JSON validation errors:', errors);
+            setJsonErrors(errors);
+            toast.error(`Invalid JSON format: ${errors[0]}`, {
+              description: 'Check console for complete error details'
+            });
+            return;
           }
           
-          // Process release data if available
-          if (disc.releaseDate) {
-            try {
-              // Ensure consistent date format
-              const date = new Date(disc.releaseDate);
-              disc.releaseDate = date.toISOString();
-            } catch (e) {
-              console.warn(`Failed to parse release date for discussion ${disc.id}`);
+          // Validate each discussion has required fields
+          const validDiscussions = parsed.filter((item: any) => {
+            return item.id && item.title && item.url;
+          });
+          
+          if (validDiscussions.length === 0) {
+            toast.error('No valid discussions found in JSON');
+            console.error('[JsonUploader] No valid discussions found');
+            return;
+          }
+          
+          if (validDiscussions.length !== parsed.length) {
+            toast.warning(`Found ${validDiscussions.length} valid discussions out of ${parsed.length}`);
+            console.warn(`[JsonUploader] Found ${validDiscussions.length} valid discussions out of ${parsed.length}`);
+          }
+          
+          // Format dates consistently
+          const processedDiscussions = validDiscussions.map((disc: any) => {
+            // Ensure createdAt exists
+            if (!disc.createdAt) {
+              disc.createdAt = new Date().toISOString();
             }
-          }
+            
+            // Process release data if available
+            if (disc.releaseDate) {
+              try {
+                // Ensure consistent date format
+                const date = new Date(disc.releaseDate);
+                disc.releaseDate = date.toISOString();
+              } catch (e) {
+                console.warn(`[JsonUploader] Failed to parse release date for discussion ${disc.id}`);
+              }
+            }
+            
+            return disc;
+          });
           
-          return disc;
-        });
-        
-        setParsedData(processedDiscussions);
-        toast.success(`Successfully parsed ${processedDiscussions.length} discussions`);
-        
+          setParsedData(processedDiscussions);
+          console.log(`[JsonUploader] Successfully parsed ${processedDiscussions.length} discussions`);
+          toast.success(`Successfully parsed ${processedDiscussions.length} discussions`);
+          
+        } catch (parseError) {
+          console.error('[JsonUploader] Error parsing JSON:', parseError);
+          toast.error('Error parsing JSON file', {
+            description: 'The file contains invalid JSON syntax'
+          });
+          setFile(null);
+        }
       } catch (error) {
-        console.error('Error parsing JSON:', error);
-        toast.error('Error parsing JSON file');
+        console.error('[JsonUploader] Error reading file:', error);
+        toast.error('Error reading JSON file');
         setFile(null);
       }
     };
@@ -97,6 +155,7 @@ const JsonUploader: React.FC = () => {
     
     try {
       setIsUploading(true);
+      console.log(`[JsonUploader] Starting upload of ${parsedData.length} discussions`);
       
       // Simulate progress
       const timer = setInterval(() => {
@@ -114,6 +173,7 @@ const JsonUploader: React.FC = () => {
       
       clearInterval(timer);
       setUploadProgress(100);
+      console.log('[JsonUploader] Upload result:', result);
       
       if (result.success) {
         toast.success(result.message);
@@ -124,17 +184,23 @@ const JsonUploader: React.FC = () => {
           setParsedData(null);
           setIsUploading(false);
           setUploadProgress(0);
+          setJsonErrors([]);
           if (fileInputRef.current) {
             fileInputRef.current.value = '';
           }
+          console.log('[JsonUploader] Form reset after successful upload');
         }, 1000);
       } else {
         toast.error(result.message);
+        console.error('[JsonUploader] Upload failed:', result);
+        if (result.errors && result.errors.length > 0) {
+          console.error('[JsonUploader] Upload errors:', result.errors);
+        }
         setIsUploading(false);
         setUploadProgress(0);
       }
     } catch (error) {
-      console.error('Upload error:', error);
+      console.error('[JsonUploader] Upload error:', error);
       toast.error('Failed to upload discussions');
       setIsUploading(false);
       setUploadProgress(0);
@@ -144,9 +210,11 @@ const JsonUploader: React.FC = () => {
   const clearFile = () => {
     setFile(null);
     setParsedData(null);
+    setJsonErrors([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+    console.log('[JsonUploader] Form cleared');
   };
 
   return (
@@ -199,6 +267,17 @@ const JsonUploader: React.FC = () => {
                   <X className="w-4 h-4" />
                 </Button>
               </div>
+              
+              {jsonErrors.length > 0 && (
+                <div className="border border-red-300 bg-red-50 rounded-md p-3">
+                  <p className="font-medium text-red-700 mb-2">JSON Validation Errors:</p>
+                  <ul className="list-disc pl-5 text-sm text-red-700 max-h-40 overflow-y-auto">
+                    {jsonErrors.map((error, idx) => (
+                      <li key={idx}>{error}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               
               {parsedData && parsedData.length > 0 && (
                 <div className="border rounded-md p-3">
@@ -268,7 +347,7 @@ const JsonUploader: React.FC = () => {
           </Button>
           <Button 
             onClick={handleUpload} 
-            disabled={!parsedData || isUploading}
+            disabled={!parsedData || isUploading || jsonErrors.length > 0}
           >
             {isUploading ? 'Uploading...' : 'Upload Discussions'}
           </Button>

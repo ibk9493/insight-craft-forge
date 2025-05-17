@@ -37,19 +37,22 @@ export const formatApiUrl = (endpoint: string): string => {
 export const handleResponse = async <T>(response: Response): Promise<T> => {
   // Check if response is OK
   if (!response.ok) {
+    console.error(`[API Error] Response not OK: ${response.status} ${response.statusText}`);
+    
     let errorData;
     try {
       // Try to parse error as JSON
       errorData = await response.json();
+      console.error('[API Error] Error response body:', errorData);
     } catch (e) {
       // If it's not JSON, get text content for debugging
       const textContent = await response.text();
-      console.error('Non-JSON error response:', textContent.substring(0, 500) + (textContent.length > 500 ? '...' : ''));
+      console.error('[API Error] Non-JSON error response:', textContent.substring(0, 500) + (textContent.length > 500 ? '...' : ''));
       errorData = { message: 'Server returned a non-JSON error' };
     }
     
     const error: ApiError = {
-      message: errorData.message || `Error ${response.status}: ${response.statusText}`,
+      message: errorData.message || errorData.detail || `Error ${response.status}: ${response.statusText}`,
       status: response.status
     };
     throw error;
@@ -57,19 +60,21 @@ export const handleResponse = async <T>(response: Response): Promise<T> => {
   
   // Check content type to ensure we're getting JSON
   const contentType = response.headers.get('content-type');
+  console.log(`[API Response] Content-Type: ${contentType || 'not specified'}`);
   
   if (!contentType || !contentType.includes('application/json')) {
     try {
       // Try to get the first 500 chars of the response for debugging
       const textContent = await response.text();
-      console.error('Expected JSON but got:', contentType || 'no content type');
-      console.error('Response preview:', textContent.substring(0, 500) + (textContent.length > 500 ? '...' : ''));
+      console.error('[API Error] Expected JSON but got:', contentType || 'no content type');
+      console.error('[API Error] Response preview:', textContent.substring(0, 500) + (textContent.length > 500 ? '...' : ''));
       
       throw {
         message: `Invalid response format: Expected JSON but got ${contentType || 'unknown format'}`,
         status: response.status
       };
     } catch (error) {
+      console.error('[API Error] Failed to read response body:', error);
       throw {
         message: 'Invalid response format: Expected JSON',
         status: response.status
@@ -78,9 +83,11 @@ export const handleResponse = async <T>(response: Response): Promise<T> => {
   }
   
   try {
-    return await response.json() as T;
+    const jsonResponse = await response.json();
+    console.log(`[API Response] Successful JSON response for ${response.url}`);
+    return jsonResponse as T;
   } catch (error) {
-    console.error('Failed to parse JSON response:', error);
+    console.error('[API Error] Failed to parse JSON response:', error);
     throw {
       message: 'Failed to parse JSON response',
       status: response.status
@@ -103,11 +110,11 @@ export const apiRequest = async <T>(
   body?: unknown,
   headers?: Record<string, string>
 ): Promise<T> => {
-  console.info(`Making API request to ${endpoint}. Mock data enabled: ${USE_MOCK_DATA}`);
+  console.info(`[API Request] ${method} ${endpoint} - Mock data enabled: ${USE_MOCK_DATA}`);
   
   // Check if we should use mock data based on config
   if (USE_MOCK_DATA) {
-    console.info(`Using mock data for: ${endpoint}`);
+    console.info(`[API Mock] Using mock data for: ${endpoint}`);
     return getMockData<T>(endpoint);
   }
   
@@ -128,26 +135,34 @@ export const apiRequest = async <T>(
         // If body is FormData, delete Content-Type header to let browser set it
         delete requestHeaders['Content-Type'];
         config.body = body;
+        console.log(`[API Request] Sending FormData with ${body.getAll('file').length} files`);
       } else if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
         config.body = JSON.stringify(body);
+        console.log(`[API Request] Request body:`, body);
       }
     }
 
     // Format the API URL properly
     const formattedUrl = formatApiUrl(endpoint);
-    console.debug(`Making actual API request to: ${formattedUrl}`);
+    console.debug(`[API Request] Making actual API request to: ${formattedUrl}`);
+    
+    // Track request timing
+    const startTime = performance.now();
     
     // Make the actual API call
     const response = await fetch(formattedUrl, config);
     
+    const endTime = performance.now();
+    console.log(`[API Timing] Request to ${endpoint} took ${(endTime - startTime).toFixed(2)}ms`);
+    
     try {
       return await handleResponse<T>(response);
     } catch (apiError) {
-      console.error('API Error:', apiError);
+      console.error('[API Error]:', apiError);
       
       // Only fall back to mock data if API call failed and we're in dev mode
       if (import.meta.env.DEV) {
-        console.warn('API call failed. Falling back to mock data for:', endpoint);
+        console.warn('[API Fallback] API call failed. Falling back to mock data for:', endpoint);
         return getMockData<T>(endpoint);
       }
       
@@ -162,7 +177,7 @@ export const apiRequest = async <T>(
     
     // In development, return mock data as a fallback
     if (import.meta.env.DEV) {
-      console.warn('Using mock data as fallback for:', endpoint);
+      console.warn('[API Fallback] Using mock data as fallback for:', endpoint);
       return getMockData<T>(endpoint);
     }
     
@@ -172,7 +187,7 @@ export const apiRequest = async <T>(
 
 // Helper function to get mock data based on endpoint
 export function getMockData<T>(endpoint: string): T {
-  console.log('Getting mock data for endpoint:', endpoint);
+  console.log('[API Mock] Getting mock data for endpoint:', endpoint);
   
   // Parse the endpoint to determine what data to return
   if (endpoint.startsWith('/discussions')) {
@@ -180,8 +195,9 @@ export function getMockData<T>(endpoint: string): T {
     const idMatch = endpoint.match(/\/discussions\/(.+)/);
     if (idMatch) {
       const id = idMatch[1];
+      console.log(`[API Mock] Looking for discussion with ID: ${id}`);
       const discussion = mockDiscussions.find(d => d.id === id);
-      return discussion as unknown as T;
+      return discussion as unknown as T || ({} as unknown as T);
     }
     return mockDiscussions as unknown as T;
   }
@@ -192,6 +208,8 @@ export function getMockData<T>(endpoint: string): T {
     const discussionId = urlParams.get('discussionId');
     const userId = urlParams.get('userId');
     const taskId = urlParams.get('taskId');
+    
+    console.log(`[API Mock] Looking for annotations with discussionId: ${discussionId}, userId: ${userId}, taskId: ${taskId}`);
     
     let filtered = [...mockAnnotations];
     
@@ -234,6 +252,16 @@ export function getMockData<T>(endpoint: string): T {
     } as unknown as T;
   }
   
+  if (endpoint.startsWith('/auth/authorized-users')) {
+    console.log('[API Mock] Returning mock authorized users');
+    return [
+      { email: 'admin@example.com', role: 'admin' },
+      { email: 'lead@example.com', role: 'pod_lead' },
+      { email: 'annotator1@example.com', role: 'annotator' }
+    ] as unknown as T;
+  }
+  
   // Default empty response
+  console.log('[API Mock] No specific mock data for endpoint, returning empty object');
   return {} as T;
 }
