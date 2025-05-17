@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Home, Upload, Download, ListFilter, CheckCircle, XCircle } from 'lucide-react';
+import { ArrowLeft, Home, Upload, Download, ListFilter, CheckCircle, XCircle, Tag } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Discussion } from '@/services/api';
 
 interface DashboardNavigationProps {
   viewMode: 'grid' | 'detail' | 'consensus';
@@ -18,6 +19,7 @@ interface DashboardNavigationProps {
   discussionId?: string;
   onCodeUrlChange?: (url: string) => void;
   onCodeUrlVerify?: (url: string) => boolean;
+  currentDiscussion?: Discussion | null;
 }
 
 const DashboardNavigation = ({
@@ -31,9 +33,11 @@ const DashboardNavigation = ({
   codeDownloadUrl,
   discussionId,
   onCodeUrlChange,
-  onCodeUrlVerify
+  onCodeUrlVerify,
+  currentDiscussion
 }: DashboardNavigationProps) => {
   const navigate = useNavigate();
+  const [useAutomaticUrl, setUseAutomaticUrl] = useState<boolean>(true);
   
   // Handle file input change
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -56,6 +60,24 @@ const DashboardNavigation = ({
   const handleCodeUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (onCodeUrlChange) {
       onCodeUrlChange(e.target.value);
+      // When manually editing, disable automatic URL
+      setUseAutomaticUrl(false);
+    }
+  };
+  
+  // Use repository release URL if available
+  useEffect(() => {
+    if (useAutomaticUrl && currentDiscussion?.releaseUrl && onCodeUrlChange) {
+      onCodeUrlChange(currentDiscussion.releaseUrl);
+    }
+  }, [currentDiscussion, useAutomaticUrl, onCodeUrlChange]);
+  
+  // Toggle between automatic and manual URLs
+  const toggleUrlMode = () => {
+    setUseAutomaticUrl(!useAutomaticUrl);
+    if (!useAutomaticUrl && currentDiscussion?.releaseUrl && onCodeUrlChange) {
+      // Switching back to automatic - use the repository release URL
+      onCodeUrlChange(currentDiscussion.releaseUrl);
     }
   };
   
@@ -124,7 +146,7 @@ const DashboardNavigation = ({
           
           {/* Code download URL input field with validation */}
           <div className="flex flex-col space-y-2 w-full">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 justify-between">
               <div className="flex-1">
                 <label htmlFor="code-url" className="text-sm font-medium text-gray-700 mb-1 block">Code Download URL</label>
                 <div className="flex gap-2 items-center">
@@ -135,6 +157,7 @@ const DashboardNavigation = ({
                     onChange={handleCodeUrlChange}
                     placeholder="https://github.com/owner/repo/archive/refs/tags/version.tar.gz"
                     className="flex-1"
+                    disabled={useAutomaticUrl && !!currentDiscussion?.releaseUrl}
                   />
                   {codeDownloadUrl && (
                     isValidGitHubUrl(codeDownloadUrl) ? 
@@ -143,17 +166,39 @@ const DashboardNavigation = ({
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-2 mt-6">
-                <Checkbox 
-                  id="url-verified" 
-                  checked={isValidGitHubUrl(codeDownloadUrl)}
-                  className="data-[state=checked]:bg-green-500"
-                  disabled
-                />
-                <label htmlFor="url-verified" className="text-sm">
-                  {isValidGitHubUrl(codeDownloadUrl) ? 'URL Valid' : 'URL Invalid'}
-                </label>
+            </div>
+            
+            {/* Show repository release info if available */}
+            {currentDiscussion?.releaseTag && (
+              <div className="flex items-center gap-2 text-sm">
+                <Tag className="h-4 w-4 text-blue-500" />
+                <span>
+                  {useAutomaticUrl ? 
+                    `Using release: ${currentDiscussion.releaseTag}` : 
+                    `Repository has release: ${currentDiscussion.releaseTag}`
+                  }
+                </span>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  className="text-xs"
+                  onClick={toggleUrlMode}
+                >
+                  {useAutomaticUrl ? 'Use custom URL' : 'Use release URL'}
+                </Button>
               </div>
+            )}
+            
+            <div className="flex items-center gap-2">
+              <Checkbox 
+                id="url-verified" 
+                checked={isValidGitHubUrl(codeDownloadUrl)}
+                className="data-[state=checked]:bg-green-500"
+                disabled
+              />
+              <label htmlFor="url-verified" className="text-sm">
+                {isValidGitHubUrl(codeDownloadUrl) ? 'URL Valid' : 'URL Invalid'}
+              </label>
             </div>
             
             {codeDownloadUrl && isValidGitHubUrl(codeDownloadUrl) && (

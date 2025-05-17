@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { api, GitHubDiscussion } from '@/services/api';
-import { Upload, X, Check } from 'lucide-react';
+import { Upload, X, Check, Tag, Code, Calendar } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 
 const JsonUploader: React.FC = () => {
@@ -55,8 +55,29 @@ const JsonUploader: React.FC = () => {
           toast.warning(`Found ${validDiscussions.length} valid discussions out of ${parsed.length}`);
         }
         
-        setParsedData(validDiscussions);
-        toast.success(`Successfully parsed ${validDiscussions.length} discussions`);
+        // Format dates consistently
+        const processedDiscussions = validDiscussions.map(disc => {
+          // Ensure createdAt exists
+          if (!disc.createdAt) {
+            disc.createdAt = new Date().toISOString();
+          }
+          
+          // Process release data if available
+          if (disc.releaseDate) {
+            try {
+              // Ensure consistent date format
+              const date = new Date(disc.releaseDate);
+              disc.releaseDate = date.toISOString();
+            } catch (e) {
+              console.warn(`Failed to parse release date for discussion ${disc.id}`);
+            }
+          }
+          
+          return disc;
+        });
+        
+        setParsedData(processedDiscussions);
+        toast.success(`Successfully parsed ${processedDiscussions.length} discussions`);
         
       } catch (error) {
         console.error('Error parsing JSON:', error);
@@ -189,6 +210,30 @@ const JsonUploader: React.FC = () => {
                         <div><strong>Title:</strong> {item.title}</div>
                         <div><strong>Repository:</strong> {item.repository || extractRepositoryFromUrl(item.url)}</div>
                         <div className="truncate"><strong>URL:</strong> {item.url}</div>
+                        
+                        {/* Show enhanced metadata if available */}
+                        {(item.releaseTag || item.repositoryLanguage || item.releaseDate) && (
+                          <div className="mt-1 pt-1 border-t border-gray-200">
+                            {item.releaseTag && (
+                              <div className="flex items-center text-xs text-gray-600">
+                                <Tag className="w-3 h-3 mr-1" />
+                                <span>Release: {item.releaseTag}</span>
+                              </div>
+                            )}
+                            {item.repositoryLanguage && (
+                              <div className="flex items-center text-xs text-gray-600">
+                                <Code className="w-3 h-3 mr-1" />
+                                <span>Language: {item.repositoryLanguage}</span>
+                              </div>
+                            )}
+                            {item.releaseDate && (
+                              <div className="flex items-center text-xs text-gray-600">
+                                <Calendar className="w-3 h-3 mr-1" />
+                                <span>Release Date: {new Date(item.releaseDate).toLocaleDateString()}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))}
                     {parsedData.length > 3 && (

@@ -1,4 +1,3 @@
-
 from sqlalchemy import Column, String, Integer, Boolean, JSON, ForeignKey, DateTime, Table, UniqueConstraint
 from sqlalchemy.orm import relationship
 import datetime
@@ -22,6 +21,12 @@ class Discussion(Base):
     url = Column(String, nullable=False)
     repository = Column(String, nullable=False)
     created_at = Column(String, nullable=False)
+    
+    # Add repository metadata fields
+    repository_language = Column(String, nullable=True)
+    release_tag = Column(String, nullable=True)
+    release_url = Column(String, nullable=True)
+    release_date = Column(String, nullable=True)
     
     # Relationships
     annotations = relationship("Annotation", back_populates="discussion")

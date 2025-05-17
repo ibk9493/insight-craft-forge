@@ -1,4 +1,3 @@
-
 // API types for the annotation system
 
 export interface Discussion {
@@ -12,6 +11,11 @@ export interface Discussion {
     task2: TaskState;
     task3: TaskState;
   };
+  // Add repository metadata fields
+  repositoryLanguage?: string;
+  releaseTag?: string;
+  releaseUrl?: string;
+  releaseDate?: string;
 }
 
 export interface Annotation {
@@ -59,6 +63,11 @@ export interface GitHubDiscussion {
   url: string;
   repository?: string;
   createdAt: string;
+  // Add metadata fields from Python script
+  repositoryLanguage?: string;
+  releaseTag?: string;
+  releaseUrl?: string;
+  releaseDate?: string;
   tasks?: {
     task1?: Partial<TaskState>;
     task2?: Partial<TaskState>;

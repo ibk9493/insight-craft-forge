@@ -1,4 +1,3 @@
-
 from pydantic import BaseModel
 from typing import Dict, List, Optional, Any, Union
 from datetime import datetime
@@ -8,6 +7,11 @@ class DiscussionBase(BaseModel):
     url: str
     repository: str
     created_at: str
+    # Add fields for repository metadata
+    repository_language: Optional[str] = None
+    release_tag: Optional[str] = None
+    release_url: Optional[str] = None
+    release_date: Optional[str] = None
 
 class DiscussionCreate(DiscussionBase):
     id: str

@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -23,6 +22,7 @@ export function useDashboardState() {
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [codeDownloadUrl, setCodeDownloadUrl] = useState<string | null>(null);
   const [isCodeUrlValid, setIsCodeUrlValid] = useState<boolean>(false);
+  const [currentDiscussion, setCurrentDiscussion] = useState<any | null>(null);
   
   // Prevent infinite render cycles
   const initialLoadRef = useRef(false);
@@ -149,20 +149,29 @@ export function useDashboardState() {
     }
   };
 
-  // Load code download URL from user's saved annotation if available
+  // Load code download URL from user's saved annotation or from discussion metadata
   useEffect(() => {
-    if (discussionId && user && currentStep === TaskId.ANSWER_QUALITY) {
-      const annotation = getUserAnnotation(discussionId, user.id, currentStep);
-      if (annotation && annotation.data.codeDownloadUrl) {
-        const url = annotation.data.codeDownloadUrl as string;
-        setCodeDownloadUrl(url);
-        setIsCodeUrlValid(validateGitHubCodeUrl(url));
-      } else if (!codeDownloadUrl) {
-        // If no URL in annotation, set a default from repository info
-        const discussion = discussions.find(d => d.id === discussionId);
-        if (discussion && discussion.repository) {
+    if (discussionId && discussions.length > 0) {
+      const discussion = discussions.find(d => d.id === discussionId);
+      setCurrentDiscussion(discussion || null);
+      
+      if (discussion && user && currentStep === TaskId.ANSWER_QUALITY) {
+        // First try to get URL from user's saved annotation
+        const annotation = getUserAnnotation(discussionId, user.id, currentStep);
+        if (annotation && annotation.data.codeDownloadUrl) {
+          const url = annotation.data.codeDownloadUrl as string;
+          setCodeDownloadUrl(url);
+          setIsCodeUrlValid(validateGitHubCodeUrl(url));
+        } 
+        // Then try to use the repository's release URL if available
+        else if (discussion.releaseUrl) {
+          setCodeDownloadUrl(discussion.releaseUrl);
+          setIsCodeUrlValid(validateGitHubCodeUrl(discussion.releaseUrl));
+        }
+        // Finally fall back to a default URL based on repository name
+        else if (!codeDownloadUrl && discussion.repository) {
           const repoName = discussion.repository;
-          const defaultUrl = `https://github.com/${repoName}/archive/refs/tags/latest.tar.gz`;
+          const defaultUrl = `https://github.com/${repoName}/archive/refs/heads/main.tar.gz`;
           setCodeDownloadUrl(defaultUrl);
           setIsCodeUrlValid(validateGitHubCodeUrl(defaultUrl));
         }
@@ -282,6 +291,7 @@ export function useDashboardState() {
     saveAnnotation,
     saveConsensusAnnotation,
     getConsensusAnnotation,
-    discussions
+    discussions,
+    currentDiscussion
   };
 }

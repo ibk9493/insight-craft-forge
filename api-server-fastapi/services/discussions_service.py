@@ -4,94 +4,107 @@ from sqlalchemy import and_
 import models
 import schemas
 import re
-from typing import List, Optional
+import requests
+from datetime import datetime
+from typing import List, Optional, Tuple
 
 def get_discussions(db: Session, status: Optional[str] = None) -> List[models.Discussion]:
-    discussions = db.query(models.Discussion).all()
-    
-    # Convert to Pydantic models with tasks info
-    result = []
-    for disc in discussions:
-        # Get task states for this discussion
-        task_states = {}
-        for task_num in range(1, 4):
-            task_assoc = db.query(models.discussion_task_association).filter(
-                and_(
-                    models.discussion_task_association.c.discussion_id == disc.id,
-                    models.discussion_task_association.c.task_number == task_num
-                )
-            ).first()
-            
-            if task_assoc:
-                task_states[f"task{task_num}"] = schemas.TaskState(
-                    status=task_assoc.status,
-                    annotators=task_assoc.annotators
-                )
-            else:
-                task_states[f"task{task_num}"] = schemas.TaskState(
-                    status="locked",
-                    annotators=0
-                )
-        
-        # Filter by status if requested
-        if status:
-            if status == "completed":
-                if not all(t.status == "completed" for t in task_states.values()):
-                    continue
-            elif status == "unlocked":
-                if not any(t.status == "unlocked" for t in task_states.values()):
-                    continue
-            elif status == "locked":
-                if not all(t.status == "locked" for t in task_states.values()):
-                    continue
-        
-        disc_dict = {
-            "id": disc.id,
-            "title": disc.title,
-            "url": disc.url,
-            "repository": disc.repository,
-            "created_at": disc.created_at,
-            "tasks": task_states
-        }
-        result.append(schemas.Discussion(**disc_dict))
-    
-    return result
+    # ... keep existing code (querying discussions logic)
 
 def get_discussion_by_id(db: Session, discussion_id: str) -> Optional[schemas.Discussion]:
-    db_discussion = db.query(models.Discussion).filter(models.Discussion.id == discussion_id).first()
-    
-    if not db_discussion:
+    # ... keep existing code (get discussion by ID logic)
+
+def extract_repository_info_from_url(url: str) -> Tuple[str, Optional[str], Optional[str]]:
+    """Extract repository owner and name from GitHub URL"""
+    try:
+        github_url_pattern = r"github\.com/([^/]+)/([^/]+)"
+        match = re.search(github_url_pattern, url, re.IGNORECASE)
+        if match:
+            owner = match.group(1)
+            repo = match.group(2)
+            # Clean up repo name (remove any trailing parts)
+            repo = repo.split('/')[0]
+            return f"{owner}/{repo}", owner, repo
+        return "unknown/repository", None, None
+    except Exception:
+        return "unknown/repository", None, None
+
+def get_repository_language(owner: str, repo: str) -> Optional[str]:
+    """Get primary language of a repository"""
+    if not owner or not repo:
         return None
     
-    # Get task states for this discussion
-    task_states = {}
-    for task_num in range(1, 4):
-        task_assoc = db.query(models.discussion_task_association).filter(
-            and_(
-                models.discussion_task_association.c.discussion_id == db_discussion.id,
-                models.discussion_task_association.c.task_number == task_num
-            )
-        ).first()
-        
-        if task_assoc:
-            task_states[f"task{task_num}"] = schemas.TaskState(
-                status=task_assoc.status,
-                annotators=task_assoc.annotators
-            )
-        else:
-            task_states[f"task{task_num}"] = schemas.TaskState(
-                status="locked",
-                annotators=0
-            )
+    try:
+        url = f"https://api.github.com/repos/{owner}/{repo}"
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("language")
+    except Exception:
+        pass
+    return None
+
+def find_release_for_discussion(owner: str, repo: str, created_at: str) -> dict:
+    """Find appropriate release for a discussion based on date"""
+    if not owner or not repo or not created_at:
+        return {}
     
-    return schemas.Discussion(
-        id=db_discussion.id,
-        title=db_discussion.title,
-        url=db_discussion.url,
-        repository=db_discussion.repository,
-        created_at=db_discussion.created_at,
-        tasks=task_states
-    )
+    try:
+        # Parse discussion creation date
+        target_date = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+        
+        # Get releases
+        url = f"https://api.github.com/repos/{owner}/{repo}/releases?per_page=100"
+        response = requests.get(url)
+        
+        if response.status_code != 200:
+            return {}
+        
+        releases = response.json()
+        
+        if not releases:
+            # Try tags as a fallback
+            tags_url = f"https://api.github.com/repos/{owner}/{repo}/tags"
+            tags_response = requests.get(tags_url)
+            if tags_response.status_code == 200:
+                tags = tags_response.json()
+                if tags:
+                    return {
+                        "tag": tags[0]["name"],
+                        "url": f"https://github.com/{owner}/{repo}/archive/refs/tags/{tags[0]['name']}.tar.gz"
+                    }
+            return {}
+        
+        # Find releases before the discussion date
+        releases_before = []
+        for release in releases:
+            if not release.get("published_at"):
+                continue
+                
+            release_date = datetime.fromisoformat(release["published_at"].replace('Z', '+00:00'))
+            
+            if release_date < target_date:
+                releases_before.append({
+                    "tag": release["tag_name"],
+                    "date": release["published_at"],
+                    "url": f"https://github.com/{owner}/{repo}/archive/refs/tags/{release['tag_name']}.tar.gz"
+                })
+        
+        # Return latest release before discussion
+        if releases_before:
+            releases_before.sort(key=lambda x: x["date"], reverse=True)
+            return releases_before[0]
+            
+        # Fallback: latest release overall
+        latest = releases[0]
+        return {
+            "tag": latest["tag_name"],
+            "date": latest.get("published_at"),
+            "url": f"https://github.com/{owner}/{repo}/archive/refs/tags/{latest['tag_name']}.tar.gz"
+        }
+    except Exception:
+        # If any error occurs, return default
+        return {}
 
 def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> schemas.UploadResult:
     discussions_added = 0
@@ -99,8 +112,8 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
     
     try:
         for disc in upload_data.discussions:
-            # Extract repository from URL if not provided
-            repository = disc.repository or extract_repository_from_url(disc.url)
+            # Extract repository information
+            repository, owner, repo = extract_repository_info_from_url(disc.url)
             
             # Check if discussion already exists
             existing = db.query(models.Discussion).filter(models.Discussion.id == disc.id).first()
@@ -108,13 +121,27 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
                 errors.append(f"Discussion with ID {disc.id} already exists")
                 continue
             
-            # Create new discussion
+            # Get repository language if possible
+            language = None
+            if owner and repo:
+                language = get_repository_language(owner, repo)
+            
+            # Get release information
+            release_info = {}
+            if owner and repo and disc.created_at:
+                release_info = find_release_for_discussion(owner, repo, disc.created_at)
+            
+            # Create new discussion with enhanced metadata
             new_discussion = models.Discussion(
                 id=disc.id,
                 title=disc.title,
                 url=disc.url,
                 repository=repository,
-                created_at=disc.created_at
+                created_at=disc.created_at,
+                repository_language=language,
+                release_tag=release_info.get("tag"),
+                release_url=release_info.get("url"),
+                release_date=release_info.get("date")
             )
             db.add(new_discussion)
             db.flush()  # Flush to get the ID
@@ -154,49 +181,9 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
         )
 
 def update_task_status(db: Session, task_update: schemas.TaskStatusUpdate) -> schemas.TaskManagementResult:
-    # Find the discussion
-    discussion = db.query(models.Discussion).filter(models.Discussion.id == task_update.discussion_id).first()
-    if not discussion:
-        return schemas.TaskManagementResult(
-            success=False,
-            message="Discussion not found"
-        )
-    
-    try:
-        # Update the task status
-        db.execute(
-            models.discussion_task_association.update().where(
-                and_(
-                    models.discussion_task_association.c.discussion_id == task_update.discussion_id,
-                    models.discussion_task_association.c.task_number == task_update.task_id
-                )
-            ).values(
-                status=task_update.status
-            )
-        )
-        
-        db.commit()
-        
-        # Get the updated discussion
-        updated_discussion = get_discussion_by_id(db, task_update.discussion_id)
-        
-        return schemas.TaskManagementResult(
-            success=True,
-            message=f"Task {task_update.task_id} status updated to {task_update.status}",
-            discussion=updated_discussion
-        )
-        
-    except Exception as e:
-        db.rollback()
-        return schemas.TaskManagementResult(
-            success=False,
-            message=f"Failed to update task status: {str(e)}"
-        )
+    # ... keep existing code (task status update logic)
 
 def extract_repository_from_url(url: str) -> str:
-    try:
-        github_url_pattern = r"github\.com/([^/]+/[^/]+)"
-        match = re.search(github_url_pattern, url, re.IGNORECASE)
-        return match.group(1) if match else "unknown/repository"
-    except Exception:
-        return "unknown/repository"
+    """Legacy repository extraction (keep for compatibility)"""
+    repository, _, _ = extract_repository_info_from_url(url)
+    return repository
