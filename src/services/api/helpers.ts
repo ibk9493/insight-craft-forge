@@ -5,11 +5,11 @@ import { mockDiscussions, mockAnnotations } from './mockData';
 import { API_CONFIG } from '@/config';
 
 /**
- * API base configuration values from environment variables
+ * API base configuration values
  */
-export const API_URL = import.meta.env.VITE_API_URL || '';
-export const API_KEY = import.meta.env.VITE_API_KEY || '';
-export const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA === 'true';
+export const API_URL = API_CONFIG.BASE_URL;
+export const API_KEY = API_CONFIG.HEADERS['X-API-Key'];
+export const USE_MOCK_DATA = API_CONFIG.USE_MOCK;
 
 /**
  * Properly formats the API URL to ensure it doesn't have duplicate slashes
@@ -103,16 +103,16 @@ export const apiRequest = async <T>(
   body?: unknown,
   headers?: Record<string, string>
 ): Promise<T> => {
+  // If mock data is specifically enabled, use mock data directly 
+  // without attempting an API call to improve performance
+  if (USE_MOCK_DATA) {
+    console.info(`Using mock data for: ${endpoint}`);
+    return getMockData<T>(endpoint);
+  }
+  
   try {
-    // If mock data is enabled, use mock data directly
-    if (USE_MOCK_DATA || import.meta.env.DEV) {
-      console.info(`Using mock data for: ${endpoint}`);
-      return getMockData<T>(endpoint);
-    }
-    
     const requestHeaders = {
-      'Content-Type': 'application/json',
-      'X-API-Key': API_KEY,
+      ...API_CONFIG.HEADERS,
       ...(headers || {})
     };
 
@@ -143,8 +143,8 @@ export const apiRequest = async <T>(
     } catch (apiError) {
       console.error('API Error:', apiError);
       
-      // If we're using mock data or the API is unavailable, fall back to mock data
-      if (USE_MOCK_DATA || import.meta.env.DEV) {
+      // If we're in development mode, fall back to mock data
+      if (import.meta.env.DEV) {
         console.warn('Falling back to mock data for:', endpoint);
         return getMockData<T>(endpoint);
       }
@@ -158,8 +158,8 @@ export const apiRequest = async <T>(
       toast.error('An error occurred while connecting to the server');
     }
     
-    // In development or if mock data is enabled, return mock data as a fallback
-    if (USE_MOCK_DATA || import.meta.env.DEV) {
+    // In development, return mock data as a fallback
+    if (import.meta.env.DEV) {
       console.warn('Using mock data as fallback for:', endpoint);
       return getMockData<T>(endpoint);
     }

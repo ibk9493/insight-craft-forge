@@ -6,8 +6,8 @@ export const API_CONFIG = {
   // Base URL for the API - ensure it ends with '/api'
   BASE_URL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api',
   
-  // Whether to use mock data
-  USE_MOCK: import.meta.env.VITE_USE_MOCK_DATA === 'true' || true, // Default to mock data if not specified
+  // Whether to use mock data - Default to true in development mode
+  USE_MOCK: import.meta.env.VITE_USE_MOCK_DATA === 'true' || import.meta.env.DEV,
   
   // API endpoints
   ENDPOINTS: {
@@ -58,7 +58,7 @@ export const FEATURES = {
   EXPERIMENTAL: import.meta.env.VITE_ENABLE_EXPERIMENTAL === 'true',
   
   // Enable detailed error reporting
-  DETAILED_ERRORS: import.meta.env.VITE_DETAILED_ERRORS === 'true',
+  DETAILED_ERRORS: import.meta.env.VITE_DETAILED_ERRORS === 'true' || import.meta.env.DEV,
   
   // Enable real-time collaboration
   REALTIME: import.meta.env.VITE_ENABLE_REALTIME === 'true'

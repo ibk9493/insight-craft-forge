@@ -1,137 +1,94 @@
 
-# Frontend API Integration Documentation
+# API Documentation for SWE-QA Annotation System
 
-This document outlines how the frontend integrates with the FastAPI backend for the SWE-QA annotation system.
+## Overview
 
-## Configuration
+The SWE-QA Annotation System API provides endpoints for managing GitHub discussions, user annotations, and consensus building. This document outlines the available endpoints, expected request/response formats, and common troubleshooting tips.
 
-API configurations are stored in `src/config.ts` and can be customized via environment variables:
+## Base URL
 
-```typescript
-// .env file
-VITE_API_URL=http://localhost:8000/api
-VITE_API_KEY=your_api_key_here
-VITE_USE_MOCK_DATA=true|false
+All API requests should be made to the base URL followed by the specific endpoint:
+
+```
+{VITE_API_URL}/{endpoint}
 ```
 
-## API Services
+For example, if your API URL is `http://localhost:8000/api`, then you would make a request to `http://localhost:8000/api/discussions` to get all discussions.
 
-The frontend uses a modular approach to API services:
+## Authentication
 
-### Core API Functions
+All API requests require an API key to be provided in the request header:
 
-- `api.discussions`: Methods for fetching and managing GitHub discussions
-- `api.annotations`: Methods for creating and retrieving annotations
-- `api.consensus`: Methods for calculating and managing consensus annotations
-- `api.auth`: Methods for authentication and user management
-- `api.admin`: Admin-specific methods for managing discussions and tasks
-
-### Error Handling
-
-- All API requests include error handling with fallback to mock data when appropriate
-- Toast notifications inform users of API success/failure
-
-### Mock Data
-
-- When `VITE_USE_MOCK_DATA=true`, the application uses mock data instead of real API calls
-- This allows for easier development and testing without a backend
-
-## Usage Examples
-
-### Fetching Discussions
-
-```typescript
-import { api } from '@/services/api';
-
-// Get all discussions
-const discussions = await api.discussions.getAll();
-
-// Get a specific discussion
-const discussion = await api.discussions.getById('github-123');
+```
+X-API-Key: your_api_key_here
 ```
 
-### Working with Annotations
+## Available Endpoints
 
-```typescript
-import { api } from '@/services/api';
+### Discussions
 
-// Get user's annotation
-const annotation = await api.annotations.getUserAnnotation('github-123', 'user1', 1);
+- `GET /discussions`: Get all discussions
+- `GET /discussions/{id}`: Get a specific discussion by ID
+- `GET /discussions?status={status}`: Get discussions by status (locked, unlocked, completed)
 
-// Save an annotation
-await api.annotations.save({
-  userId: 'user1',
-  discussionId: 'github-123',
-  taskId: 1,
-  data: { relevance: true }
-});
+### Annotations
 
-// For pod leads: Override an annotator's annotation
-await api.annotations.podLeadOverride(
-  'podlead1',    // Pod lead's user ID
-  'annotator2',  // Annotator's user ID
-  'github-123',  // Discussion ID
-  1,             // Task ID
-  { relevance: true }  // New annotation data
-);
-```
+- `GET /annotations?discussionId={id}`: Get all annotations for a discussion
+- `GET /annotations?discussionId={id}&taskId={taskId}`: Get annotations for a discussion and task
+- `GET /annotations?discussionId={id}&userId={userId}&taskId={taskId}`: Get a specific user's annotation
+- `POST /annotations`: Save a new annotation
+- `PUT /annotations/{discussionId}/{userId}/{taskId}`: Update an existing annotation
 
-### Managing Consensus
+### Consensus
 
-```typescript
-import { api } from '@/services/api';
+- `GET /consensus?discussionId={id}&taskId={taskId}`: Get consensus annotation for a discussion/task
+- `POST /consensus`: Save a new consensus annotation
+- `GET /consensus/calculate?discussionId={id}&taskId={taskId}`: Calculate consensus for a discussion/task
+- `POST /consensus/override`: Override consensus values
 
-// Calculate consensus
-await api.consensus.calculate('github-123', 1);
+## Mock Data
 
-// Save consensus
-await api.consensus.save({
-  userId: 'consensus',
-  discussionId: 'github-123',
-  taskId: 1,
-  data: { relevance: true }
-});
-```
+In development mode or when `VITE_USE_MOCK_DATA` is set to `true`, the system will use mock data instead of making actual API calls. This is useful for development and testing when the API server is not available.
 
-## Troubleshooting API Integration
+## Troubleshooting
 
 ### Common Issues
 
-1. **Receiving HTML instead of JSON**: If your API calls return HTML content instead of JSON:
-   - Check that the API server is running correctly
-   - Verify your API URL in `.env` (should end with `/api` for the FastAPI server)
-   - Ensure CORS is configured properly on the server
-   - Try using `VITE_USE_MOCK_DATA=true` for development
+1. **API URL Configuration**
+   - Ensure your `VITE_API_URL` in the `.env` file ends with `/api`
+   - The correct format is: `http://localhost:8000/api` (not `http://localhost:8000`)
 
-2. **Authentication Issues**:
-   - Verify that API keys are correctly set in your environment
-   - Check that cookies are being properly sent for authenticated requests
+2. **Receiving HTML Responses Instead of JSON**
+   - This usually happens when your API URL is pointing to a frontend server instead of an API server
+   - Check that your FastAPI server is running and accessible at the specified URL
+   - Verify that the endpoint exists and returns JSON responses
 
-3. **Fallback Mechanism**:
-   - The application automatically falls back to mock data when `USE_MOCK_DATA=true` or in development mode
-   - Check browser console for API errors and fallback messages
+3. **API Key Issues**
+   - Ensure your API key in the `.env` file matches the one expected by the server
+   - Check that the API key is being included in request headers
 
-## Best Practices
+4. **Server Not Running**
+   - Start your FastAPI server using `uvicorn main:app --reload` from the api-server-fastapi directory
+   - Check that the server is listening on the correct port (default: 8000)
 
-1. **Error Handling**: Always handle potential API errors in UI components
-2. **Loading States**: Implement loading indicators during API calls
-3. **Caching**: Consider caching responses for frequently accessed data
-4. **Type Safety**: Utilize TypeScript interfaces for API responses
+5. **Mock Data**
+   - If you're having issues with the API, you can enable mock data by setting `VITE_USE_MOCK_DATA=true` in your `.env` file
+   - This will allow you to develop the frontend without needing the API server running
 
-## Role-Based Features
+### Using the API in Development
 
-### For Annotators
-- Create and update their own annotations
-- View discussions assigned to them
+For local development, you can:
 
-### For Pod Leads
-- All annotator capabilities
-- Create/update consensus annotations
-- Override individual annotator submissions when necessary
-- View annotator submissions
+1. Set `VITE_USE_MOCK_DATA=true` to use mock data without an API server
+2. Run the FastAPI server and set `VITE_USE_MOCK_DATA=false` to use actual API calls
+3. In development mode (`import.meta.env.DEV`), the system will automatically fall back to mock data if API calls fail
 
-### For Admins
-- All pod lead capabilities
-- Upload discussions
-- Manage tasks (lock/unlock)
-- Manage user access
+### Debugging API Calls
+
+The system logs detailed information about API calls and responses to the console, including:
+
+- API request URLs
+- Response format errors
+- Mock data fallbacks
+
+Check the browser's developer console for these logs when troubleshooting API issues.
