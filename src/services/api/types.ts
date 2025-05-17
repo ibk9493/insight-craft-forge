@@ -82,3 +82,23 @@ export interface GitHubDiscussion {
   releaseDate?: string;
   tasks?: GitHubDiscussionTasks;
 }
+
+// System summary types
+export interface SystemSummary {
+  totalDiscussions: number;
+  task1Completed: number;
+  task2Completed: number;
+  task3Completed: number;
+  totalTasksCompleted: number;
+  totalAnnotations: number;
+  uniqueAnnotators: number;
+}
+
+export interface UserSummary {
+  userId: string;
+  totalAnnotations: number;
+  task1Completed: number;
+  task2Completed: number;
+  task3Completed: number;
+  totalTasksCompleted: number;
+}

@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Form, Header, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel, Field
@@ -72,8 +72,13 @@ app.add_middleware(
 UPLOADS_DIR = Path("uploads")
 UPLOADS_DIR.mkdir(exist_ok=True)
 
+# Create reports directory if it doesn't exist
+REPORTS_DIR = Path("reports")
+REPORTS_DIR.mkdir(exist_ok=True)
+
 # Serve static files
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.mount("/reports", StaticFiles(directory="reports"), name="reports")
 
 # Middleware for logging requests and responses
 @app.middleware("http")
@@ -385,6 +390,36 @@ def verify_google_token(token_data: schemas.GoogleToken, db: Session = Depends(g
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Error verifying Google token: {str(e)}")
 
+@app.post("/api/auth/signup")
+def signup_user(user_data: schemas.UserSignup, db: Session = Depends(get_db)):
+    try:
+        logger.info(f"Signing up new user with email: {user_data.email}")
+        
+        # Check if email is in authorized users list
+        authorized_user = auth_service.check_if_email_authorized(db, user_data.email)
+        
+        if not authorized_user:
+            logger.warning(f"Email not authorized for signup: {user_data.email}")
+            return JSONResponse(
+                status_code=403,
+                content={"success": False, "message": "Email not authorized for signup"}
+            )
+        
+        # In a real app, this would create a user in the database
+        # For demo purposes, we'll just return success
+        user_id = str(uuid.uuid4())
+        logger.info(f"User created with ID: {user_id}")
+        
+        return {
+            "success": True,
+            "userId": user_id,
+            "message": "User created successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error signing up user: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Error signing up user: {str(e)}")
+
 @app.get("/api/auth/authorized-users", dependencies=[Depends(verify_api_key)])
 def get_authorized_users(db: Session = Depends(get_db)):
     try:
@@ -423,16 +458,63 @@ def remove_authorized_user(email: str, db: Session = Depends(get_db)):
 
 # Summary endpoints
 @app.get("/api/summary/stats", dependencies=[Depends(verify_api_key)])
-def get_summary_stats(db: Session = Depends(get_db)):
+def get_system_summary(db: Session = Depends(get_db)):
     try:
-        logger.info("Fetching summary statistics")
-        result = summary_service.get_summary_stats(db)
+        logger.info("Fetching system summary statistics")
+        result = summary_service.get_system_summary(db)
         logger.info("Summary statistics fetched successfully")
         return result
     except Exception as e:
         logger.error(f"Error fetching summary statistics: {str(e)}")
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Error fetching summary statistics: {str(e)}")
+
+@app.get("/api/summary/user/{user_id}", dependencies=[Depends(verify_api_key)])
+def get_user_summary(user_id: str, db: Session = Depends(get_db)):
+    try:
+        logger.info(f"Fetching summary statistics for user: {user_id}")
+        result = summary_service.get_user_summary(db, user_id)
+        logger.info("User summary statistics fetched successfully")
+        return result
+    except Exception as e:
+        logger.error(f"Error fetching user summary statistics: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Error fetching user summary statistics: {str(e)}")
+
+@app.get("/api/summary/report", dependencies=[Depends(verify_api_key)])
+def generate_report(format: str = "csv", db: Session = Depends(get_db)):
+    try:
+        logger.info(f"Generating {format} report")
+        
+        # Get all the data
+        system_summary = summary_service.get_system_summary(db)
+        
+        # Generate filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"report_{timestamp}.{format}"
+        file_path = REPORTS_DIR / filename
+        
+        # Create the report based on format
+        if format.lower() == "json":
+            with open(file_path, "w") as f:
+                json.dump(system_summary, f, indent=2)
+        else:  # Default to CSV
+            with open(file_path, "w") as f:
+                # Write header
+                f.write("Metric,Value\n")
+                
+                # Write data
+                for key, value in system_summary.items():
+                    f.write(f"{key},{value}\n")
+        
+        logger.info(f"Report generated successfully: {filename}")
+        download_url = f"/reports/{filename}"
+        
+        return {"downloadUrl": download_url}
+    except Exception as e:
+        logger.error(f"Error generating report: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Error generating report: {str(e)}")
 
 # Health check endpoint
 @app.get("/api/health")

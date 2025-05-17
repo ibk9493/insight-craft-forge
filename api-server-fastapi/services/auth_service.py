@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_
 import models
 import schemas
-from typing import List
+from typing import List, Optional
 
 def get_authorized_users(db: Session) -> List[schemas.AuthorizedUser]:
     users = db.query(models.AuthorizedUser).all()
@@ -16,6 +16,23 @@ def get_authorized_users(db: Session) -> List[schemas.AuthorizedUser]:
         )
         for user in users
     ]
+
+def check_if_email_authorized(db: Session, email: str) -> Optional[schemas.AuthorizedUser]:
+    """
+    Check if the email is in the authorized users list
+    """
+    user = db.query(models.AuthorizedUser).filter(
+        models.AuthorizedUser.email == email
+    ).first()
+    
+    if not user:
+        return None
+    
+    return schemas.AuthorizedUser(
+        id=user.id,
+        email=user.email,
+        role=user.role
+    )
 
 def add_or_update_authorized_user(db: Session, user_data: schemas.AuthorizedUserCreate) -> schemas.AuthorizedUser:
     # Check if user already exists

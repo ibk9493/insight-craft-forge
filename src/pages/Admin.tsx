@@ -6,6 +6,7 @@ import { useUser } from '@/contexts/UserContext';
 import Header from '@/components/layout/Header';
 import JsonUploader from '@/components/admin/JsonUploader';
 import TaskManager from '@/components/admin/TaskManager';
+import SystemReports from '@/components/admin/SystemReports';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"; 
 import { useAnnotationData } from '@/hooks/useAnnotationData';
 import { Loader, Settings, Upload, Users, FileText } from 'lucide-react';
@@ -118,7 +119,7 @@ const Admin = () => {
                   <Users className="h-4 w-4" />
                   <span>User Management</span>
                 </Tab>
-                <Tab value="system-settings" className="flex items-center gap-2">
+                <Tab value="system-reports" className="flex items-center gap-2">
                   <FileText className="h-4 w-4" />
                   <span>System Reports</span>
                 </Tab>
@@ -197,68 +198,15 @@ const Admin = () => {
                 <UserAccessManager />
               </TabPanel>
               
-              {/* System Settings Tab - Admin Only */}
-              <TabPanel value="system-settings">
+              {/* System Reports Tab - Admin Only */}
+              <TabPanel value="system-reports">
                 <div className="mb-4">
                   <h2 className="text-lg font-medium">System Reports</h2>
                   <p className="text-sm text-gray-500">
                     View system statistics and generate reports
                   </p>
                 </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Annotation Statistics</CardTitle>
-                      <CardDescription>Overall system usage</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <dl className="space-y-4">
-                        <div className="flex justify-between">
-                          <dt className="text-sm font-medium text-gray-500">Total Discussions:</dt>
-                          <dd className="text-sm font-medium">{discussions.length}</dd>
-                        </div>
-                        <div className="flex justify-between">
-                          <dt className="text-sm font-medium text-gray-500">Completed Tasks:</dt>
-                          <dd className="text-sm font-medium">
-                            {discussions.reduce((acc, disc) => {
-                              if (disc.tasks.task1.status === 'completed') acc++;
-                              if (disc.tasks.task2.status === 'completed') acc++;
-                              if (disc.tasks.task3.status === 'completed') acc++;
-                              return acc;
-                            }, 0)}
-                          </dd>
-                        </div>
-                        <div className="flex justify-between">
-                          <dt className="text-sm font-medium text-gray-500">Active Annotators:</dt>
-                          <dd className="text-sm font-medium">3</dd>
-                        </div>
-                        <div className="flex justify-between">
-                          <dt className="text-sm font-medium text-gray-500">Average Time per Task:</dt>
-                          <dd className="text-sm font-medium">12 minutes</dd>
-                        </div>
-                      </dl>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>System Actions</CardTitle>
-                      <CardDescription>Administrative tools</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <Button className="w-full" variant="outline">
-                        Export All Annotations
-                      </Button>
-                      <Button className="w-full" variant="outline">
-                        Generate Statistics Report
-                      </Button>
-                      <Button className="w-full" variant="outline">
-                        View Access Logs
-                      </Button>
-                    </CardContent>
-                  </Card>
-                </div>
+                <SystemReports />
               </TabPanel>
             </>
           )}

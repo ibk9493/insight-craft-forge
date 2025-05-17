@@ -1,5 +1,6 @@
+
 import { apiRequest } from './helpers';
-import { Discussion, Annotation, TaskStatus, GitHubDiscussion, UploadResult, TaskManagementResult, UserRole } from './types';
+import { Discussion, Annotation, TaskStatus, GitHubDiscussion, UploadResult, TaskManagementResult, UserRole, SystemSummary, UserSummary } from './types';
 
 /**
  * API endpoint functions for the SWE-QA Annotation System
@@ -111,6 +112,12 @@ export const api = {
       return safeApiRequest<{success: boolean, user: any}>('/auth/google', 'POST', { token }, undefined, { success: false, user: null });
     },
     
+    // Sign up a new user
+    signupUser: (email: string, password: string) => {
+      console.log('[Auth] Signing up user:', email);
+      return safeApiRequest<{success: boolean, userId: string}>('/auth/signup', 'POST', { email, password }, undefined, { success: false, userId: '' });
+    },
+    
     // Get authorized users endpoint
     getAuthorizedUsers: () => {
       console.log('[Auth] Getting authorized users');
@@ -162,6 +169,44 @@ export const api = {
     overrideAnnotation: (annotation: Annotation) => {
       console.log('[Admin] Overriding annotation:', annotation.discussionId, annotation.taskId);
       return safeApiRequest<Annotation>('/admin/annotations/override', 'PUT', annotation, undefined, {} as Annotation);
+    }
+  },
+  
+  // System summary endpoints
+  summary: {
+    // Get system summary statistics
+    getSystemSummary: () => {
+      console.log('[Summary] Getting system summary statistics');
+      return safeApiRequest<SystemSummary>('/api/summary/stats', 'GET', undefined, undefined, {
+        totalDiscussions: 0,
+        task1Completed: 0,
+        task2Completed: 0,
+        task3Completed: 0,
+        totalTasksCompleted: 0,
+        totalAnnotations: 0,
+        uniqueAnnotators: 0
+      });
+    },
+    
+    // Get user summary statistics
+    getUserSummary: (userId: string) => {
+      console.log(`[Summary] Getting user summary for: ${userId}`);
+      return safeApiRequest<UserSummary>(`/api/summary/user/${userId}`, 'GET', undefined, undefined, {
+        userId: userId,
+        totalAnnotations: 0,
+        task1Completed: 0,
+        task2Completed: 0,
+        task3Completed: 0,
+        totalTasksCompleted: 0
+      });
+    },
+    
+    // Generate and download report
+    downloadReport: (format: 'csv' | 'json' = 'csv') => {
+      console.log(`[Summary] Downloading report in ${format} format`);
+      return safeApiRequest<{downloadUrl: string}>(`/api/summary/report?format=${format}`, 'GET', undefined, undefined, {
+        downloadUrl: ''
+      });
     }
   }
 };

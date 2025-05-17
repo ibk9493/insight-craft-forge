@@ -20,6 +20,7 @@ export interface AuthorizedUser {
 interface UserContextType {
   user: User | null;
   login: (username: string, password: string) => boolean;
+  signup: (email: string, password: string) => Promise<boolean>;
   googleLogin: (googleToken: string) => Promise<boolean>;
   logout: () => void;
   isAuthenticated: boolean;
@@ -27,8 +28,8 @@ interface UserContextType {
   isAdmin: boolean;
   setUserRole: (role: UserRole) => void;
   authorizedUsers: AuthorizedUser[];
-  addAuthorizedUser: (email: string, role: UserRole) => void;
-  removeAuthorizedUser: (email: string) => void;
+  addAuthorizedUser: (email: string, role: UserRole) => Promise<void>;
+  removeAuthorizedUser: (email: string) => Promise<void>;
   loadAuthorizedUsers: () => Promise<void>;
 }
 
@@ -131,6 +132,53 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return false;
   };
 
+  const signup = async (email: string, password: string): Promise<boolean> => {
+    try {
+      // Check if email is in authorized users list
+      const authorizedUser = authorizedUsers.find(
+        user => user.email.toLowerCase() === email.toLowerCase()
+      );
+      
+      if (!authorizedUser) {
+        toast.error('Email not authorized for signup');
+        return false;
+      }
+      
+      // In a real app, this would be an API call to create a user
+      const signupResult = await api.auth.signupUser(email, password);
+      
+      if (signupResult.success) {
+        // Create new user object
+        const newUser = {
+          id: signupResult.userId || Date.now().toString(),
+          username: email,
+          role: authorizedUser.role,
+          provider: 'local' as const
+        };
+        
+        setUser(newUser);
+        localStorage.setItem(AUTH_CONFIG.STORAGE_KEYS.USER, JSON.stringify(newUser));
+        
+        // Show toast based on user role
+        if (authorizedUser.role === 'admin') {
+          toast.success('Signed up as Administrator');
+        } else if (authorizedUser.role === 'pod_lead') {
+          toast.success('Signed up as Pod Lead');
+        } else {
+          toast.success('Signed up as Annotator');
+        }
+        
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Signup error:', error);
+      toast.error('Failed to create account');
+      return false;
+    }
+  };
+
   const googleLogin = async (googleToken: string): Promise<boolean> => {
     try {
       // Call the API to verify the Google token
@@ -158,17 +206,8 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           
           return true;
         } else {
-          // If user not authorized, use default role
-          const googleUser = {
-            id: response.user.id,
-            username: email,
-            role: 'annotator' as const,
-            provider: 'google' as const
-          };
-          
-          setUser(googleUser);
-          localStorage.setItem(AUTH_CONFIG.STORAGE_KEYS.USER, JSON.stringify(googleUser));
-          return true;
+          toast.error('Email not authorized for login');
+          return false;
         }
       }
       toast.error('Failed to authenticate with Google');
@@ -233,6 +272,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const value = {
     user,
     login,
+    signup,
     googleLogin,
     logout,
     setUserRole,
