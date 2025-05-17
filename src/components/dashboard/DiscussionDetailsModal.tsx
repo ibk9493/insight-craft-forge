@@ -86,7 +86,7 @@ const DiscussionDetailsModal: React.FC<DiscussionDetailsModalProps> = ({
         )}
         
         <ScrollArea className="flex-grow">
-          <div className="space-y-4">
+          <div className="space-y-4 p-1">
             <div>
               <h3 className="text-lg font-medium mb-2">Title</h3>
               <div className="bg-gray-50 p-3 rounded-md">
@@ -98,8 +98,10 @@ const DiscussionDetailsModal: React.FC<DiscussionDetailsModalProps> = ({
             {questionData && (
               <div>
                 <h3 className="text-lg font-medium mb-2">Question</h3>
-                <div className="bg-gray-50 p-3 rounded-md">
-                  <pre className="whitespace-pre-wrap text-sm">{questionData}</pre>
+                <div className="bg-gray-50 p-3 rounded-md max-h-[30vh]">
+                  <ScrollArea className="h-full max-h-[30vh]">
+                    <pre className="whitespace-pre-wrap text-sm">{questionData}</pre>
+                  </ScrollArea>
                 </div>
               </div>
             )}
@@ -107,8 +109,10 @@ const DiscussionDetailsModal: React.FC<DiscussionDetailsModalProps> = ({
             {answerData && (
               <div>
                 <h3 className="text-lg font-medium mb-2">Answer</h3>
-                <div className="bg-gray-50 p-3 rounded-md">
-                  <pre className="whitespace-pre-wrap text-sm">{answerData}</pre>
+                <div className="bg-gray-50 p-3 rounded-md max-h-[30vh]">
+                  <ScrollArea className="h-full max-h-[30vh]">
+                    <pre className="whitespace-pre-wrap text-sm">{answerData}</pre>
+                  </ScrollArea>
                 </div>
               </div>
             )}
@@ -116,10 +120,12 @@ const DiscussionDetailsModal: React.FC<DiscussionDetailsModalProps> = ({
             {/* Show raw discussion data if available */}
             <div>
               <h3 className="text-lg font-medium mb-2">Raw Data</h3>
-              <div className="bg-gray-50 p-3 rounded-md">
-                <pre className="whitespace-pre-wrap text-xs overflow-auto">
-                  {JSON.stringify(discussion, null, 2)}
-                </pre>
+              <div className="bg-gray-50 p-3 rounded-md max-h-[30vh]">
+                <ScrollArea className="h-full max-h-[30vh]">
+                  <pre className="whitespace-pre-wrap text-xs">
+                    {JSON.stringify(discussion, null, 2)}
+                  </pre>
+                </ScrollArea>
               </div>
             </div>
           </div>
