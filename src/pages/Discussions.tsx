@@ -4,7 +4,7 @@ import Header from '@/components/layout/Header';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Github, ExternalLink, Filter } from 'lucide-react';
+import { Search, Github, ExternalLink, Filter, Code, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 import { useUser } from '@/contexts/UserContext';
 import { useAnnotationData } from '@/hooks/useAnnotationData';
@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { Badge } from "@/components/ui/badge";
 
 // Discussion type imported from api service
 import { Discussion, TaskState } from '@/services/api';
@@ -358,7 +359,6 @@ const Discussions = () => {
                       </CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-500">Created: {discussion.createdAt}</span>
                       <Button 
                         size="icon" 
                         variant="ghost" 
@@ -372,8 +372,24 @@ const Discussions = () => {
                 </CardHeader>
                 
                 <CardContent>
-                  <div className="text-sm text-gray-600 mb-4 truncate">
-                    <span className="font-medium">URL:</span> {discussion.url}
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="text-sm text-gray-600 truncate flex-grow">
+                      <span className="font-medium">URL:</span> {discussion.url}
+                    </div>
+                    <div className="flex items-center gap-3 ml-4">
+                      {discussion.repositoryLanguage && (
+                        <Badge variant="outline" className="flex items-center gap-1">
+                          <Code className="h-3.5 w-3.5" />
+                          <span>{discussion.repositoryLanguage}</span>
+                        </Badge>
+                      )}
+                      {discussion.createdAt && (
+                        <Badge variant="secondary" className="flex items-center gap-1">
+                          <Calendar className="h-3.5 w-3.5" />
+                          <span>{new Date(discussion.createdAt).toLocaleDateString()}</span>
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -422,7 +438,7 @@ const Discussions = () => {
                     {/* Task 3 */}
                     <div className="border rounded-md p-4">
                       <div className="flex justify-between items-center mb-2">
-                        <h3 className="font-medium">Task 3: Rewriting</h3>
+                        <h3 className="font-medium">Task 3: Rewrite</h3>
                         <span className={`text-xs px-2 py-1 rounded-full ${getTaskStatusClass(discussion.tasks.task3.status, discussion.tasks.task3.userAnnotated)}`}>
                           {discussion.tasks.task3.userAnnotated ? 'Annotated' : discussion.tasks.task3.status}
                         </span>
