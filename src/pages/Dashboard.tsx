@@ -1,4 +1,3 @@
-
 import React, { useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import UrlInput from '@/components/dashboard/UrlInput';
@@ -32,6 +31,7 @@ const Dashboard = () => {
     tasks,
     uploadedImage,
     codeDownloadUrl,
+    setCodeDownloadUrl,
     isPodLead,
     user,
     getUserAnnotation,
@@ -144,6 +144,17 @@ const Dashboard = () => {
       codeDownloadUrl, 
       handleBackToGrid
     );
+  };
+  
+  // Handle code URL change
+  const handleCodeUrlChange = (url: string) => {
+    setCodeDownloadUrl(url);
+  };
+  
+  // Validate code URLs
+  const validateCodeUrl = (url: string): boolean => {
+    return url.includes('github.com') && 
+      (url.includes('/archive/refs/tags/') || url.includes('/archive/refs/heads/'));
   };
 
   return (
@@ -304,6 +315,8 @@ const Dashboard = () => {
           onFileUpload={handleFileUpload}
           codeDownloadUrl={codeDownloadUrl}
           discussionId={discussionId || undefined}
+          onCodeUrlChange={handleCodeUrlChange}
+          onCodeUrlVerify={validateCodeUrl}
         />
       </div>
     </div>

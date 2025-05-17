@@ -1,10 +1,9 @@
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useUser } from '@/contexts/UserContext';
 import { useAnnotationData } from '@/hooks/useAnnotationData';
-import { SubTask, SubTaskStatus } from '@/components/dashboard/TaskCard';
+import { SubTask } from '@/components/dashboard/TaskCard';
 
 export function useDashboardState() {
   const navigate = useNavigate();
@@ -93,9 +92,6 @@ export function useDashboardState() {
     
     // Update URL with task parameters without full page reload
     navigate(`/dashboard?discussionId=${discussionId}&task=${taskId}`, { replace: true });
-    
-    // Note: loadUserAnnotation and prepareConsensusView will be handled in Dashboard.tsx
-    // with useAnnotationHandlers hook
   };
 
   const handleBackToGrid = useCallback(() => {
@@ -134,26 +130,27 @@ export function useDashboardState() {
   const toggleConsensusMode = () => {
     if (viewMode === 'detail') {
       setViewMode('consensus');
-      // Note: prepareConsensusView will be handled in Dashboard.tsx
-      // with useAnnotationHandlers hook
     } else {
       setViewMode('detail');
     }
   };
 
-  // Set code download URL when discussion ID is available
+  // Load code download URL from user's saved annotation if available
   useEffect(() => {
-    if (discussionId) {
-      // Find the discussion to get repository URL
-      const discussion = discussions.find(d => d.id === discussionId);
-      if (discussion) {
-        // In a real implementation, this would come from the API or a config file
-        // For now, we'll use a mock URL for demonstration
-        const repoName = discussion.repository || 'owner/repo';
-        setCodeDownloadUrl(`https://github.com/${repoName}/archive/refs/tags/latest.tar.gz`);
+    if (discussionId && user && currentStep === 2) {
+      const annotation = getUserAnnotation(discussionId, user.id, currentStep);
+      if (annotation && annotation.data.codeDownloadUrl) {
+        setCodeDownloadUrl(annotation.data.codeDownloadUrl as string);
+      } else if (!codeDownloadUrl) {
+        // If no URL in annotation, set a default from repository info
+        const discussion = discussions.find(d => d.id === discussionId);
+        if (discussion && discussion.repository) {
+          const repoName = discussion.repository;
+          setCodeDownloadUrl(`https://github.com/${repoName}/archive/refs/tags/latest.tar.gz`);
+        }
       }
     }
-  }, [discussionId, discussions]);
+  }, [discussionId, user, currentStep, discussions, getUserAnnotation]);
 
   // Load URL from query params or discussion entry
   useEffect(() => {

@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Home, Upload, Download, ListFilter, CheckCircle, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -14,7 +14,7 @@ interface DashboardNavigationProps {
   onSave: () => void;
   isConsensus: boolean;
   onFileUpload?: (file: File) => void;
-  codeDownloadUrl?: string;
+  codeDownloadUrl?: string | null;
   discussionId?: string;
   onCodeUrlChange?: (url: string) => void;
   onCodeUrlVerify?: (url: string) => boolean;
@@ -34,8 +34,17 @@ const DashboardNavigation = ({
   onCodeUrlVerify
 }: DashboardNavigationProps) => {
   const navigate = useNavigate();
-  const [codeUrl, setCodeUrl] = useState(codeDownloadUrl || '');
-  const [codeUrlVerified, setCodeUrlVerified] = useState(!!codeDownloadUrl);
+  const [codeUrl, setCodeUrl] = useState('');
+  const [codeUrlVerified, setCodeUrlVerified] = useState(false);
+  
+  // Initialize codeUrl from props when component mounts or when codeDownloadUrl changes
+  useEffect(() => {
+    if (codeDownloadUrl) {
+      setCodeUrl(codeDownloadUrl);
+      const isValid = onCodeUrlVerify ? onCodeUrlVerify(codeDownloadUrl) : isValidGithubUrl(codeDownloadUrl);
+      setCodeUrlVerified(isValid);
+    }
+  }, [codeDownloadUrl, onCodeUrlVerify]);
   
   // Handle file input change
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -150,10 +159,11 @@ const DashboardNavigation = ({
                     placeholder="https://github.com/owner/repo/archive/refs/tags/version.tar.gz"
                     className="flex-1"
                   />
-                  {codeUrlVerified ? 
-                    <CheckCircle className="h-5 w-5 text-green-500" /> : 
-                    codeUrl ? <XCircle className="h-5 w-5 text-red-500" /> : null
-                  }
+                  {codeUrl && (
+                    codeUrlVerified ? 
+                      <CheckCircle className="h-5 w-5 text-green-500" /> : 
+                      <XCircle className="h-5 w-5 text-red-500" />
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2 mt-6">
