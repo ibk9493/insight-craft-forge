@@ -10,16 +10,22 @@ import SystemReports from '@/components/admin/SystemReports';
 import BatchManager from '@/components/admin/BatchManager';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"; 
 import { useAnnotationData } from '@/hooks/useAnnotationData';
-import { Loader, Settings, Upload, Users, FileText, Package } from 'lucide-react';
+import { Loader, Settings, Upload, Users, FileText, Package, BarChart3, CheckSquare, Shield } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import UserAccessManager from '@/components/admin/UserAccessManager';
+import AnalyticsDashboard from '@/components/admin/analytics/AnalyticsDashboard';
+import BulkTaskManager from '@/components/admin/bulk/BulkTaskManager';
+import AnnotationQuality from '@/components/admin/quality/AnnotationQuality';
+import { api, SystemSummary } from '@/services/api';
 
 const Admin = () => {
   const { isAuthenticated, isPodLead, isAdmin, user } = useUser();
   const navigate = useNavigate();
   const { discussions, loading, error } = useAnnotationData();
-  const [activeTab, setActiveTab] = useState("task-management");
+  const [activeTab, setActiveTab] = useState("analytics-dashboard");
+  const [systemSummary, setSystemSummary] = useState<SystemSummary | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
   
   // Redirect if not authenticated or not admin/pod lead
   useEffect(() => {
@@ -32,11 +38,39 @@ const Admin = () => {
       navigate('/dashboard');
       return;
     }
+
+    // Fetch system summary data if admin
+    if (isAdmin) {
+      loadSystemSummary();
+    }
   }, [isAuthenticated, isPodLead, isAdmin, navigate]);
   
+  const loadSystemSummary = async () => {
+    setSummaryLoading(true);
+    try {
+      const summary = await api.summary.getSystemSummary();
+      setSystemSummary(summary);
+    } catch (err) {
+      console.error('Error fetching system summary:', err);
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
   const handleDiscussionUpdated = (updatedDiscussion: any) => {
     console.log('Discussion updated:', updatedDiscussion);
     // In a real app, we would refresh the discussions list
+  };
+
+  const handleExportReport = async (format: 'csv' | 'json') => {
+    try {
+      const { downloadUrl } = await api.summary.downloadReport(format);
+      if (downloadUrl) {
+        window.open(downloadUrl, '_blank');
+      }
+    } catch (err) {
+      console.error('Error exporting report:', err);
+    }
   };
   
   if (loading) {
@@ -100,15 +134,33 @@ const Admin = () => {
         
         <TabsContainer value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabList>
+            {isAdmin && (
+              <Tab value="analytics-dashboard" className="flex items-center gap-2">
+                <BarChart3 className="h-4 w-4" />
+                <span>Analytics</span>
+              </Tab>
+            )}
             <Tab value="task-management" className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
               <span>Task Management</span>
             </Tab>
-            {isPodLead && (
-              <Tab value="consensus-review" className="flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                <span>Consensus Review</span>
+            {isAdmin && (
+              <Tab value="bulk-tasks" className="flex items-center gap-2">
+                <CheckSquare className="h-4 w-4" />
+                <span>Bulk Tasks</span>
               </Tab>
+            )}
+            {isPodLead && (
+              <>
+                <Tab value="annotation-quality" className="flex items-center gap-2">
+                  <Shield className="h-4 w-4" />
+                  <span>Quality Metrics</span>
+                </Tab>
+                <Tab value="consensus-review" className="flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  <span>Consensus Review</span>
+                </Tab>
+              </>
             )}
             {isAdmin && (
               <>
@@ -132,6 +184,26 @@ const Admin = () => {
             )}
           </TabList>
           
+          {/* Analytics Dashboard Tab - Admin Only */}
+          {isAdmin && (
+            <TabPanel value="analytics-dashboard">
+              <div className="mb-4">
+                <h2 className="text-lg font-medium">Analytics Dashboard</h2>
+                <p className="text-sm text-gray-500">
+                  Track annotation metrics and performance
+                </p>
+              </div>
+              
+              {systemSummary && (
+                <AnalyticsDashboard 
+                  systemSummary={systemSummary}
+                  isLoading={summaryLoading}
+                  onExport={handleExportReport}
+                />
+              )}
+            </TabPanel>
+          )}
+
           {/* Task Management Tab - Available to both Pod Lead and Admin */}
           <TabPanel value="task-management">
             <div className="mb-4">
@@ -146,6 +218,39 @@ const Admin = () => {
               onTaskUpdated={handleDiscussionUpdated}
             />
           </TabPanel>
+
+          {/* Bulk Task Management Tab - Admin Only */}
+          {isAdmin && (
+            <TabPanel value="bulk-tasks">
+              <div className="mb-4">
+                <h2 className="text-lg font-medium">Bulk Task Management</h2>
+                <p className="text-sm text-gray-500">
+                  Update multiple tasks at once
+                </p>
+              </div>
+              
+              <BulkTaskManager
+                discussions={discussions}
+                onTaskUpdated={(updatedDiscussions) => {
+                  console.log(`Updated ${updatedDiscussions.length} discussions`);
+                }}
+              />
+            </TabPanel>
+          )}
+
+          {/* Annotation Quality Tab - Pod Lead */}
+          {isPodLead && (
+            <TabPanel value="annotation-quality">
+              <div className="mb-4">
+                <h2 className="text-lg font-medium">Annotation Quality</h2>
+                <p className="text-sm text-gray-500">
+                  Monitor annotation quality and inter-annotator agreement
+                </p>
+              </div>
+              
+              <AnnotationQuality />
+            </TabPanel>
+          )}
           
           {/* Consensus Review Tab - Available to Pod Lead */}
           {isPodLead && (

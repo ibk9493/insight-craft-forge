@@ -1,7 +1,7 @@
 import { apiRequest } from './helpers';
 import { Discussion, Annotation, TaskStatus, GitHubDiscussion, UploadResult, 
          TaskManagementResult, UserRole, SystemSummary, UserSummary, 
-         BatchUpload, BatchManagementResult } from './types';
+         BatchUpload, BatchManagementResult, BulkTaskUpdate, BulkActionResult } from './types';
 
 /**
  * API endpoint functions for the SWE-QA Annotation System
@@ -173,10 +173,48 @@ export const api = {
       });
     },
     
+    // NEW: Bulk update task status
+    bulkUpdateTaskStatus: (discussionIds: string[], taskId: number, status: TaskStatus) => {
+      console.log(`[Admin] Bulk updating task status for ${discussionIds.length} discussions, Task ${taskId} to ${status}`);
+      return safeApiRequest<BulkActionResult>('/admin/tasks/bulk-status', 'PUT', {
+        discussionIds,
+        taskId,
+        status
+      }, undefined, {
+        success: false,
+        message: 'Failed to bulk update task status',
+        updatedCount: 0,
+        failedCount: 0
+      });
+    },
+    
     // Override annotation values
     overrideAnnotation: (annotation: Annotation) => {
       console.log('[Admin] Overriding annotation:', annotation.discussionId, annotation.taskId);
       return safeApiRequest<Annotation>('/admin/annotations/override', 'PUT', annotation, undefined, {} as Annotation);
+    },
+    
+    // NEW: Get quality metrics
+    getQualityMetrics: () => {
+      console.log('[Admin] Getting annotation quality metrics');
+      return safeApiRequest<{
+        discussionId: string,
+        title: string,
+        agreementScore: number,
+        annotatorCount: number,
+        conflictAreas: string[]
+      }[]>('/admin/quality/metrics', 'GET', undefined, undefined, []);
+    },
+    
+    // NEW: Get annotator performance
+    getAnnotatorPerformance: () => {
+      console.log('[Admin] Getting annotator performance data');
+      return safeApiRequest<{
+        userId: string,
+        completedTasks: number,
+        averageTime: number,
+        agreement: number
+      }[]>('/admin/quality/performance', 'GET', undefined, undefined, []);
     }
   },
   
@@ -256,6 +294,23 @@ export const api = {
       return safeApiRequest<{downloadUrl: string}>(`/api/summary/report?format=${format}`, 'GET', undefined, undefined, {
         downloadUrl: ''
       });
+    },
+    
+    // NEW: Get annotation activity data
+    getAnnotationActivity: (fromDate?: string, toDate?: string) => {
+      const dateParams = [];
+      if (fromDate) dateParams.push(`fromDate=${fromDate}`);
+      if (toDate) dateParams.push(`toDate=${toDate}`);
+      const queryString = dateParams.length > 0 ? `?${dateParams.join('&')}` : '';
+      
+      console.log(`[Summary] Getting annotation activity data${queryString}`);
+      return safeApiRequest<{date: string, count: number}[]>(`/api/summary/activity${queryString}`, 'GET', undefined, undefined, []);
+    },
+    
+    // NEW: Get repository breakdown
+    getRepositoryBreakdown: () => {
+      console.log('[Summary] Getting repository breakdown');
+      return safeApiRequest<{repository: string, count: number}[]>('/api/summary/repositories', 'GET', undefined, undefined, []);
     }
   }
 };

@@ -140,3 +140,43 @@ export interface UserSummary {
   task3Completed: number;
   totalTasksCompleted: number;
 }
+
+// Analytics types
+export interface AnnotationActivity {
+  date: string;
+  count: number;
+}
+
+export interface RepositoryBreakdown {
+  repository: string;
+  count: number;
+}
+
+export interface AnnotatorPerformance {
+  userId: string;
+  completedTasks: number;
+  averageTime: number;
+  agreement: number;
+}
+
+export interface QualityMetrics {
+  discussionId: string;
+  title: string;
+  agreementScore: number;
+  annotatorCount: number;
+  conflictAreas: string[];
+}
+
+// Bulk action types
+export interface BulkTaskUpdate {
+  discussionIds: string[];
+  taskId: number;
+  status: TaskStatus;
+}
+
+export interface BulkActionResult {
+  success: boolean;
+  message: string;
+  updatedCount: number;
+  failedCount: number;
+}
