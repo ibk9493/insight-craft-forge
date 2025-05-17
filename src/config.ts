@@ -3,11 +3,11 @@
 
 // API configuration
 export const API_CONFIG = {
-  // Base URL for the API
-  BASE_URL: import.meta.env.VITE_API_URL || 'https://api-mock.example.com',
+  // Base URL for the API - ensure it ends with '/api'
+  BASE_URL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api',
   
   // Whether to use mock data
-  USE_MOCK: import.meta.env.VITE_USE_MOCK_DATA === 'true' || !import.meta.env.VITE_API_URL,
+  USE_MOCK: import.meta.env.VITE_USE_MOCK_DATA === 'true' || true, // Default to mock data if not specified
   
   // API endpoints
   ENDPOINTS: {
@@ -22,7 +22,7 @@ export const API_CONFIG = {
   // Default request headers
   HEADERS: {
     'Content-Type': 'application/json',
-    'X-API-Key': import.meta.env.VITE_API_KEY || ''
+    'X-API-Key': import.meta.env.VITE_API_KEY || 'development_api_key'
   }
 };
 

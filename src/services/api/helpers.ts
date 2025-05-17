@@ -1,6 +1,8 @@
+
 import { toast } from 'sonner';
 import { ApiError } from './types';
 import { mockDiscussions, mockAnnotations } from './mockData';
+import { API_CONFIG } from '@/config';
 
 /**
  * API base configuration values from environment variables
@@ -8,6 +10,23 @@ import { mockDiscussions, mockAnnotations } from './mockData';
 export const API_URL = import.meta.env.VITE_API_URL || '';
 export const API_KEY = import.meta.env.VITE_API_KEY || '';
 export const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA === 'true';
+
+/**
+ * Properly formats the API URL to ensure it doesn't have duplicate slashes
+ * @param endpoint - The API endpoint to format
+ * @returns The properly formatted API URL
+ */
+export const formatApiUrl = (endpoint: string): string => {
+  if (!API_URL) return endpoint; // If no API URL, just return the endpoint
+  
+  // Remove leading slash from endpoint if it exists
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint;
+  
+  // Ensure API_URL ends with a slash
+  const baseUrl = API_URL.endsWith('/') ? API_URL : `${API_URL}/`;
+  
+  return `${baseUrl}${cleanEndpoint}`;
+};
 
 /**
  * Handles API responses and performs error checking
@@ -85,6 +104,12 @@ export const apiRequest = async <T>(
   headers?: Record<string, string>
 ): Promise<T> => {
   try {
+    // If mock data is enabled, use mock data directly
+    if (USE_MOCK_DATA || import.meta.env.DEV) {
+      console.info(`Using mock data for: ${endpoint}`);
+      return getMockData<T>(endpoint);
+    }
+    
     const requestHeaders = {
       'Content-Type': 'application/json',
       'X-API-Key': API_KEY,
@@ -107,9 +132,13 @@ export const apiRequest = async <T>(
       }
     }
 
+    // Format the API URL properly
+    const formattedUrl = formatApiUrl(endpoint);
+    console.debug(`Making API request to: ${formattedUrl}`);
+    
     // Try to make the actual API call
     try {
-      const response = await fetch(`${API_URL}${endpoint}`, config);
+      const response = await fetch(formattedUrl, config);
       return await handleResponse<T>(response);
     } catch (apiError) {
       console.error('API Error:', apiError);
