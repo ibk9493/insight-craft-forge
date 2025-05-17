@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
@@ -43,12 +44,12 @@ export const useUser = () => {
 
 // Mock users for demonstration - clear distinction between Pod Lead and Admin
 const MOCK_USERS = [
-  { id: '1', username: 'annotator1', password: 'password', role: 'annotator' as const },
-  { id: '2', username: 'annotator2', password: 'password', role: 'annotator' as const },
-  { id: '3', username: 'annotator3', password: 'password', role: 'annotator' as const },
-  { id: '4', username: 'lead', password: 'password', role: 'pod_lead' as const },
-  { id: '5', username: 'google.user@example.com', provider: 'google', role: 'annotator' as const },
-  { id: '6', username: 'admin', password: 'admin123', role: 'admin' as const },
+  { id: '1', username: 'annotator1', password: 'password', role: 'annotator' as UserRole },
+  { id: '2', username: 'annotator2', password: 'password', role: 'annotator' as UserRole },
+  { id: '3', username: 'annotator3', password: 'password', role: 'annotator' as UserRole },
+  { id: '4', username: 'lead', password: 'password', role: 'pod_lead' as UserRole },
+  { id: '5', username: 'google.user@example.com', provider: 'google', role: 'annotator' as UserRole },
+  { id: '6', username: 'admin', password: 'admin123', role: 'admin' as UserRole },
 ];
 
 export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) => {

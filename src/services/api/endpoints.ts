@@ -1,6 +1,5 @@
-
 import { apiRequest } from './helpers';
-import { Discussion, Annotation, TaskStatus, GitHubDiscussion, UploadResult, TaskManagementResult } from './types';
+import { Discussion, Annotation, TaskStatus, GitHubDiscussion, UploadResult, TaskManagementResult, UserRole } from './types';
 
 /**
  * API endpoint functions for the SWE-QA Annotation System
@@ -36,7 +35,7 @@ export const api = {
   // Discussion endpoints
   discussions: {
     getAll: () => safeApiRequest<Discussion[]>('/discussions', 'GET', undefined, undefined, []),
-    getById: (id: string) => safeApiRequest<Discussion>(`/discussions/${id}`, 'GET', undefined, undefined, null),
+    getById: (id: string) => safeApiRequest<Discussion>(`/discussions/${id}`, 'GET', undefined, undefined, null as any),
     getByStatus: (status: TaskStatus) => 
       safeApiRequest<Discussion[]>(`/discussions?status=${status}`, 'GET', undefined, undefined, []),
   },
