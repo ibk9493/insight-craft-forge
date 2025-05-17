@@ -118,7 +118,7 @@ const DashboardNavigation = ({
 
       {viewMode !== 'grid' && currentStep === 2 && (
         <div className="flex flex-col gap-4 mt-2">
-          {/* File upload button for manual code execution check */}
+          {/* File upload button for screenshots */}
           <div className="flex items-center">
             <input
               type="file"
@@ -161,6 +161,7 @@ const DashboardNavigation = ({
                   id="url-verified" 
                   checked={codeUrlVerified}
                   className="data-[state=checked]:bg-green-500"
+                  disabled
                 />
                 <label htmlFor="url-verified" className="text-sm">
                   {codeUrlVerified ? 'URL Valid' : 'URL Invalid'}
