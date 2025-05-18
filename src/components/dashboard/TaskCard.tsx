@@ -119,7 +119,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                     {task.options.map((option) => (
                       <button
                         key={option}
-                        onClick={() => onSubTaskChange(task.id, option)}
+                        onClick={() => onSubTaskChange(task.id, option, task.textValue)}
                         className={cn(
                           "text-xs py-1 px-3 rounded-full",
                           task.selectedOption === option
@@ -133,15 +133,21 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   </div>
                 )}
                 
-                {/* Textarea - completely simplified for better input handling */}
+                {/* Textarea - with isolated event handling */}
                 {shouldShowRemarks(task) && (
                   <div className="mt-3">
                     <Textarea
                       value={task.textValue || ''}
-                      onChange={(e) => onSubTaskChange(task.id, task.selectedOption, e.target.value)}
+                      onChange={(e) => {
+                        // Use stopPropagation only for click events
+                        e.stopPropagation();
+                        // Always pass the task.id, current selectedOption, and new text value
+                        onSubTaskChange(task.id, task.selectedOption, e.target.value);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
                       placeholder={`Enter ${task.textInput ? task.title.toLowerCase() : 'remarks or justification'}`}
                       className="min-h-[100px] text-sm w-full"
-                      onClick={(e) => e.stopPropagation()}
                     />
                   </div>
                 )}

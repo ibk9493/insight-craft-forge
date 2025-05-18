@@ -1,3 +1,4 @@
+
 import React, { useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import UrlInput from '@/components/dashboard/UrlInput';
@@ -251,15 +252,15 @@ const Dashboard = () => {
               )}
             </div>
             
-            {/* Task cards for different steps */}
+            {/* Task cards for different steps - UPDATED to include textValue parameter */}
             {currentStep === TaskId.QUESTION_QUALITY && viewMode === 'detail' && (
               <TaskCard
                 title="Task 1: Question Quality Assessment"
                 description="Evaluate the quality of the question based on relevance, learning value, clarity, and image grounding."
                 subTasks={task1SubTasks}
                 status={getTask1Progress()}
-                onSubTaskChange={(taskId, selectedOption) => 
-                  handleSubTaskChange('task1', taskId, selectedOption)
+                onSubTaskChange={(taskId, selectedOption, textValue) => 
+                  handleSubTaskChange('task1', taskId, selectedOption, textValue)
                 }
                 active={true}
               />
