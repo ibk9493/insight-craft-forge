@@ -20,31 +20,68 @@ const Toaster = ({ ...props }: ToasterProps) => {
           cancelButton:
             "group-[.toast]:bg-muted group-[.toast]:text-muted-foreground",
         },
-        // Ensure objects are properly stringified before rendering
-        formatToast: (toast) => {
-          // Make sure toast message is a string
-          if (typeof toast.message === 'object') {
-            try {
-              toast.message = JSON.stringify(toast.message);
-            } catch (e) {
-              toast.message = '[Object]';
-            }
-          }
-          // Make sure toast description is a string
-          if (toast.description && typeof toast.description === 'object') {
-            try {
-              toast.description = JSON.stringify(toast.description);
-            } catch (e) {
-              toast.description = '[Object]';
-            }
-          }
-          return toast;
-        },
       }}
       {...props}
     />
   )
 }
 
-export { Toaster }
-export { toast } from "sonner"
+// Create a custom wrapper for toast to ensure objects are stringified
+const customToast = (() => {
+  // Import the original toast
+  const { toast: originalToast } = require("sonner");
+  
+  // Create our wrapped version
+  const wrappedToast = {
+    ...originalToast,
+    // Override the default methods to handle object messages
+    error: (message: any, data?: any) => {
+      const stringMessage = formatToastMessage(message);
+      return originalToast.error(stringMessage, data);
+    },
+    success: (message: any, data?: any) => {
+      const stringMessage = formatToastMessage(message);
+      return originalToast.success(stringMessage, data);
+    },
+    info: (message: any, data?: any) => {
+      const stringMessage = formatToastMessage(message);
+      return originalToast.info(stringMessage, data);
+    },
+    warning: (message: any, data?: any) => {
+      const stringMessage = formatToastMessage(message);
+      return originalToast.warning(stringMessage, data);
+    },
+    // Default method
+    default: (message: any, data?: any) => {
+      const stringMessage = formatToastMessage(message);
+      return originalToast(stringMessage, data);
+    },
+  };
+  
+  // Make the default function callable directly
+  const toast = (message: any, data?: any) => wrappedToast.default(message, data);
+  
+  // Add all the methods to the callable function
+  Object.assign(toast, wrappedToast);
+  
+  return toast as typeof originalToast;
+})();
+
+// Helper function to format toast messages
+const formatToastMessage = (message: any): string => {
+  if (message === null) return 'null';
+  if (message === undefined) return 'undefined';
+  
+  if (typeof message === 'object') {
+    try {
+      return JSON.stringify(message);
+    } catch (e) {
+      return '[Object]';
+    }
+  }
+  
+  return String(message);
+};
+
+export { Toaster };
+export { customToast as toast };

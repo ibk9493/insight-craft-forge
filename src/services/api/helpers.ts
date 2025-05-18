@@ -1,5 +1,4 @@
-
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 import { ApiError } from './types';
 import { mockDiscussions, mockAnnotations } from './mockData';
 import { API_CONFIG } from '@/config';
