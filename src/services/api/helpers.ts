@@ -1,3 +1,4 @@
+
 import { toast } from 'sonner';
 import { ApiError } from './types';
 import { mockDiscussions, mockAnnotations } from './mockData';
@@ -109,13 +110,7 @@ export const apiRequest = async <T>(
   body?: unknown,
   headers?: Record<string, string>
 ): Promise<T> => {
-  console.info(`[API Request] ${method} ${endpoint} - Mock data enabled: ${USE_MOCK_DATA}`);
-  
-  // Check if we should use mock data based on config
-  if (USE_MOCK_DATA) {
-    console.info(`[API Mock] Using mock data for: ${endpoint}`);
-    return getMockData<T>(endpoint);
-  }
+  console.info(`[API Request] ${method} ${endpoint} - Mock data disabled`);
   
   try {
     const requestHeaders = {
@@ -154,14 +149,7 @@ export const apiRequest = async <T>(
     const endTime = performance.now();
     console.log(`[API Timing] Request to ${endpoint} took ${(endTime - startTime).toFixed(2)}ms`);
     
-    try {
-      return await handleResponse<T>(response);
-    } catch (apiError) {
-      console.error('[API Error]:', apiError);
-      
-      // Don't fall back to mock data anymore
-      throw apiError;
-    }
+    return await handleResponse<T>(response);
   } catch (error) {
     if ((error as ApiError).message) {
       toast.error((error as ApiError).message);
@@ -169,25 +157,13 @@ export const apiRequest = async <T>(
       toast.error('An error occurred while connecting to the server');
     }
     
-    // Don't fall back to mock data in development anymore
+    // Don't fall back to mock data anymore
     throw error;
   }
 };
 
-// Helper function to get mock data based on endpoint - keeping this for reference but not using it anymore
+// Helper function to get mock data based on endpoint - not used anymore
 export function getMockData<T>(endpoint: string): T {
-  console.log('[API Mock] Getting mock data for endpoint:', endpoint);
-  
-  // Return empty results by default
-  console.log('[API Mock] No specific mock data for endpoint, returning empty fallback');
-  
-  // Try to infer the appropriate default value based on usage patterns and endpoint name
-  if (endpoint.includes('list') || endpoint.endsWith('s') || 
-      endpoint.includes('all') || endpoint.includes('get')) {
-    // For endpoints likely returning lists
-    return ([] as unknown) as T;
-  } else {
-    // For endpoints likely returning objects
-    return ({} as unknown) as T;
-  }
+  console.error('[API Error] Mock data is disabled. This function should not be called.');
+  throw new Error('Mock data is disabled');
 }

@@ -122,6 +122,21 @@ export interface BatchBreakdown {
   discussions: number;
 }
 
+export interface TrainerBreakdown {
+  trainer_id: string;
+  total_annotations: number;
+  task1_count: number;
+  task2_count: number;
+  task3_count: number;
+}
+
+export interface TaskProgression {
+  stuck_in_task1: number;
+  stuck_in_task2: number;
+  reached_task3: number;
+  fully_completed: number;
+}
+
 export interface SystemSummary {
   totalDiscussions: number;
   task1Completed: number;
@@ -132,6 +147,9 @@ export interface SystemSummary {
   uniqueAnnotators: number;
   totalBatches: number;
   batchesBreakdown: BatchBreakdown[];
+  trainerBreakdown: TrainerBreakdown[];
+  taskProgression: TaskProgression;
+  consensus_annotations: number;
 }
 
 export interface UserSummary {
