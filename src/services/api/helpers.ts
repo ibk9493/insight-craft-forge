@@ -1,4 +1,3 @@
-
 import { toast } from 'sonner';
 import { ApiError } from './types';
 import { mockDiscussions, mockAnnotations } from './mockData';
@@ -9,7 +8,7 @@ import { API_CONFIG } from '@/config';
  */
 export const API_URL = API_CONFIG.BASE_URL;
 export const API_KEY = API_CONFIG.HEADERS['X-API-Key'];
-export const USE_MOCK_DATA = API_CONFIG.USE_MOCK;
+export const USE_MOCK_DATA = false; // Set this to false to disable mock data
 
 /**
  * Properly formats the API URL to ensure it doesn't have duplicate slashes
@@ -160,12 +159,7 @@ export const apiRequest = async <T>(
     } catch (apiError) {
       console.error('[API Error]:', apiError);
       
-      // Only fall back to mock data if API call failed and we're in dev mode
-      if (import.meta.env.DEV) {
-        console.warn('[API Fallback] API call failed. Falling back to mock data for:', endpoint);
-        return getMockData<T>(endpoint);
-      }
-      
+      // Don't fall back to mock data anymore
       throw apiError;
     }
   } catch (error) {
@@ -175,224 +169,16 @@ export const apiRequest = async <T>(
       toast.error('An error occurred while connecting to the server');
     }
     
-    // In development, return mock data as a fallback
-    if (import.meta.env.DEV) {
-      console.warn('[API Fallback] Using mock data as fallback for:', endpoint);
-      return getMockData<T>(endpoint);
-    }
-    
+    // Don't fall back to mock data in development anymore
     throw error;
   }
 };
 
-// Helper function to get mock data based on endpoint
+// Helper function to get mock data based on endpoint - keeping this for reference but not using it anymore
 export function getMockData<T>(endpoint: string): T {
   console.log('[API Mock] Getting mock data for endpoint:', endpoint);
   
-  // Parse the endpoint to determine what data to return
-  if (endpoint.startsWith('/discussions')) {
-    // Return all discussions or a specific one
-    const idMatch = endpoint.match(/\/discussions\/(.+)/);
-    if (idMatch) {
-      const id = idMatch[1];
-      console.log(`[API Mock] Looking for discussion with ID: ${id}`);
-      const discussion = mockDiscussions.find(d => d.id === id);
-      return discussion as unknown as T || ({} as unknown as T);
-    }
-    return mockDiscussions as unknown as T;
-  }
-  
-  if (endpoint.startsWith('/annotations')) {
-    // Parse query parameters
-    const urlParams = new URLSearchParams(endpoint.split('?')[1]);
-    const discussionId = urlParams.get('discussionId');
-    const userId = urlParams.get('userId');
-    const taskId = urlParams.get('taskId');
-    
-    console.log(`[API Mock] Looking for annotations with discussionId: ${discussionId}, userId: ${userId}, taskId: ${taskId}`);
-    
-    let filtered = [...mockAnnotations];
-    
-    if (discussionId) {
-      filtered = filtered.filter(a => a.discussionId === discussionId);
-    }
-    
-    if (userId) {
-      filtered = filtered.filter(a => a.userId === userId);
-    }
-    
-    if (taskId) {
-      filtered = filtered.filter(a => a.taskId === Number(taskId));
-    }
-    
-    // If specific user and task, return a single annotation
-    if (userId && taskId && discussionId && filtered.length > 0) {
-      return filtered[0] as unknown as T;
-    }
-    
-    return filtered as unknown as T;
-  }
-  
-  if (endpoint.startsWith('/consensus')) {
-    // Mock consensus calculation
-    if (endpoint.includes('calculate')) {
-      return {
-        result: 'Agreement',
-        agreement: true
-      } as unknown as T;
-    }
-    
-    // Mock get consensus
-    return {
-      discussionId: 'github-123',
-      userId: 'consensus',
-      taskId: 1,
-      data: { relevance: true, learning_value: true, clarity: true },
-      timestamp: '2025-04-20T12:00:00Z'
-    } as unknown as T;
-  }
-  
-  if (endpoint.startsWith('/admin/tasks/status')) {
-    // Mock task status update
-    return {
-      success: true,
-      message: 'Task status updated successfully',
-      discussion: {
-        id: 'mock-123',
-        title: 'Mock Discussion',
-        url: 'https://github.com/org/repo/discussions/1',
-        repository: 'org/repo',
-        createdAt: '2025-05-01T00:00:00Z',
-        repositoryLanguage: 'TypeScript',
-        releaseTag: 'v1.0.0',
-        tasks: {
-          task1: { status: 'unlocked', annotators: 0 },
-          task2: { status: 'locked', annotators: 0 },
-          task3: { status: 'locked', annotators: 0 }
-        }
-      }
-    } as unknown as T;
-  }
-  
-  if (endpoint.startsWith('/admin/discussions/upload')) {
-    // Mock upload discussions
-    return {
-      success: true,
-      message: 'Successfully uploaded 3 discussions',
-      discussionsAdded: 3,
-      errors: []
-    } as unknown as T;
-  }
-  
-  if (endpoint.startsWith('/auth/authorized-users')) {
-    console.log('[API Mock] Returning mock authorized users');
-    return [
-      { email: 'admin@example.com', role: 'admin' },
-      { email: 'lead@example.com', role: 'pod_lead' },
-      { email: 'annotator1@example.com', role: 'annotator' }
-    ] as unknown as T;
-  }
-  
-  if (endpoint.startsWith('/api/batches') || endpoint === '/batches') {
-    // For batch endpoints, always return an array for list endpoints
-    if (endpoint === '/api/batches' || endpoint === '/batches') {
-      console.log('[API Mock] Returning mock batches list');
-      return ([
-        {
-          id: 1,
-          name: 'May 2025 Batch',
-          description: 'Discussions from May 2025',
-          created_at: '2025-05-01T00:00:00Z',
-          created_by: 'admin@example.com',
-          discussion_count: 45
-        },
-        {
-          id: 2,
-          name: 'April 2025 Batch',
-          description: 'Discussions from April 2025',
-          created_at: '2025-04-01T00:00:00Z',
-          created_by: 'admin@example.com',
-          discussion_count: 32
-        }
-      ]) as unknown as T;
-    }
-    
-    // For specific batch ID, return a single batch
-    const batchIdMatch = endpoint.match(/\/batches\/(\d+)$/);
-    if (batchIdMatch) {
-      const batchId = parseInt(batchIdMatch[1]);
-      console.log(`[API Mock] Looking for batch with ID: ${batchId}`);
-      return {
-        id: batchId,
-        name: `Batch ${batchId}`,
-        description: `Description for batch ${batchId}`,
-        created_at: '2025-05-01T00:00:00Z',
-        created_by: 'admin@example.com',
-        discussion_count: 20
-      } as unknown as T;
-    }
-    
-    // For batch discussions, return an array of discussions
-    const batchDiscussionsMatch = endpoint.match(/\/batches\/(\d+)\/discussions/);
-    if (batchDiscussionsMatch) {
-      console.log('[API Mock] Returning mock batch discussions');
-      return mockDiscussions.slice(0, 5) as unknown as T;
-    }
-  }
-  
-  // For system summary stats
-  if (endpoint.startsWith('/api/summary/stats')) {
-    console.log('[API Mock] Returning mock system summary stats');
-    return {
-      totalDiscussions: 125,
-      task1Completed: 85,
-      task2Completed: 62,
-      task3Completed: 41,
-      totalTasksCompleted: 188,
-      totalAnnotations: 356,
-      uniqueAnnotators: 12,
-      totalBatches: 5,
-      batchesBreakdown: [
-        { name: 'May 2025', discussions: 45 },
-        { name: 'April 2025', discussions: 32 },
-        { name: 'March 2025', discussions: 28 },
-        { name: 'February 2025', discussions: 15 },
-        { name: 'January 2025', discussions: 5 }
-      ]
-    } as unknown as T;
-  }
-
-  // For annotation activity data
-  if (endpoint.startsWith('/api/summary/activity')) {
-    console.log('[API Mock] Returning mock annotation activity data');
-    const mockData = [];
-    const now = new Date();
-    for (let i = 14; i >= 0; i--) {
-      const date = new Date(now);
-      date.setDate(date.getDate() - i);
-      mockData.push({
-        date: date.toISOString().split('T')[0],
-        count: Math.floor(Math.random() * 30) + 5
-      });
-    }
-    return mockData as unknown as T;
-  }
-  
-  // For repository breakdown
-  if (endpoint.startsWith('/api/summary/repositories')) {
-    console.log('[API Mock] Returning mock repository breakdown data');
-    return [
-      { repository: 'react', count: 25 },
-      { repository: 'typescript', count: 18 },
-      { repository: 'pytorch', count: 15 },
-      { repository: 'tensorflow', count: 12 },
-      { repository: 'langchain', count: 10 },
-      { repository: 'fastapi', count: 8 },
-      { repository: 'django', count: 7 }
-    ] as unknown as T;
-  }
-  
-  // Default empty response - use appropriate defaults based on expected return type
+  // Return empty results by default
   console.log('[API Mock] No specific mock data for endpoint, returning empty fallback');
   
   // Try to infer the appropriate default value based on usage patterns and endpoint name
