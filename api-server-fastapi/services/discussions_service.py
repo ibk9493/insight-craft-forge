@@ -1,6 +1,5 @@
-
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, exc
 import models
 import schemas
 import re
@@ -8,9 +7,47 @@ import requests
 from datetime import datetime
 import logging
 from typing import List, Optional, Tuple, Dict, Any
+from contextlib import contextmanager
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+class DiscussionNotFoundError(Exception):
+    """Raised when a discussion cannot be found."""
+    pass
+
+class DatabaseError(Exception):
+    """Raised when a database operation fails."""
+    pass
+
+class ValidationError(Exception):
+    """Raised when input validation fails."""
+    pass
+
+@contextmanager
+def transaction_scope(db: Session):
+    """Provide a transactional scope around a series of operations."""
+    try:
+        yield
+        db.commit()
+    except exc.SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"Database error: {str(e)}")
+        raise DatabaseError(f"Database operation failed: {str(e)}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Transaction error: {str(e)}")
+        raise
+
+def validate_discussion_data(discussion: schemas.GitHubDiscussion) -> None:
+    """Validate discussion data."""
+    if not discussion.url:
+        raise ValidationError("Discussion URL cannot be empty")
+    
+    if not discussion.url.startswith("https://"):
+        raise ValidationError("Discussion URL must start with https://")
+    
+    # Add more validation rules as needed
 
 def get_discussions(db: Session, status: Optional[str] = None) -> List[schemas.Discussion]:
     """
@@ -28,72 +65,23 @@ def get_discussions(db: Session, status: Optional[str] = None) -> List[schemas.D
         query = db.query(models.Discussion)
         
         if status:
+            valid_statuses = ['completed', 'unlocked', 'locked']
+            if status not in valid_statuses:
+                logger.warning(f"Invalid status filter: {status}")
+                return []
+                
             # Get discussions based on task status
             if status == 'completed':
                 # All tasks should be completed
-                completed_discussions = []
-                all_discussions = query.all()
-                
-                for discussion in all_discussions:
-                    task_assocs = db.query(models.discussion_task_association).filter(
-                        models.discussion_task_association.c.discussion_id == discussion.id
-                    ).all()
-                    
-                    all_completed = all(task.status == 'completed' for task in task_assocs)
-                    if all_completed:
-                        completed_discussions.append(discussion)
-                
-                logger.info(f"Found {len(completed_discussions)} completed discussions")
-                discussions_with_tasks = []
-                for disc in completed_discussions:
-                    discussion = get_discussion_by_id(db, disc.id)
-                    if discussion:
-                        discussions_with_tasks.append(discussion)
-                return discussions_with_tasks
+                return _get_discussions_with_status(db, status, lambda tasks: all(task.status == 'completed' for task in tasks))
                 
             elif status == 'unlocked':
                 # At least one task should be unlocked
-                unlocked_discussions = []
-                all_discussions = query.all()
-                
-                for discussion in all_discussions:
-                    task_assocs = db.query(models.discussion_task_association).filter(
-                        models.discussion_task_association.c.discussion_id == discussion.id
-                    ).all()
-                    
-                    has_unlocked = any(task.status == 'unlocked' for task in task_assocs)
-                    if has_unlocked:
-                        unlocked_discussions.append(discussion)
-                
-                logger.info(f"Found {len(unlocked_discussions)} unlocked discussions")
-                discussions_with_tasks = []
-                for disc in unlocked_discussions:
-                    discussion = get_discussion_by_id(db, disc.id)
-                    if discussion:
-                        discussions_with_tasks.append(discussion)
-                return discussions_with_tasks
+                return _get_discussions_with_status(db, status, lambda tasks: any(task.status == 'unlocked' for task in tasks))
                 
             elif status == 'locked':
                 # All tasks should be locked
-                locked_discussions = []
-                all_discussions = query.all()
-                
-                for discussion in all_discussions:
-                    task_assocs = db.query(models.discussion_task_association).filter(
-                        models.discussion_task_association.c.discussion_id == discussion.id
-                    ).all()
-                    
-                    all_locked = all(task.status == 'locked' for task in task_assocs)
-                    if all_locked:
-                        locked_discussions.append(discussion)
-                
-                logger.info(f"Found {len(locked_discussions)} locked discussions")
-                discussions_with_tasks = []
-                for disc in locked_discussions:
-                    discussion = get_discussion_by_id(db, disc.id)
-                    if discussion:
-                        discussions_with_tasks.append(discussion)
-                return discussions_with_tasks
+                return _get_discussions_with_status(db, status, lambda tasks: all(task.status == 'locked' for task in tasks))
         
         # If no status filter or unknown status, return all with tasks
         all_discussions = query.all()
@@ -107,10 +95,50 @@ def get_discussions(db: Session, status: Optional[str] = None) -> List[schemas.D
                 result.append(discussion_with_tasks)
         
         return result
+    except exc.SQLAlchemyError as e:
+        logger.error(f"Database error in get_discussions: {str(e)}")
+        raise DatabaseError(f"Failed to retrieve discussions: {str(e)}")
     except Exception as e:
         logger.error(f"Error fetching discussions: {str(e)}")
         # Return empty list when error occurs
         return []
+
+def _get_discussions_with_status(db: Session, status_name: str, filter_func) -> List[schemas.Discussion]:
+    """
+    Helper function to get discussions filtered by a task status condition.
+    
+    Parameters:
+    - db: Database session
+    - status_name: Name of the status for logging
+    - filter_func: Function that takes task_assocs and returns True/False for filtering
+    
+    Returns:
+    - List of filtered discussions with task information
+    """
+    try:
+        all_discussions = db.query(models.Discussion).all()
+        filtered_discussions = []
+        
+        for discussion in all_discussions:
+            task_assocs = db.query(models.discussion_task_association).filter(
+                models.discussion_task_association.c.discussion_id == discussion.id
+            ).all()
+            
+            if filter_func(task_assocs):
+                filtered_discussions.append(discussion)
+        
+        logger.info(f"Found {len(filtered_discussions)} {status_name} discussions")
+        
+        discussions_with_tasks = []
+        for disc in filtered_discussions:
+            discussion = get_discussion_by_id(db, disc.id)
+            if discussion:
+                discussions_with_tasks.append(discussion)
+        
+        return discussions_with_tasks
+    except exc.SQLAlchemyError as e:
+        logger.error(f"Database error in _get_discussions_with_status: {str(e)}")
+        raise DatabaseError(f"Failed to retrieve discussions with status {status_name}: {str(e)}")
 
 def get_discussion_by_id(db: Session, discussion_id: str) -> Optional[schemas.Discussion]:
     """
@@ -123,6 +151,10 @@ def get_discussion_by_id(db: Session, discussion_id: str) -> Optional[schemas.Di
     Returns:
     - Discussion with task status information, or None if not found
     """
+    if not discussion_id:
+        logger.warning("Empty discussion_id provided")
+        raise ValidationError("Discussion ID cannot be empty")
+        
     try:
         logger.info(f"Fetching discussion with ID: {discussion_id}")
         # Query the discussion
@@ -178,11 +210,67 @@ def get_discussion_by_id(db: Session, discussion_id: str) -> Optional[schemas.Di
         
         logger.info(f"Successfully fetched discussion: {discussion_id}")
         return discussion
+    except exc.SQLAlchemyError as e:
+        logger.error(f"Database error in get_discussion_by_id: {str(e)}")
+        raise DatabaseError(f"Failed to retrieve discussion {discussion_id}: {str(e)}")
     except Exception as e:
         logger.error(f"Error fetching discussion {discussion_id}: {str(e)}")
         return None
 
-# ... keep existing code (generate_discussion_id, fetch_discussion_title, and extract_repository functions)
+def generate_discussion_id(repository: str, url: str) -> str:
+    """
+    Generate a unique discussion ID based on repository and URL.
+    
+    Parameters:
+    - repository: Repository name (e.g., 'owner/repo')
+    - url: Discussion URL
+    
+    Returns:
+    - A unique discussion ID
+    """
+    try:
+        # Extract number from the URL (last part after /)
+        number = url.rstrip('/').split('/')[-1]
+        
+        # Clean repository name
+        clean_repo = repository.replace('/', '_')
+        
+        # Create ID in format: repo_discussionNumber
+        discussion_id = f"{clean_repo}_{number}"
+        
+        return discussion_id
+    except Exception as e:
+        logger.error(f"Error generating discussion ID: {str(e)}")
+        # Fallback to a timestamp-based ID if something goes wrong
+        return f"discussion_{int(datetime.now().timestamp())}"
+
+def fetch_discussion_title(url: str) -> str:
+    """
+    Fetch the title of a GitHub discussion from its URL.
+    
+    Parameters:
+    - url: GitHub discussion URL
+    
+    Returns:
+    - Discussion title or a generic title if fetching fails
+    """
+    try:
+        # Extract relevant information for the GitHub API
+        # This is a simplified version - in practice you'd use GitHub API
+        match = re.search(r'github\.com/([^/]+)/([^/]+)/discussions/(\d+)', url)
+        if not match:
+            return f"Discussion from {url}"
+        
+        owner, repo, discussion_number = match.groups()
+        
+        # In a real implementation, you would use GitHub API with proper authentication
+        logger.info(f"Would fetch title for {owner}/{repo} discussion #{discussion_number}")
+        
+        # For now, just return a placeholder
+        return f"Discussion #{discussion_number} from {owner}/{repo}"
+    except Exception as e:
+        logger.error(f"Error fetching discussion title: {str(e)}")
+        return f"Discussion from {url}"
 
 def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> schemas.UploadResult:
     """
@@ -199,112 +287,129 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
     errors = []
     batch_id = None
     
+    if not upload_data.discussions:
+        logger.warning("No discussions provided for upload")
+        return schemas.UploadResult(
+            success=False,
+            message="No discussions provided for upload",
+            discussions_added=0,
+            batch_id=None,
+            errors=["No discussions provided"]
+        )
+    
     try:
         logger.info(f"Processing upload of {len(upload_data.discussions)} discussions")
         
-        # Create a batch if batch name is provided
-        if upload_data.batch_name:
-            from services import batch_service
-            batch_data = schemas.BatchUploadCreate(
-                name=upload_data.batch_name,
-                description=upload_data.batch_description
-            )
-            batch = batch_service.create_batch(db, batch_data)
-            batch_id = batch.id
-            logger.info(f"Created batch with ID {batch_id}: {upload_data.batch_name}")
+        with transaction_scope(db):
+            # Create a batch if batch name is provided
+            if upload_data.batch_name:
+                from services import batch_service
+                batch_data = schemas.BatchUploadCreate(
+                    name=upload_data.batch_name,
+                    description=upload_data.batch_description
+                )
+                batch = batch_service.create_batch(db, batch_data)
+                batch_id = batch.id
+                logger.info(f"Created batch with ID {batch_id}: {upload_data.batch_name}")
+            
+            for disc in upload_data.discussions:
+                try:
+                    # Validate discussion data
+                    validate_discussion_data(disc)
+                    
+                    # Extract repository information from URL if not provided
+                    repository = disc.repository
+                    if not repository and disc.url:
+                        repository, owner, repo = extract_repository_info_from_url(disc.url)
+                        logger.info(f"Extracted repository: {repository} from URL: {disc.url}")
+                    
+                    # Generate ID if not provided
+                    discussion_id = disc.id
+                    if not discussion_id:
+                        discussion_id = generate_discussion_id(repository, disc.url)
+                        logger.info(f"Generated discussion ID: {discussion_id}")
+                    
+                    # Check if discussion already exists
+                    existing = db.query(models.Discussion).filter(models.Discussion.id == discussion_id).first()
+                    if existing:
+                        errors.append(f"Discussion with ID {discussion_id} already exists")
+                        logger.warning(f"Discussion with ID {discussion_id} already exists")
+                        continue
+                    
+                    # Get title if not provided
+                    title = disc.title
+                    if not title:
+                        title = fetch_discussion_title(disc.url)
+                        logger.info(f"Generated discussion title: {title}")
+                    
+                    # Get repository language if possible
+                    language = disc.repository_language
+                    
+                    # Use batch_id from request or from the batch we created
+                    discussion_batch_id = disc.batch_id or batch_id
+                    
+                    # Create new discussion with enhanced metadata
+                    new_discussion = models.Discussion(
+                        id=discussion_id,
+                        title=title,
+                        url=disc.url,
+                        repository=repository,
+                        created_at=disc.created_at or datetime.utcnow(),
+                        repository_language=language,
+                        release_tag=disc.release_tag,
+                        release_url=disc.release_url,
+                        release_date=disc.release_date,
+                        batch_id=discussion_batch_id
+                    )
+                    db.add(new_discussion)
+                    db.flush()  # Flush to get the ID
+                    
+                    # Add task associations
+                    tasks = disc.tasks or {}
+                    
+                    db.execute(
+                        models.discussion_task_association.insert().values(
+                            discussion_id=new_discussion.id,
+                            task_number=1,
+                            status=tasks.get("task1", {}).get("status", "locked"),
+                            annotators=tasks.get("task1", {}).get("annotators", 0)
+                        )
+                    )
+                    
+                    db.execute(
+                        models.discussion_task_association.insert().values(
+                            discussion_id=new_discussion.id,
+                            task_number=2,
+                            status=tasks.get("task2", {}).get("status", "locked"),
+                            annotators=tasks.get("task2", {}).get("annotators", 0)
+                        )
+                    )
+                    
+                    db.execute(
+                        models.discussion_task_association.insert().values(
+                            discussion_id=new_discussion.id,
+                            task_number=3,
+                            status=tasks.get("task3", {}).get("status", "locked"),
+                            annotators=tasks.get("task3", {}).get("annotators", 0)
+                        )
+                    )
+                    
+                    # Update batch discussion count if we have a batch
+                    if discussion_batch_id:
+                        from services import batch_service
+                        batch_service.increment_discussion_count(db, discussion_batch_id)
+                    
+                    discussions_added += 1
+                    logger.info(f"Added discussion: {discussion_id}")
+                except ValidationError as e:
+                    error_msg = f"Validation error for discussion {getattr(disc, 'id', 'unknown')}: {str(e)}"
+                    errors.append(error_msg)
+                    logger.warning(error_msg)
+                except Exception as e:
+                    error_msg = f"Error processing discussion {getattr(disc, 'id', 'unknown')}: {str(e)}"
+                    errors.append(error_msg)
+                    logger.error(error_msg)
         
-        for disc in upload_data.discussions:
-            try:
-                # Extract repository information from URL if not provided
-                repository = disc.repository
-                if not repository and disc.url:
-                    repository, owner, repo = extract_repository_info_from_url(disc.url)
-                    logger.info(f"Extracted repository: {repository} from URL: {disc.url}")
-                
-                # Generate ID if not provided
-                discussion_id = disc.id
-                if not discussion_id:
-                    discussion_id = generate_discussion_id(repository, disc.url)
-                    logger.info(f"Generated discussion ID: {discussion_id}")
-                
-                # Check if discussion already exists
-                existing = db.query(models.Discussion).filter(models.Discussion.id == discussion_id).first()
-                if existing:
-                    errors.append(f"Discussion with ID {discussion_id} already exists")
-                    logger.warning(f"Discussion with ID {discussion_id} already exists")
-                    continue
-                
-                # Get title if not provided
-                title = disc.title
-                if not title:
-                    title = fetch_discussion_title(disc.url)
-                    logger.info(f"Generated discussion title: {title}")
-                
-                # Get repository language if possible
-                language = disc.repository_language
-                
-                # Use batch_id from request or from the batch we created
-                discussion_batch_id = disc.batch_id or batch_id
-                
-                # Create new discussion with enhanced metadata
-                new_discussion = models.Discussion(
-                    id=discussion_id,
-                    title=title,
-                    url=disc.url,
-                    repository=repository,
-                    created_at=disc.created_at,
-                    repository_language=language,
-                    release_tag=disc.release_tag,
-                    release_url=disc.release_url,
-                    release_date=disc.release_date,
-                    batch_id=discussion_batch_id
-                )
-                db.add(new_discussion)
-                db.flush()  # Flush to get the ID
-                
-                # Add task associations
-                tasks = disc.tasks or {}
-                
-                db.execute(
-                    models.discussion_task_association.insert().values(
-                        discussion_id=new_discussion.id,
-                        task_number=1,
-                        status=tasks.get("task1", {}).get("status", "locked"),
-                        annotators=tasks.get("task1", {}).get("annotators", 0)
-                    )
-                )
-                
-                db.execute(
-                    models.discussion_task_association.insert().values(
-                        discussion_id=new_discussion.id,
-                        task_number=2,
-                        status=tasks.get("task2", {}).get("status", "locked"),
-                        annotators=tasks.get("task2", {}).get("annotators", 0)
-                    )
-                )
-                
-                db.execute(
-                    models.discussion_task_association.insert().values(
-                        discussion_id=new_discussion.id,
-                        task_number=3,
-                        status=tasks.get("task3", {}).get("status", "locked"),
-                        annotators=tasks.get("task3", {}).get("annotators", 0)
-                    )
-                )
-                
-                # Update batch discussion count if we have a batch
-                if discussion_batch_id:
-                    from services import batch_service
-                    batch_service.increment_discussion_count(db, discussion_batch_id)
-                
-                discussions_added += 1
-                logger.info(f"Added discussion: {discussion_id}")
-            except Exception as e:
-                error_msg = f"Error processing discussion {getattr(disc, 'id', 'unknown')}: {str(e)}"
-                errors.append(error_msg)
-                logger.error(error_msg)
-        
-        db.commit()
         logger.info(f"Successfully uploaded {discussions_added} discussions")
         return schemas.UploadResult(
             success=True,
@@ -314,8 +419,17 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
             errors=errors if errors else None
         )
         
+    except DatabaseError as e:
+        error_msg = f"Database error: {str(e)}"
+        logger.error(error_msg)
+        return schemas.UploadResult(
+            success=False,
+            message="Database error processing discussions",
+            discussions_added=discussions_added,
+            batch_id=batch_id,
+            errors=[error_msg] + errors
+        )
     except Exception as e:
-        db.rollback()
         error_msg = f"Error processing discussions: {str(e)}"
         logger.error(error_msg)
         return schemas.UploadResult(
@@ -339,64 +453,122 @@ def update_task_status(db: Session, discussion_id: str, task_id: int, status: st
     Returns:
     - TaskManagementResult with success/failure information
     """
+    if not discussion_id:
+        logger.warning("Empty discussion_id provided for task status update")
+        return schemas.TaskManagementResult(
+            success=False,
+            message="Discussion ID cannot be empty"
+        )
+    
+    if task_id not in [1, 2, 3]:
+        logger.warning(f"Invalid task ID: {task_id}")
+        return schemas.TaskManagementResult(
+            success=False,
+            message=f"Invalid task ID: {task_id}. Must be 1, 2, or 3."
+        )
+    
+    valid_statuses = ["locked", "unlocked", "completed"]
+    if status not in valid_statuses:
+        logger.warning(f"Invalid status: {status}")
+        return schemas.TaskManagementResult(
+            success=False,
+            message=f"Invalid status: {status}. Must be one of: {', '.join(valid_statuses)}"
+        )
+    
     try:
         logger.info(f"Updating task {task_id} status to {status} for discussion {discussion_id}")
         
-        # Check if discussion exists
-        discussion = db.query(models.Discussion).filter(models.Discussion.id == discussion_id).first()
-        if not discussion:
-            logger.warning(f"Discussion with ID {discussion_id} not found")
-            return schemas.TaskManagementResult(
-                success=False,
-                message=f"Discussion with ID {discussion_id} not found"
-            )
-        
-        # Update the task status
-        result = db.execute(
-            models.discussion_task_association.update().where(
-                and_(
-                    models.discussion_task_association.c.discussion_id == discussion_id,
-                    models.discussion_task_association.c.task_number == task_id
+        with transaction_scope(db):
+            # Check if discussion exists
+            discussion = db.query(models.Discussion).filter(models.Discussion.id == discussion_id).first()
+            if not discussion:
+                logger.warning(f"Discussion with ID {discussion_id} not found")
+                return schemas.TaskManagementResult(
+                    success=False,
+                    message=f"Discussion with ID {discussion_id} not found"
                 )
-            ).values(
-                status=status
-            )
-        )
-        
-        if result.rowcount == 0:
-            logger.info(f"Creating new task association for discussion {discussion_id}, task {task_id}")
-            # Create task association if it doesn't exist
-            db.execute(
-                models.discussion_task_association.insert().values(
-                    discussion_id=discussion_id,
-                    task_number=task_id,
-                    status=status,
-                    annotators=0
+            
+            # Update the task status
+            result = db.execute(
+                models.discussion_task_association.update().where(
+                    and_(
+                        models.discussion_task_association.c.discussion_id == discussion_id,
+                        models.discussion_task_association.c.task_number == task_id
+                    )
+                ).values(
+                    status=status
                 )
             )
-        
-        db.commit()
+            
+            if result.rowcount == 0:
+                logger.info(f"Creating new task association for discussion {discussion_id}, task {task_id}")
+                # Create task association if it doesn't exist
+                db.execute(
+                    models.discussion_task_association.insert().values(
+                        discussion_id=discussion_id,
+                        task_number=task_id,
+                        status=status,
+                        annotators=0
+                    )
+                )
         
         # Get updated discussion with tasks for response
         updated_discussion = get_discussion_by_id(db, discussion_id)
+        
+        # Create a properly serializable Discussion object with all required fields explicitly set
+        discussion_response = schemas.Discussion(
+            id=updated_discussion.id,
+            title=updated_discussion.title,
+            url=updated_discussion.url,
+            repository=updated_discussion.repository,
+            created_at=updated_discussion.created_at,
+            repository_language=updated_discussion.repository_language or None,
+            release_tag=updated_discussion.release_tag or None,
+            release_url=updated_discussion.release_url or None,
+            release_date=updated_discussion.release_date or None,
+            batch_id=updated_discussion.batch_id,
+            task1_status=updated_discussion.task1_status,
+            task1_annotators=updated_discussion.task1_annotators,
+            task2_status=updated_discussion.task2_status,
+            task2_annotators=updated_discussion.task2_annotators,
+            task3_status=updated_discussion.task3_status,
+            task3_annotators=updated_discussion.task3_annotators,
+            tasks=updated_discussion.tasks
+        )
         
         logger.info(f"Successfully updated task {task_id} status to {status}")
         return schemas.TaskManagementResult(
             success=True,
             message=f"Task {task_id} status updated to {status}",
-            discussion=updated_discussion
+            discussion=discussion_response
         )
         
+    except DatabaseError as e:
+        logger.error(f"Database error updating task status: {str(e)}")
+        return schemas.TaskManagementResult(
+            success=False,
+            message=f"Database error updating task status: {str(e)}"
+        )
     except Exception as e:
-        db.rollback()
         logger.error(f"Error updating task status: {str(e)}")
         return schemas.TaskManagementResult(
             success=False,
             message=f"Error updating task status: {str(e)}"
         )
-
 def extract_repository_info_from_url(url: str) -> Tuple[str, Optional[str], Optional[str]]:
-    """Extract repository name, owner and repo from GitHub URL"""
+    """
+    Extract repository name, owner and repo from GitHub URL
+    
+    Parameters:
+    - url: GitHub URL
+    
+    Returns:
+    - Tuple of (repository, owner, repo)
+    """
+    if not url:
+        logger.warning("Empty URL provided for repository extraction")
+        return "unknown/repository", None, None
+        
     try:
         githubUrlPattern = r'github\.com\/([^\/]+)\/([^\/]+)'
         match = re.search(githubUrlPattern, url)
@@ -417,3 +589,147 @@ def extract_repository_from_url(url: str) -> str:
     """Legacy repository extraction (keep for compatibility)"""
     repository, _, _ = extract_repository_info_from_url(url)
     return repository
+
+def delete_discussion(db: Session, discussion_id: str) -> bool:
+    """
+    Delete a discussion and all associated data.
+    
+    Parameters:
+    - db: Database session
+    - discussion_id: The ID of the discussion to delete
+    
+    Returns:
+    - True if deleted successfully, False otherwise
+    """
+    if not discussion_id:
+        logger.warning("Empty discussion_id provided for deletion")
+        raise ValidationError("Discussion ID cannot be empty")
+        
+    try:
+        logger.info(f"Attempting to delete discussion: {discussion_id}")
+        
+        with transaction_scope(db):
+            # First check if the discussion exists
+            discussion = db.query(models.Discussion).filter(models.Discussion.id == discussion_id).first()
+            if not discussion:
+                logger.warning(f"Discussion with ID {discussion_id} not found")
+                return False
+            
+            # Get batch ID for later reference (if needed)
+            batch_id = discussion.batch_id
+            
+            # Delete annotations
+            annotation_count = db.query(models.Annotation).filter(
+                models.Annotation.discussion_id == discussion_id
+            ).delete()
+            logger.info(f"Deleted {annotation_count} annotations for discussion {discussion_id}")
+            
+            # Delete consensus annotations
+            consensus_count = db.query(models.ConsensusAnnotation).filter(
+                models.ConsensusAnnotation.discussion_id == discussion_id
+            ).delete()
+            logger.info(f"Deleted {consensus_count} consensus annotations for discussion {discussion_id}")
+            
+            # Delete task associations
+            task_result = db.execute(
+                models.discussion_task_association.delete().where(
+                    models.discussion_task_association.c.discussion_id == discussion_id
+                )
+            )
+            logger.info(f"Deleted {task_result.rowcount} task associations for discussion {discussion_id}")
+            
+            # Finally delete the discussion itself
+            db.delete(discussion)
+            
+            # Update batch discussion count if applicable
+            if batch_id:
+                try:
+                    from services import batch_service
+                    batch_service.decrement_discussion_count(db, batch_id)
+                except Exception as e:
+                    logger.warning(f"Could not update batch {batch_id} discussion count: {str(e)}")
+        
+        logger.info(f"Successfully deleted discussion {discussion_id}")
+        return True
+        
+    except DatabaseError as e:
+        logger.error(f"Database error deleting discussion {discussion_id}: {str(e)}")
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting discussion {discussion_id}: {str(e)}")
+        return False
+
+def get_discussion_stats(db: Session) -> Dict[str, Any]:
+    """
+    Get statistics about discussions in the database.
+    
+    Parameters:
+    - db: Database session
+    
+    Returns:
+    - Dictionary with statistics
+    """
+    try:
+        # Count total discussions
+        total = db.query(models.Discussion).count()
+        
+        # Count by status category
+        locked_discussions = len(_get_discussions_with_status(
+            db, 'locked', lambda tasks: all(task.status == 'locked' for task in tasks)
+        ))
+        
+        unlocked_discussions = len(_get_discussions_with_status(
+            db, 'unlocked', lambda tasks: any(task.status == 'unlocked' for task in tasks)
+        ))
+        
+        completed_discussions = len(_get_discussions_with_status(
+            db, 'completed', lambda tasks: all(task.status == 'completed' for task in tasks)
+        ))
+        
+        # Count annotations
+        annotation_count = db.query(models.Annotation).count()
+        
+        # Count unique annotators
+        unique_annotators = db.query(models.Annotation.user_id).distinct().count()
+        
+        # Count by repository language
+        language_counts = {}
+        languages = db.query(models.Discussion.repository_language).distinct().all()
+        for lang in languages:
+            if lang[0]:  # Skip None values
+                count = db.query(models.Discussion).filter(
+                    models.Discussion.repository_language == lang[0]
+                ).count()
+                language_counts[lang[0]] = count
+                
+        # Count discussions with batches vs. without
+        with_batch = db.query(models.Discussion).filter(
+            models.Discussion.batch_id != None
+        ).count()
+        
+        without_batch = total - with_batch
+        
+        stats = {
+            "total_discussions": total,
+            "locked_discussions": locked_discussions,
+            "unlocked_discussions": unlocked_discussions, 
+            "completed_discussions": completed_discussions,
+            "total_annotations": annotation_count,
+            "unique_annotators": unique_annotators,
+            "by_language": language_counts,
+            "with_batch": with_batch,
+            "without_batch": without_batch
+        }
+        
+        logger.info(f"Generated discussion statistics")
+        return stats
+        
+    except exc.SQLAlchemyError as e:
+        logger.error(f"Database error in get_discussion_stats: {str(e)}")
+        raise DatabaseError(f"Failed to retrieve discussion statistics: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error generating discussion statistics: {str(e)}")
+        return {
+            "error": f"Failed to generate statistics: {str(e)}",
+            "total_discussions": 0
+        }

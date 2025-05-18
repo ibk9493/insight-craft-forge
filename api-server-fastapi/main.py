@@ -80,16 +80,33 @@ def get_discussion(discussion_id: str, db: Session = Depends(get_db)):
 # Annotations endpoints
 @app.post("/api/annotations", response_model=schemas.Annotation)
 def create_annotation(annotation: schemas.AnnotationCreate, db: Session = Depends(get_db)):
-    return annotations_service.create_annotation(db, annotation)
-
+    try:
+        return annotations_service.create_annotation(db, annotation)
+    except Exception as e:
+        # Log the error for debugging
+        print(f"Error creating annotation: {str(e)}")
+        # Return a proper HTTP error
+        raise HTTPException(status_code=500, detail=f"Failed to create annotation: {str(e)}")
 @app.get("/api/annotations", response_model=List[schemas.Annotation])
 def get_annotations(
-    discussion_id: Optional[str] = None,
-    user_id: Optional[str] = None,
-    task_id: Optional[int] = None,
+    discussionId: Optional[str] = None,  # Changed to match URL parameter
+    userId: Optional[str] = None,        # Changed to be consistent
+    taskId: Optional[int] = None,        # Changed to be consistent
     db: Session = Depends(get_db)
 ):
-    return annotations_service.get_annotations(db, discussion_id, user_id, task_id)
+    try:
+        # Convert camelCase to snake_case for internal use
+        return annotations_service.get_annotations(
+            db, 
+            discussion_id=discussionId, 
+            user_id=userId, 
+            task_id=taskId
+        )
+    except Exception as e:
+        # Log the error for debugging
+        print(f"Error getting annotations: {str(e)}")
+        # Return a proper HTTP error
+        raise HTTPException(status_code=500, detail=f"Failed to get annotations: {str(e)}")
 
 # Admin task status update
 @app.put("/api/admin/tasks/status", response_model=schemas.TaskManagementResult)
