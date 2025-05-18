@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   Card, 
@@ -152,7 +153,12 @@ const AnnotationQuality: React.FC<AnnotationQualityProps> = ({
         </div>
       </CardHeader>
       <CardContent>
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <Tabs 
+          defaultValue={activeTab} 
+          value={activeTab} 
+          onValueChange={setActiveTab} 
+          className="space-y-4"
+        >
           <TabsList>
             <TabsTrigger value="agreement" className="flex items-center gap-2">
               <Shield className="h-4 w-4" />

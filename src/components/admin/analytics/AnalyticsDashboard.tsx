@@ -107,7 +107,11 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
         </div>
       </CardHeader>
       <CardContent>
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs 
+          defaultValue={activeTab} 
+          value={activeTab} 
+          onValueChange={setActiveTab}
+        >
           <TabsList className="mb-4">
             <TabsTrigger value="overview" className="flex items-center gap-2">
               <Grid className="h-4 w-4" />
