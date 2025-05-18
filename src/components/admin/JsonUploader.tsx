@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,30 +27,66 @@ const JsonUploader: React.FC = () => {
 
   // Helper to normalize GitHub discussion data
   const normalizeDiscussionData = (disc: any): GitHubDiscussion => {
-    // Convert createdAt to createdAt for API compatibility
-    if (disc.createdAt && !disc.createdAt) {
-      disc.createdAt = disc.createdAt;
+    // Create a new discussion object with camelCase properties
+    const normalized: GitHubDiscussion = {
+      url: disc.url,
+      createdAt: ''
+    };
+    
+    // Handle ID
+    if (disc.id) normalized.id = disc.id;
+    
+    // Handle title
+    if (disc.title) normalized.title = disc.title;
+    
+    // Handle repository
+    if (disc.repository) normalized.repository = disc.repository;
+    
+    // Convert date fields
+    if (disc.createdAt) {
+      normalized.createdAt = disc.createdAt;
+    } else if (disc.created_at) {
+      normalized.createdAt = disc.created_at;
+    } else {
+      normalized.createdAt = new Date().toISOString();
     }
     
-    // Ensure we have proper date format for API
-    if (disc.createdAt) {
-      try {
-        // Ensure date format is ISO
-        disc.createdAt = new Date(disc.createdAt).toISOString();
-      } catch (e) {
-        console.warn(`[JsonUploader] Invalid date format for discussion: ${disc.id || 'unknown'}`);
-        disc.createdAt = new Date().toISOString(); // Fallback
-      }
-    } else {
-      disc.createdAt = new Date().toISOString(); // Required field
+    // Try to ensure date format is ISO
+    try {
+      normalized.createdAt = new Date(normalized.createdAt).toISOString();
+    } catch (e) {
+      console.warn(`[JsonUploader] Invalid date format for discussion: ${normalized.id || 'unknown'}`);
+      normalized.createdAt = new Date().toISOString(); // Fallback
     }
+    
+    // Handle repository language
+    if (disc.repositoryLanguage) normalized.repositoryLanguage = disc.repositoryLanguage;
+    else if (disc.repository_language) normalized.repositoryLanguage = disc.repository_language;
+    else if (disc.lang) normalized.repositoryLanguage = disc.lang;
+    
+    // Handle release info
+    if (disc.releaseTag) normalized.releaseTag = disc.releaseTag;
+    else if (disc.release_tag) normalized.releaseTag = disc.release_tag;
+    
+    if (disc.releaseUrl) normalized.releaseUrl = disc.releaseUrl;
+    else if (disc.release_url) normalized.releaseUrl = disc.release_url;
+    
+    if (disc.releaseDate) normalized.releaseDate = disc.releaseDate;
+    else if (disc.release_date) normalized.releaseDate = disc.release_date;
     
     // Extract repository from URL if not provided
-    if (!disc.repository && disc.url) {
-      disc.repository = extractRepositoryFromUrl(disc.url);
+    if (!normalized.repository && normalized.url) {
+      normalized.repository = extractRepositoryFromUrl(normalized.url);
     }
     
-    return disc;
+    // Handle tasks if present
+    if (disc.tasks) normalized.tasks = disc.tasks;
+    
+    // Handle batch ID if present
+    if (disc.batchId) normalized.batchId = disc.batchId;
+    else if (disc.batch_id) normalized.batchId = disc.batch_id;
+    
+    return normalized;
   };
 
   const validateJSON = (json: any): { isValid: boolean, errors: string[], validItems: any[] } => {
@@ -76,14 +113,12 @@ const JsonUploader: React.FC = () => {
         isItemValid = false;
       }
       
-      // Ensure created_at is present or can be derived
-      if (!item.createdAt && !item.createdAt) {
-        console.warn(`[JsonUploader] Item #${index + 1} missing created_at/createdAt`);
+      // Ensure createdAt is present or can be derived
+      if (!item.createdAt && !item.created_at) {
+        console.warn(`[JsonUploader] Item #${index + 1} missing createdAt/created_at`);
         validationErrors.push(`Item #${index + 1}: Missing required 'createdAt' field (will use current date as fallback)`);
         // Not failing validation for this, we'll add it automatically
       }
-      
-      // Other field validations can be less strict since we'll auto-generate missing fields
       
       // Optional field validations (if present)
       if (item.repositoryLanguage !== undefined && typeof item.repositoryLanguage !== 'string') {
@@ -174,7 +209,7 @@ const JsonUploader: React.FC = () => {
           }
           
           // Format dates consistently and ensure all required fields
-          const processedDiscussions = validItems.map((disc: any) => {
+          const processedDiscussions = validItems.map((disc: GitHubDiscussion) => {
             // Auto-generate missing fields where possible
             if (!disc.repository && disc.url) {
               disc.repository = extractRepositoryFromUrl(disc.url);
@@ -182,12 +217,7 @@ const JsonUploader: React.FC = () => {
             }
             
             // Ensure title exists
-            if (!disc.title && disc.question) {
-              // Extract first line from question as title
-              const firstLine = disc.question.split('\n')[0].trim();
-              disc.title = firstLine.substring(0, 120); // Limit title length
-              console.info(`[JsonUploader] Auto-generated title from question: ${disc.title}`);
-            } else if (!disc.title) {
+            if (!disc.title) {
               disc.title = `Discussion from ${disc.repository || extractRepositoryFromUrl(disc.url)}`;
               console.info(`[JsonUploader] Auto-generated generic title: ${disc.title}`);
             }
@@ -279,6 +309,21 @@ const JsonUploader: React.FC = () => {
       setApiError(null); // Reset any previous API errors
       console.log(`[JsonUploader] Starting upload of ${parsedData.length} discussions in batch: ${batchName}`);
       
+      // Ensure all discussions have required fields for API
+      const validatedData = parsedData.map(disc => {
+        // Make sure createdAt is in ISO format
+        if (!disc.createdAt) {
+          disc.createdAt = new Date().toISOString();
+        } else {
+          try {
+            disc.createdAt = new Date(disc.createdAt).toISOString();
+          } catch (e) {
+            disc.createdAt = new Date().toISOString();
+          }
+        }
+        return disc;
+      });
+      
       // Simulate progress
       const timer = setInterval(() => {
         setUploadProgress(prev => {
@@ -292,7 +337,7 @@ const JsonUploader: React.FC = () => {
       
       // Upload to API with batch information
       try {
-        const result = await api.admin.uploadDiscussions(parsedData, batchName, batchDescription);
+        const result = await api.admin.uploadDiscussions(validatedData, batchName, batchDescription);
       
         clearInterval(timer);
         setUploadProgress(100);

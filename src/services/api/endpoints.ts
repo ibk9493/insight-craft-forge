@@ -1,3 +1,4 @@
+
 import { apiRequest } from './helpers';
 import { Discussion, Annotation, TaskStatus, GitHubDiscussion, UploadResult, 
          TaskManagementResult, UserRole, SystemSummary, UserSummary, 
@@ -53,47 +54,77 @@ export const fetchDiscussions = async (): Promise<Discussion[]> => {
 };
 
 // Helper function to format GitHub discussions for API compatibility
-const formatGitHubDiscussion = (discussion: GitHubDiscussion): GitHubDiscussion => {
-  const formatted = { ...discussion };
+const formatGitHubDiscussion = (discussion: GitHubDiscussion): any => {
+  // Create a new object to map camelCase to snake_case for API compatibility
+  const apiFormatted: any = {
+    url: discussion.url,
+  };
+  
+  // Map camelCase to snake_case fields
+  if (discussion.id) apiFormatted.id = discussion.id;
+  if (discussion.title) apiFormatted.title = discussion.title;
+  if (discussion.repository) apiFormatted.repository = discussion.repository;
   
   // Ensure created_at is in ISO format
   if (discussion.createdAt) {
-    formatted.createdAt = new Date(discussion.createdAt).toISOString();
-  } else if (discussion.createdAt) {
-    // Make sure it's valid ISO format
-    formatted.createdAt = new Date(discussion.createdAt).toISOString();
+    apiFormatted.created_at = new Date(discussion.createdAt).toISOString();
   } else {
     // Fallback to current date if no date is provided
-    formatted.createdAt = new Date().toISOString();
+    apiFormatted.created_at = new Date().toISOString();
   }
   
   // Handle repository information
-  if (!formatted.repository && formatted.url) {
-    const match = formatted.url.match(/github\.com\/([^\/]+\/[^\/]+)/i);
-    formatted.repository = match ? match[1] : 'unknown/repository';
+  if (!discussion.repository && discussion.url) {
+    apiFormatted.repository = extractRepositoryFromUrl(discussion.url);
   }
   
   // Ensure we have a title
-  if (!formatted.title && formatted.title) {
+  if (!apiFormatted.title && discussion.title) {
     // Extract first line from question as title
-    const firstLine = formatted.title.split('\n')[0].trim();
-    formatted.title = firstLine.substring(0, 120); // Limit title length
+    const firstLine = discussion.title.split('\n')[0].trim();
+    apiFormatted.title = firstLine.substring(0, 120); // Limit title length
   }
   
-  // Convert any custom fields to standard format expected by the API
-  if (formatted.repositoryLanguage) {
-    formatted.repositoryLanguage = formatted.repositoryLanguage;
+  // Convert metadata fields to snake_case
+  if (discussion.repositoryLanguage) {
+    apiFormatted.repository_language = discussion.repositoryLanguage;
   }
   
-  // Remove any fields that aren't expected by the API schema
-  const unexpectedFields = ['question', 'answer', 'category', 'knowledge', 'code'];
-  unexpectedFields.forEach(field => {
-    if (field in formatted) {
-      delete formatted[field as keyof GitHubDiscussion];
-    }
-  });
+  if (discussion.releaseTag) {
+    apiFormatted.release_tag = discussion.releaseTag;
+  }
   
-  return formatted;
+  if (discussion.releaseUrl) {
+    apiFormatted.release_url = discussion.releaseUrl;
+  }
+  
+  if (discussion.releaseDate) {
+    apiFormatted.release_date = discussion.releaseDate;
+  }
+  
+  // Handle tasks if present
+  if (discussion.tasks) {
+    apiFormatted.tasks = discussion.tasks;
+  }
+  
+  // Handle batch ID if present
+  if (discussion.batchId) {
+    apiFormatted.batch_id = discussion.batchId;
+  }
+  
+  return apiFormatted;
+};
+
+// Helper function to extract repository name from GitHub URL
+const extractRepositoryFromUrl = (url: string): string => {
+  try {
+    const githubUrlPattern = /github\.com\/([^\/]+\/[^\/]+)/i;
+    const match = url.match(githubUrlPattern);
+    return match ? match[1] : 'unknown/repository';
+  } catch (error) {
+    console.error('Error extracting repository from URL:', error);
+    return 'unknown/repository';
+  }
 };
 
 export const api = {
@@ -172,20 +203,16 @@ export const api = {
       return safeApiRequest<{success: boolean, userId: string}>('/api/auth/signup', 'POST', { email, password }, undefined, { success: false, userId: '' });
     },
     
-    // Get authorized users endpoint
     getAuthorizedUsers: () => {
       console.log('[Auth] Getting authorized users');
-      // In production, always make the API call
       return safeApiRequest<{email: string, role: UserRole}[]>('/api/auth/authorized-users', 'GET', undefined, undefined, []);
     },
     
-    // Add authorized user endpoint
     addAuthorizedUser: (email: string, role: UserRole) => {
       console.log('[Auth] Adding authorized user:', email, role);
       return safeApiRequest<{success: boolean}>('/api/auth/authorized-users', 'POST', { email, role }, undefined, { success: false });
     },
     
-    // Remove authorized user endpoint
     removeAuthorizedUser: (email: string) => {
       console.log('[Auth] Removing authorized user:', email);
       return safeApiRequest<{success: boolean}>(`/api/auth/authorized-users/${encodeURIComponent(email)}`, 'DELETE', undefined, undefined, { success: false });
@@ -201,11 +228,15 @@ export const api = {
       // Format each discussion to ensure API compatibility
       const formattedDiscussions = discussions.map(formatGitHubDiscussion);
       
-      return safeApiRequest<UploadResult>('/api/admin/discussions/upload', 'POST', { 
+      const payload = { 
         discussions: formattedDiscussions, 
         batch_name: batchName, 
         batch_description: batchDescription
-      }, undefined, { 
+      };
+      
+      console.log('[Admin] Formatted payload for API:', JSON.stringify(payload).substring(0, 200) + '...');
+      
+      return safeApiRequest<UploadResult>('/api/admin/discussions/upload', 'POST', payload, undefined, { 
         success: false, 
         message: 'Failed to upload discussions', 
         discussionsAdded: 0,
@@ -227,7 +258,6 @@ export const api = {
       });
     },
     
-    // Bulk update task status
     bulkUpdateTaskStatus: (discussionIds: string[], taskId: number, status: TaskStatus) => {
       console.log(`[Admin] Bulk updating task status for ${discussionIds.length} discussions, Task ${taskId} to ${status}`);
       return safeApiRequest<BulkActionResult>('/api/admin/tasks/bulk-status', 'PUT', {
@@ -242,13 +272,11 @@ export const api = {
       });
     },
     
-    // Override annotation values
     overrideAnnotation: (annotation: Annotation) => {
       console.log('[Admin] Overriding annotation:', annotation.discussionId, annotation.taskId);
       return safeApiRequest<Annotation>('/api/admin/annotations/override', 'PUT', annotation, undefined, {} as Annotation);
     },
     
-    // Get quality metrics
     getQualityMetrics: () => {
       console.log('[Admin] Getting annotation quality metrics');
       return safeApiRequest<{
@@ -260,7 +288,6 @@ export const api = {
       }[]>('/api/admin/quality/metrics', 'GET', undefined, undefined, []);
     },
     
-    // Get annotator performance
     getAnnotatorPerformance: () => {
       console.log('[Admin] Getting annotator performance data');
       return safeApiRequest<{
@@ -274,19 +301,16 @@ export const api = {
   
   // Batch management endpoints
   batches: {
-    // Get all batches
     getAllBatches: () => {
       console.log('[Batches] Getting all batches');
       return safeApiRequest<BatchUpload[]>('/api/batches', 'GET', undefined, undefined, []);
     },
 
-    // Get batch by ID
     getBatchById: (batchId: number) => {
       console.log(`[Batches] Getting batch with ID: ${batchId}`);
       return safeApiRequest<BatchUpload>(`/api/batches/${batchId}`, 'GET', undefined, undefined, {} as BatchUpload);
     },
 
-    // Create a new batch
     createBatch: (name: string, description?: string) => {
       console.log(`[Batches] Creating new batch: ${name}`);
       return safeApiRequest<BatchManagementResult>('/api/batches', 'POST', { name, description }, undefined, {
@@ -295,7 +319,6 @@ export const api = {
       });
     },
 
-    // Delete a batch
     deleteBatch: (batchId: number) => {
       console.log(`[Batches] Deleting batch with ID: ${batchId}`);
       return safeApiRequest<BatchManagementResult>(`/api/batches/${batchId}`, 'DELETE', undefined, undefined, {
@@ -304,16 +327,13 @@ export const api = {
       });
     },
 
-    // Get discussions in a batch
     getBatchDiscussions: (batchId: number) => {
       console.log(`[Batches] Getting discussions for batch ID: ${batchId}`);
       return safeApiRequest<Discussion[]>(`/api/batches/${batchId}/discussions`, 'GET', undefined, undefined, []);
     }
   },
   
-  // System summary endpoints
   summary: {
-    // Get system summary statistics
     getSystemSummary: () => {
       console.log('[Summary] Getting system summary statistics');
       return safeApiRequest<SystemSummary>('/api/summary/stats', 'GET', undefined, undefined, {
@@ -337,7 +357,6 @@ export const api = {
       });
     },
     
-    // Get user summary statistics
     getUserSummary: (userId: string) => {
       console.log(`[Summary] Getting user summary for: ${userId}`);
       return safeApiRequest<UserSummary>(`/api/summary/user/${userId}`, 'GET', undefined, undefined, {
@@ -350,7 +369,6 @@ export const api = {
       });
     },
     
-    // Generate and download report
     downloadReport: (format: 'csv' | 'json' = 'csv') => {
       console.log(`[Summary] Downloading report in ${format} format`);
       return safeApiRequest<{downloadUrl: string}>(`/api/summary/report?format=${format}`, 'GET', undefined, undefined, {
@@ -358,7 +376,6 @@ export const api = {
       });
     },
     
-    // Get annotation activity data
     getAnnotationActivity: (fromDate?: string, toDate?: string) => {
       const dateParams = [];
       if (fromDate) dateParams.push(`fromDate=${fromDate}`);
@@ -369,7 +386,6 @@ export const api = {
       return safeApiRequest<{date: string, count: number}[]>(`/api/summary/activity${queryString}`, 'GET', undefined, undefined, []);
     },
     
-    // Get repository breakdown
     getRepositoryBreakdown: () => {
       console.log('[Summary] Getting repository breakdown');
       return safeApiRequest<{repository: string, count: number}[]>('/api/summary/repositories', 'GET', undefined, undefined, []);
