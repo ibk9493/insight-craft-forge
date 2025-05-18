@@ -293,6 +293,58 @@ export function getMockData<T>(endpoint: string): T {
     ] as unknown as T;
   }
   
+  // For system summary stats
+  if (endpoint.startsWith('/api/summary/stats')) {
+    console.log('[API Mock] Returning mock system summary stats');
+    return {
+      totalDiscussions: 125,
+      task1Completed: 85,
+      task2Completed: 62,
+      task3Completed: 41,
+      totalTasksCompleted: 188,
+      totalAnnotations: 356,
+      uniqueAnnotators: 12,
+      totalBatches: 5,
+      batchesBreakdown: [
+        { name: 'May 2025', discussions: 45 },
+        { name: 'April 2025', discussions: 32 },
+        { name: 'March 2025', discussions: 28 },
+        { name: 'February 2025', discussions: 15 },
+        { name: 'January 2025', discussions: 5 }
+      ]
+    } as unknown as T;
+  }
+
+  // For annotation activity data
+  if (endpoint.startsWith('/api/summary/activity')) {
+    console.log('[API Mock] Returning mock annotation activity data');
+    const mockData = [];
+    const now = new Date();
+    for (let i = 14; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      mockData.push({
+        date: date.toISOString().split('T')[0],
+        count: Math.floor(Math.random() * 30) + 5
+      });
+    }
+    return mockData as unknown as T;
+  }
+  
+  // For repository breakdown
+  if (endpoint.startsWith('/api/summary/repositories')) {
+    console.log('[API Mock] Returning mock repository breakdown data');
+    return [
+      { repository: 'react', count: 25 },
+      { repository: 'typescript', count: 18 },
+      { repository: 'pytorch', count: 15 },
+      { repository: 'tensorflow', count: 12 },
+      { repository: 'langchain', count: 10 },
+      { repository: 'fastapi', count: 8 },
+      { repository: 'django', count: 7 }
+    ] as unknown as T;
+  }
+  
   // Default empty response
   console.log('[API Mock] No specific mock data for endpoint, returning empty object');
   return {} as T;

@@ -79,6 +79,18 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
     }
   };
 
+  // Ensure systemSummary always has valid values even if the API fails
+  const safeSystemSummary = {
+    totalDiscussions: systemSummary?.totalDiscussions || 0,
+    task1Completed: systemSummary?.task1Completed || 0,
+    task2Completed: systemSummary?.task2Completed || 0,
+    task3Completed: systemSummary?.task3Completed || 0,
+    totalTasksCompleted: systemSummary?.totalTasksCompleted || 0,
+    totalAnnotations: systemSummary?.totalAnnotations || 0,
+    uniqueAnnotators: systemSummary?.uniqueAnnotators || 0,
+    batchesBreakdown: systemSummary?.batchesBreakdown || []
+  };
+
   return (
     <Card className="w-full shadow-md">
       <CardHeader>
@@ -108,7 +120,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
       </CardHeader>
       <CardContent>
         <Tabs 
-          defaultValue={activeTab} 
+          defaultValue={activeTab}
           value={activeTab} 
           onValueChange={setActiveTab}
         >
@@ -136,7 +148,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                 </CardHeader>
                 <CardContent>
                   <div className="text-3xl font-bold">
-                    {systemSummary.totalDiscussions}
+                    {safeSystemSummary.totalDiscussions}
                   </div>
                 </CardContent>
               </Card>
@@ -146,7 +158,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                 </CardHeader>
                 <CardContent>
                   <div className="text-3xl font-bold">
-                    {systemSummary.totalAnnotations}
+                    {safeSystemSummary.totalAnnotations}
                   </div>
                 </CardContent>
               </Card>
@@ -156,7 +168,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                 </CardHeader>
                 <CardContent>
                   <div className="text-3xl font-bold">
-                    {systemSummary.uniqueAnnotators}
+                    {safeSystemSummary.uniqueAnnotators}
                   </div>
                 </CardContent>
               </Card>
@@ -171,9 +183,9 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                       data={[
-                        { name: 'Task 1', value: systemSummary.task1Completed },
-                        { name: 'Task 2', value: systemSummary.task2Completed },
-                        { name: 'Task 3', value: systemSummary.task3Completed }
+                        { name: 'Task 1', value: safeSystemSummary.task1Completed },
+                        { name: 'Task 2', value: safeSystemSummary.task2Completed },
+                        { name: 'Task 3', value: safeSystemSummary.task3Completed }
                       ]}
                       margin={{ top: 10, right: 10, left: 0, bottom: 20 }}
                     >
@@ -206,7 +218,10 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={systemSummary.batchesBreakdown}
+                        data={safeSystemSummary.batchesBreakdown.length > 0 ? 
+                          safeSystemSummary.batchesBreakdown : 
+                          [{ name: 'No Data', discussions: 1 }]
+                        }
                         cx="50%"
                         cy="50%"
                         labelLine={false}
@@ -216,7 +231,10 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                         dataKey="discussions"
                         nameKey="name"
                       >
-                        {systemSummary.batchesBreakdown.map((entry, index) => (
+                        {(safeSystemSummary.batchesBreakdown.length > 0 ? 
+                          safeSystemSummary.batchesBreakdown : 
+                          [{ name: 'No Data', discussions: 1 }]
+                        ).map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>

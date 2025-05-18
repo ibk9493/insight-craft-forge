@@ -117,6 +117,11 @@ export interface GitHubDiscussion {
 }
 
 // System summary types
+export interface BatchBreakdown {
+  name: string;
+  discussions: number;
+}
+
 export interface SystemSummary {
   totalDiscussions: number;
   task1Completed: number;
@@ -126,10 +131,7 @@ export interface SystemSummary {
   totalAnnotations: number;
   uniqueAnnotators: number;
   totalBatches: number;
-  batchesBreakdown: {
-    name: string;
-    discussions: number;
-  }[];
+  batchesBreakdown: BatchBreakdown[];
 }
 
 export interface UserSummary {

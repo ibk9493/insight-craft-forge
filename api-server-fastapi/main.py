@@ -1,533 +1,86 @@
 
-import os
-import uuid
-import json
-import logging
-import traceback
-from datetime import datetime
-from typing import List, Dict, Any, Optional, Union
-from pathlib import Path
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Form, Header, BackgroundTasks, Request
+from fastapi import FastAPI, Depends, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse, FileResponse
-from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
-from fastapi.openapi.utils import get_openapi
-from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import SQLAlchemyError, OperationalError
-from dotenv import load_dotenv
+from typing import List, Dict, Optional, Union
+import json
 
-from database import engine, SessionLocal, check_and_create_tables
 import models
 import schemas
+from database import engine, get_db
 from services import discussions_service, annotations_service, consensus_service, auth_service, summary_service
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler("api_server.log")
-    ]
-)
-logger = logging.getLogger("api_server")
+# Create database tables
+models.Base.metadata.create_all(bind=engine)
 
-# Load environment variables
-load_dotenv()
-
-# Check database tables and recreate if necessary
-try:
-    logger.info("Checking database tables")
-    schema_recreated = check_and_create_tables()
-    if schema_recreated:
-        logger.info("Database schema has been created or updated")
-    else:
-        logger.info("Database schema is up-to-date")
-except Exception as e:
-    logger.error(f"Error checking database tables: {str(e)}")
-    logger.error(traceback.format_exc())
-
-# Initialize FastAPI app
-app = FastAPI(
-    title="SWE-QA API",
-    description="API for the Software Engineering QA Annotation System",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json"
-)
+app = FastAPI()
 
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust this in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Create uploads directory if it doesn't exist
-UPLOADS_DIR = Path("uploads")
-UPLOADS_DIR.mkdir(exist_ok=True)
+# Root endpoint
+@app.get("/")
+async def root():
+    return {"message": "SWE-QA Annotation API"}
 
-# Create reports directory if it doesn't exist
-REPORTS_DIR = Path("reports")
-REPORTS_DIR.mkdir(exist_ok=True)
+# Discussions endpoints
+@app.get("/api/discussions", response_model=List[schemas.Discussion])
+def get_all_discussions(db: Session = Depends(get_db)):
+    discussions = discussions_service.get_all_discussions(db)
+    return discussions
 
-# Serve static files
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
-app.mount("/reports", StaticFiles(directory="reports"), name="reports")
-
-# Middleware for logging requests and responses
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    request_id = str(uuid.uuid4())
-    logger.info(f"Request {request_id} - {request.method} {request.url.path}")
-    
-    try:
-        # Process the request and get the response
-        response = await call_next(request)
-        logger.info(f"Response {request_id} - Status: {response.status_code}")
-        return response
-    except Exception as e:
-        logger.error(f"Request {request_id} failed: {str(e)}")
-        logger.error(traceback.format_exc())
-        return JSONResponse(
-            status_code=500,
-            content={"detail": "Internal server error", "error": str(e)},
-        )
-
-# Dependency to get DB session
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-# API key authentication middleware
-async def verify_api_key(x_api_key: str = Header(...)):
-    valid_api_key = os.getenv("API_KEY", "development_api_key")
-    if x_api_key != valid_api_key:
-        logger.warning("Invalid API key used in request")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Unauthorized: Invalid API key"
-        )
-    return x_api_key
-
-# Error handler for database operations
-def handle_db_errors(func):
-    async def wrapper(*args, **kwargs):
-        try:
-            return await func(*args, **kwargs)
-        except OperationalError as e:
-            logger.error(f"Database operational error: {str(e)}")
-            logger.error(traceback.format_exc())
-            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-        except SQLAlchemyError as e:
-            logger.error(f"SQLAlchemy error: {str(e)}")
-            logger.error(traceback.format_exc())
-            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-        except Exception as e:
-            logger.error(f"Unexpected error: {str(e)}")
-            logger.error(traceback.format_exc())
-            raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
-    return wrapper
-
-# Discussion endpoints
-@app.get("/api/discussions", response_model=List[schemas.Discussion], dependencies=[Depends(verify_api_key)])
-def get_discussions(status: Optional[str] = None, db: Session = Depends(get_db)):
-    try:
-        logger.info(f"Fetching discussions with status: {status}")
-        discussions = discussions_service.get_discussions(db, status)
-        logger.info(f"Found {len(discussions)} discussions")
-        return discussions
-    except Exception as e:
-        logger.error(f"Error fetching discussions: {str(e)}")
-        logger.error(traceback.format_exc())
-        # Return empty list instead of propagating the error
-        return []
-
-@app.get("/api/discussions/{discussion_id}", response_model=schemas.Discussion, dependencies=[Depends(verify_api_key)])
+@app.get("/api/discussions/{discussion_id}", response_model=schemas.Discussion)
 def get_discussion(discussion_id: str, db: Session = Depends(get_db)):
-    logger.info(f"Fetching discussion with ID: {discussion_id}")
-    discussion = discussions_service.get_discussion_by_id(db, discussion_id)
-    if discussion is None:
-        logger.warning(f"Discussion not found: {discussion_id}")
-        raise HTTPException(status_code=404, detail="Discussion not found")
-    return discussion
+    return discussions_service.get_discussion_by_id(db, discussion_id)
 
-# Annotation endpoints
-@app.get("/api/annotations", response_model=Union[List[schemas.Annotation], schemas.Annotation], dependencies=[Depends(verify_api_key)])
-def get_annotations(
-    discussion_id: Optional[str] = None, 
-    user_id: Optional[str] = None, 
-    task_id: Optional[int] = None, 
-    db: Session = Depends(get_db)
-):
-    try:
-        logger.info(f"Fetching annotations - discussion_id: {discussion_id}, user_id: {user_id}, task_id: {task_id}")
-        annotations = annotations_service.get_annotations(db, discussion_id, user_id, task_id)
-        
-        # If specific user, task, and discussion, return a single annotation
-        if discussion_id and user_id and task_id and len(annotations) == 1:
-            logger.info(f"Found specific annotation for discussion: {discussion_id}, user: {user_id}, task: {task_id}")
-            return annotations[0]
-        
-        logger.info(f"Found {len(annotations)} annotations")
-        return annotations
-    except Exception as e:
-        logger.error(f"Error fetching annotations: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error fetching annotations: {str(e)}")
-
-@app.post("/api/annotations", response_model=schemas.Annotation, dependencies=[Depends(verify_api_key)])
+# Annotations endpoints
+@app.post("/api/annotations", response_model=schemas.Annotation)
 def create_annotation(annotation: schemas.AnnotationCreate, db: Session = Depends(get_db)):
-    try:
-        logger.info(f"Creating annotation for discussion: {annotation.discussion_id}, user: {annotation.user_id}, task: {annotation.task_id}")
-        result = annotations_service.create_or_update_annotation(db, annotation)
-        logger.info(f"Annotation created successfully")
-        return result
-    except Exception as e:
-        logger.error(f"Error creating annotation: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error creating annotation: {str(e)}")
+    return annotations_service.create_annotation(db, annotation)
 
-@app.put("/api/annotations/{discussion_id}/{user_id}/{task_id}", response_model=schemas.Annotation, dependencies=[Depends(verify_api_key)])
-def update_annotation(
-    discussion_id: str, 
-    user_id: str, 
-    task_id: int, 
-    annotation_update: schemas.AnnotationUpdate, 
+@app.get("/api/annotations", response_model=List[schemas.Annotation])
+def get_annotations(
+    discussion_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    task_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
-    try:
-        logger.info(f"Updating annotation for discussion: {discussion_id}, user: {user_id}, task: {task_id}")
-        result = annotations_service.update_annotation(db, discussion_id, user_id, task_id, annotation_update)
-        logger.info(f"Annotation updated successfully")
-        return result
-    except Exception as e:
-        logger.error(f"Error updating annotation: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error updating annotation: {str(e)}")
+    return annotations_service.get_annotations(db, discussion_id, user_id, task_id)
 
-# New endpoint for pod leads to override annotations
-@app.post("/api/pod-lead/annotations/override", response_model=schemas.Annotation, dependencies=[Depends(verify_api_key)])
-def pod_lead_override_annotation(
-    override_data: schemas.PodLeadAnnotationOverride, 
-    pod_lead_id: str,
-    db: Session = Depends(get_db)
-):
+# Admin task status update
+@app.put("/api/admin/tasks/status", response_model=schemas.TaskManagementResult)
+def update_task_status(status_update: schemas.TaskStatusUpdate, db: Session = Depends(get_db)):
     try:
-        logger.info(f"Pod lead {pod_lead_id} overriding annotation for discussion: {override_data.discussion_id}")
-        result = annotations_service.pod_lead_override_annotation(db, pod_lead_id, override_data)
-        logger.info(f"Pod lead annotation override successful")
-        return result
-    except Exception as e:
-        logger.error(f"Error in pod lead annotation override: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error in pod lead annotation override: {str(e)}")
-
-# Consensus endpoints
-@app.get("/api/consensus", response_model=schemas.Annotation, dependencies=[Depends(verify_api_key)])
-def get_consensus(discussion_id: str, task_id: int, db: Session = Depends(get_db)):
-    try:
-        logger.info(f"Fetching consensus for discussion: {discussion_id}, task: {task_id}")
-        consensus = consensus_service.get_consensus(db, discussion_id, task_id)
-        if not consensus:
-            logger.warning(f"Consensus not found for discussion: {discussion_id}, task: {task_id}")
-            raise HTTPException(status_code=404, detail="Consensus not found")
-        return consensus
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching consensus: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error fetching consensus: {str(e)}")
-
-@app.post("/api/consensus", response_model=schemas.Annotation, dependencies=[Depends(verify_api_key)])
-def create_consensus(consensus: schemas.AnnotationCreate, db: Session = Depends(get_db)):
-    try:
-        logger.info(f"Creating consensus for discussion: {consensus.discussion_id}, task: {consensus.task_id}")
-        result = consensus_service.create_or_update_consensus(db, consensus)
-        logger.info(f"Consensus created successfully")
-        return result
-    except Exception as e:
-        logger.error(f"Error creating consensus: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error creating consensus: {str(e)}")
-
-@app.post("/api/consensus/calculate", dependencies=[Depends(verify_api_key)])
-def calculate_consensus(discussion_id: str, task_id: int, db: Session = Depends(get_db)):
-    try:
-        logger.info(f"Calculating consensus for discussion: {discussion_id}, task: {task_id}")
-        result = consensus_service.calculate_consensus(db, discussion_id, task_id)
-        logger.info(f"Consensus calculation completed: {result}")
-        return result
-    except Exception as e:
-        logger.error(f"Error calculating consensus: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error calculating consensus: {str(e)}")
-
-@app.post("/api/consensus/override", response_model=schemas.Annotation, dependencies=[Depends(verify_api_key)])
-def override_consensus(override_data: schemas.ConsensusOverride, db: Session = Depends(get_db)):
-    try:
-        logger.info(f"Overriding consensus for discussion: {override_data.discussion_id}, task: {override_data.task_id}")
-        result = consensus_service.override_consensus(db, override_data)
-        logger.info(f"Consensus override successful")
-        return result
-    except Exception as e:
-        logger.error(f"Error overriding consensus: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error overriding consensus: {str(e)}")
-
-# File upload endpoint
-@app.post("/api/files/upload", dependencies=[Depends(verify_api_key)])
-async def upload_file(
-    file: UploadFile = File(...), 
-    discussion_id: str = Form(...),
-    db: Session = Depends(get_db)
-):
-    try:
-        logger.info(f"Uploading file for discussion: {discussion_id} - {file.filename}, size: {file.size}")
-        # Generate unique filename
-        file_ext = file.filename.split('.')[-1]
-        filename = f"{discussion_id}_{uuid.uuid4()}.{file_ext}"
-        file_path = UPLOADS_DIR / filename
-        
-        # Save file
-        with open(file_path, "wb") as f:
-            f.write(await file.read())
-        
-        file_url = f"/uploads/{filename}"
-        logger.info(f"File uploaded successfully: {file_url}")
-        return {"fileUrl": file_url}
-    except Exception as e:
-        logger.error(f"File upload failed: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
-
-# Code download endpoint
-@app.get("/api/code/download", dependencies=[Depends(verify_api_key)])
-def get_code_download_url(discussion_id: str, repo: str):
-    try:
-        logger.info(f"Generating code download URL for discussion: {discussion_id}, repo: {repo}")
-        # In a real app, this would generate/fetch the actual download URL
-        download_url = f"https://github.com/{repo}/archive/refs/heads/master.zip"
-        logger.info(f"Generated download URL: {download_url}")
-        return {"downloadUrl": download_url}
-    except Exception as e:
-        logger.error(f"Error generating code download URL: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error generating code download URL: {str(e)}")
-
-# Admin endpoints
-@app.post("/api/admin/discussions/upload", dependencies=[Depends(verify_api_key)])
-def upload_discussions(discussions_data: schemas.DiscussionUpload, db: Session = Depends(get_db)):
-    try:
-        discussions = discussions_data.discussions
-        logger.info(f"Uploading {len(discussions)} discussions")
-        
-        # Log first discussion for debugging
-        if discussions and len(discussions) > 0:
-            logger.info(f"Sample discussion: {json.dumps(discussions[0].dict(), default=str)}")
-            
-        result = discussions_service.upload_discussions(db, discussions_data)
-        logger.info(f"Discussions upload complete: {result}")
-        return result
-    except Exception as e:
-        logger.error(f"Error uploading discussions: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error uploading discussions: {str(e)}")
-
-# Update the task status endpoint to use the updated TaskStatusUpdate schema
-@app.put("/api/admin/tasks/status", dependencies=[Depends(verify_api_key)])
-def update_task_status(task_update: schemas.TaskStatusUpdate, db: Session = Depends(get_db)):
-    try:
-        logger.info(f"Updating task status for discussion: {task_update.discussion_id}, task: {task_update.task_id}, status: {task_update.status}")
-        result = discussions_service.update_task_status(db, task_update)
-        logger.info(f"Task status updated successfully")
-        return result
-    except Exception as e:
-        logger.error(f"Error updating task status: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error updating task status: {str(e)}")
-
-@app.put("/api/admin/annotations/override", response_model=schemas.Annotation, dependencies=[Depends(verify_api_key)])
-def override_annotation(annotation: schemas.AnnotationOverride, db: Session = Depends(get_db)):
-    try:
-        logger.info(f"Admin overriding annotation for discussion: {annotation.discussion_id}, task: {annotation.task_id}")
-        result = annotations_service.override_annotation(db, annotation)
-        logger.info(f"Annotation override successful")
-        return result
-    except Exception as e:
-        logger.error(f"Error overriding annotation: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error overriding annotation: {str(e)}")
-
-# Auth endpoints
-@app.post("/api/auth/google")
-def verify_google_token(token_data: schemas.GoogleToken, db: Session = Depends(get_db)):
-    try:
-        logger.info("Verifying Google token")
-        # In a real app, this would verify the Google token with Google's servers
-        # For demo purposes, we'll just return success
+        updated_discussion = discussions_service.update_task_status(
+            db, status_update.discussion_id, status_update.task_id, status_update.status
+        )
         return {
             "success": True,
-            "user": {
-                "id": str(uuid.uuid4()),
-                "username": "google.user@example.com",
-                "email": "google.user@example.com",
-                "role": "annotator",
-                "provider": "google"
-            }
+            "message": f"Task {status_update.task_id} status updated to {status_update.status}",
+            "discussion": updated_discussion
         }
     except Exception as e:
-        logger.error(f"Error verifying Google token: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error verifying Google token: {str(e)}")
-
-@app.post("/api/auth/signup")
-def signup_user(user_data: schemas.UserSignup, db: Session = Depends(get_db)):
-    try:
-        logger.info(f"Signing up new user with email: {user_data.email}")
-        
-        # Check if email is in authorized users list
-        authorized_user = auth_service.check_if_email_authorized(db, user_data.email)
-        
-        if not authorized_user:
-            logger.warning(f"Email not authorized for signup: {user_data.email}")
-            return JSONResponse(
-                status_code=403,
-                content={"success": False, "message": "Email not authorized for signup"}
-            )
-        
-        # In a real app, this would create a user in the database
-        # For demo purposes, we'll just return success
-        user_id = str(uuid.uuid4())
-        logger.info(f"User created with ID: {user_id}")
-        
         return {
-            "success": True,
-            "userId": user_id,
-            "message": "User created successfully"
+            "success": False,
+            "message": str(e)
         }
-    except Exception as e:
-        logger.error(f"Error signing up user: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error signing up user: {str(e)}")
 
-@app.get("/api/auth/authorized-users", dependencies=[Depends(verify_api_key)])
-def get_authorized_users(db: Session = Depends(get_db)):
-    try:
-        logger.info("Fetching authorized users")
-        result = auth_service.get_authorized_users(db)
-        logger.info(f"Found {len(result)} authorized users")
-        return result
-    except Exception as e:
-        logger.error(f"Error fetching authorized users: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error fetching authorized users: {str(e)}")
+# Upload discussions endpoint
+@app.post("/api/admin/discussions/upload", response_model=schemas.UploadResult)
+def upload_discussions(upload_data: schemas.DiscussionUpload, db: Session = Depends(get_db)):
+    return discussions_service.upload_discussions(db, upload_data)
 
-@app.post("/api/auth/authorized-users", dependencies=[Depends(verify_api_key)])
-def add_authorized_user(user_data: schemas.AuthorizedUserCreate, db: Session = Depends(get_db)):
-    try:
-        logger.info(f"Adding authorized user: {user_data.email}, role: {user_data.role}")
-        auth_service.add_or_update_authorized_user(db, user_data)
-        logger.info(f"Authorized user added successfully")
-        return {"success": True}
-    except Exception as e:
-        logger.error(f"Error adding authorized user: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error adding authorized user: {str(e)}")
-
-@app.delete("/api/auth/authorized-users/{email}", dependencies=[Depends(verify_api_key)])
-def remove_authorized_user(email: str, db: Session = Depends(get_db)):
-    try:
-        logger.info(f"Removing authorized user: {email}")
-        auth_service.remove_authorized_user(db, email)
-        logger.info(f"Authorized user removed successfully")
-        return {"success": True}
-    except Exception as e:
-        logger.error(f"Error removing authorized user: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error removing authorized user: {str(e)}")
-
-# Summary endpoints
-@app.get("/api/summary/stats", dependencies=[Depends(verify_api_key)])
+# Summary statistics endpoints
+@app.get("/api/summary/stats")
 def get_system_summary(db: Session = Depends(get_db)):
-    try:
-        logger.info("Fetching system summary statistics")
-        result = summary_service.get_system_summary(db)
-        logger.info("Summary statistics fetched successfully")
-        return result
-    except Exception as e:
-        logger.error(f"Error fetching summary statistics: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error fetching summary statistics: {str(e)}")
+    return summary_service.get_system_summary(db)
 
-@app.get("/api/summary/user/{user_id}", dependencies=[Depends(verify_api_key)])
+@app.get("/api/summary/user/{user_id}")
 def get_user_summary(user_id: str, db: Session = Depends(get_db)):
-    try:
-        logger.info(f"Fetching summary statistics for user: {user_id}")
-        result = summary_service.get_user_summary(db, user_id)
-        logger.info("User summary statistics fetched successfully")
-        return result
-    except Exception as e:
-        logger.error(f"Error fetching user summary statistics: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error fetching user summary statistics: {str(e)}")
-
-@app.get("/api/summary/report", dependencies=[Depends(verify_api_key)])
-def generate_report(format: str = "csv", db: Session = Depends(get_db)):
-    try:
-        logger.info(f"Generating {format} report")
-        
-        # Get all the data
-        system_summary = summary_service.get_system_summary(db)
-        
-        # Generate filename
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"report_{timestamp}.{format}"
-        file_path = REPORTS_DIR / filename
-        
-        # Create the report based on format
-        if format.lower() == "json":
-            with open(file_path, "w") as f:
-                json.dump(system_summary, f, indent=2)
-        else:  # Default to CSV
-            with open(file_path, "w") as f:
-                # Write header
-                f.write("Metric,Value\n")
-                
-                # Write data
-                for key, value in system_summary.items():
-                    f.write(f"{key},{value}\n")
-        
-        logger.info(f"Report generated successfully: {filename}")
-        download_url = f"/reports/{filename}"
-        
-        return {"downloadUrl": download_url}
-    except Exception as e:
-        logger.error(f"Error generating report: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Error generating report: {str(e)}")
-
-# Health check endpoint
-@app.get("/api/health")
-def health_check():
-    logger.info("Health check request received")
-    return {
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "version": "1.0.0"
-    }
-
-# Run the app
-if __name__ == "__main__":
-    import uvicorn
-    logger.info("Starting API server")
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    return summary_service.get_user_summary(db, user_id)
