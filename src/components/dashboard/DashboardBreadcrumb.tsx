@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
@@ -10,7 +9,14 @@ import {
   BreadcrumbSeparator,
   BreadcrumbPage,
 } from '@/components/ui/breadcrumb';
-import { TaskId } from '@/hooks/annotations/useAnnotationTypes';
+
+// Define TaskId enum directly if there's an issue with the import
+enum TaskId {
+  QUESTION_QUALITY = 1,
+  ANSWER_QUALITY = 2,
+  REWRITE = 3,
+  SUMMARY = 4
+}
 
 interface DashboardBreadcrumbProps {
   discussionId?: string;

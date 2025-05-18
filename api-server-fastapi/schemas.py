@@ -24,8 +24,10 @@ class AuthorizedUserCreate(AuthorizedUserBase):
 class AuthorizedUser(AuthorizedUserBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = {
+        "from_attributes": True,  # Replaces orm_mode=True
+        "populate_by_name": True  # Helps with field aliases
+    }
 
 # Batch Upload schemas
 class BatchUploadBase(BaseModel):
@@ -41,9 +43,10 @@ class BatchUpload(BatchUploadBase):
     created_at: datetime
     discussion_count: int
 
-    class Config:
-        orm_mode = True
-
+    model_config = {
+        "from_attributes": True,  # Replaces orm_mode=True
+        "populate_by_name": True  # Helps with field aliases
+    }
 # Task state for discussions
 class TaskState(BaseModel):
     status: str
@@ -75,9 +78,10 @@ class Discussion(DiscussionBase):
     batch_id: Optional[int] = None
     tasks: Dict[str, TaskState] = {}
 
-    class Config:
-        orm_mode = True
-        
+    model_config = {
+        "from_attributes": True,  # Replaces orm_mode=True
+        "populate_by_name": True  # Helps with field aliases
+    }        
     @classmethod
     def from_orm(cls, obj):
         # Get normal attributes
@@ -125,9 +129,10 @@ class Annotation(AnnotationBase):
     id: int
     timestamp: datetime
 
-    class Config:
-        orm_mode = True
-
+    model_config = {
+        "from_attributes": True,  # Replaces orm_mode=True
+        "populate_by_name": True  # Helps with field aliases
+    }
 # Schema for annotation override by pod lead
 class PodLeadAnnotationOverride(BaseModel):
     pod_lead_id: str
