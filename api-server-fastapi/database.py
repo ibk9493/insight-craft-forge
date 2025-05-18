@@ -38,7 +38,7 @@ def check_and_create_tables():
     """
     Check if all tables exist with correct columns and create or recreate them if needed
     """
-    from models import Discussion, Annotation, ConsensusAnnotation, AuthorizedUser
+    from models import Discussion, Annotation, ConsensusAnnotation, AuthorizedUser, BatchUpload
     
     try:
         logger.info("Checking database schema...")
@@ -48,7 +48,10 @@ def check_and_create_tables():
         required_columns = {
             'discussions': [
                 'id', 'title', 'url', 'repository', 'created_at', 
-                'repository_language', 'release_tag', 'release_url', 'release_date'
+                'repository_language', 'release_tag', 'release_url', 'release_date', 'batch_id'
+            ],
+            'batch_uploads': [
+                'id', 'name', 'description', 'created_at', 'created_by', 'discussion_count'
             ]
         }
         

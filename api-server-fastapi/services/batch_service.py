@@ -76,8 +76,14 @@ def get_batch_discussions(db: Session, batch_id: int) -> List[schemas.Discussion
     # Convert to response models using the existing discussions_service
     discussions = []
     for db_discussion in db_discussions:
-        discussion = discussions_service.map_discussion_to_response(db, db_discussion)
-        discussions.append(discussion)
+        try:
+            discussion = discussions_service.get_discussion_by_id(db, db_discussion.id)
+            if discussion:
+                discussions.append(discussion)
+        except Exception as e:
+            print(f"Error mapping discussion {db_discussion.id}: {e}")
+            # Continue processing other discussions even if one fails
+            continue
     
     return discussions
 

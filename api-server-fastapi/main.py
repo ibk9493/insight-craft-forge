@@ -7,7 +7,7 @@ import json
 
 import models
 import schemas
-from database import engine, get_db
+from database import engine, get_db, check_and_create_tables
 from services import discussions_service, annotations_service, consensus_service, auth_service, summary_service, batch_service
 
 # Create database tables
@@ -28,6 +28,15 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     db = next(get_db())
+    # Check database schema
+    schema_ok = check_and_create_tables()
+    if not schema_ok:
+        print("\n\n======================================================")
+        print("WARNING: Database schema is outdated or missing tables!")
+        print("Please run 'python reset_db.py' to update the schema.")
+        print("This is required for the application to work correctly.")
+        print("======================================================\n\n")
+    
     # Add Ibrahim as admin user if not exists
     try:
         admin_user = schemas.AuthorizedUserCreate(
