@@ -44,6 +44,12 @@ class BatchUpload(BatchUploadBase):
     class Config:
         orm_mode = True
 
+# Task state for discussions
+class TaskState(BaseModel):
+    status: str
+    annotators: int
+    user_annotated: Optional[bool] = None
+
 # Base class for Discussion
 class DiscussionBase(BaseModel):
     title: str
@@ -67,6 +73,7 @@ class Discussion(DiscussionBase):
     task3_status: str
     task3_annotators: int
     batch_id: Optional[int] = None
+    tasks: Optional[Dict[str, TaskState]] = None
 
     class Config:
         orm_mode = True
@@ -178,4 +185,3 @@ class BatchManagementResult(BaseModel):
     success: bool
     message: str
     batch_id: Optional[int] = None
-
