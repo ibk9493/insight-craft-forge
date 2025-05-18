@@ -136,20 +136,26 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   </div>
                 )}
                 
-                {/* Simple textarea implementation */}
+                {/* Textarea implementation with stopPropagation */}
                 {shouldShowRemarks(task) && (
                   <div 
                     className="mt-3"
+                    // Create a new div that prevents event bubbling
                     onClick={(e) => e.stopPropagation()}
                   >
                     <Textarea
                       value={task.textValue || ''}
                       onChange={(e) => {
-                        e.stopPropagation();
+                        // Prevent any click or change events from bubbling up
+                        e.stopPropagation(); 
                         onSubTaskChange(task.id, task.selectedOption, e.target.value);
                       }}
+                      // Make sure clicks don't bubble and trigger parent handlers
+                      onKeyDown={(e) => e.stopPropagation()}
+                      onKeyUp={(e) => e.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
                       placeholder={`Enter ${task.textInput ? task.title.toLowerCase() : 'remarks or justification'}`}
-                      className="min-h-[100px] text-sm"
+                      className="min-h-[100px] text-sm w-full"
                     />
                   </div>
                 )}
