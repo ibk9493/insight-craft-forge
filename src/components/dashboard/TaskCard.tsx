@@ -15,7 +15,7 @@ export interface SubTask {
   description?: string;
   textInput?: boolean;
   textValue?: string;
-  requiresRemarks?: boolean; // Field to indicate if remarks are required
+  requiresRemarks?: boolean;
 }
 
 interface TaskCardProps {
@@ -61,32 +61,9 @@ const TaskCard: React.FC<TaskCardProps> = ({
     }
   };
 
-  // Helper to check if a remarks field should be shown
+  // Simplified check for showing remarks
   const shouldShowRemarks = (task: SubTask): boolean => {
-    return (
-      (task.textInput === true) || 
-      (task.requiresRemarks === true && task.selectedOption !== undefined && 
-       (task.selectedOption === 'Yes' || task.selectedOption === 'No' || 
-        task.selectedOption === 'True' || task.selectedOption === 'False'))
-    );
-  };
-
-  // Handle textarea change
-  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>, taskId: string) => {
-    e.stopPropagation(); // Prevent event from bubbling up
-    onSubTaskChange(taskId, undefined, e.target.value);
-  };
-
-  // Handle option selection
-  const handleOptionSelect = (e: React.MouseEvent, taskId: string, option: string) => {
-    e.stopPropagation(); // Prevent event from bubbling up
-    e.preventDefault(); // Prevent default behavior
-    onSubTaskChange(taskId, option);
-  };
-
-  // Separate handler for card header click to toggle expansion
-  const toggleExpand = (e: React.MouseEvent) => {
-    setExpanded(!expanded);
+    return !!task.textInput || !!task.requiresRemarks;
   };
 
   return (
@@ -95,9 +72,10 @@ const TaskCard: React.FC<TaskCardProps> = ({
       getStatusColor(status),
       active && 'ring-2 ring-dashboard-blue'
     )}>
+      {/* Card header */}
       <div 
         className="flex items-center justify-between p-4 cursor-pointer"
-        onClick={toggleExpand}
+        onClick={() => setExpanded(!expanded)}
       >
         <div className="flex items-center">
           {expanded ? 
@@ -112,31 +90,31 @@ const TaskCard: React.FC<TaskCardProps> = ({
         </div>
       </div>
       
+      {/* Card content */}
       {expanded && (
         <div className="p-4 pt-0 animate-fadeIn">
           <p className="text-gray-600 mb-4 text-sm">{description}</p>
           <div className="space-y-4">
             {subTasks.map((task) => (
-              <div 
-                key={task.id} 
-                className="bg-white border rounded-md p-3"
-                onClick={(e) => e.stopPropagation()} // Stop click propagation on the task item
-              >
+              <div key={task.id} className="bg-white border rounded-md p-3">
+                {/* Task title and status */}
                 <div className="flex items-center mb-2">
                   {getStatusIcon(task.status)}
                   <span className="ml-2 font-medium text-sm">{task.title}</span>
                 </div>
+                
+                {/* Task description */}
                 {task.description && (
                   <p className="text-gray-500 text-xs mb-2">{task.description}</p>
                 )}
                 
-                {/* Option buttons */}
+                {/* Option buttons - simplified */}
                 {task.options && task.options.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-2">
                     {task.options.map((option) => (
                       <button
                         key={option}
-                        onClick={(e) => handleOptionSelect(e, task.id, option)}
+                        onClick={() => onSubTaskChange(task.id, option)}
                         className={cn(
                           "text-xs py-1 px-3 rounded-full",
                           task.selectedOption === option
@@ -150,18 +128,14 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   </div>
                 )}
                 
-                {/* Text input field - shown for explicit textInput or when a Yes/No/True/False option is selected */}
+                {/* Simple textarea implementation */}
                 {shouldShowRemarks(task) && (
-                  <div 
-                    className="mt-3" 
-                    onClick={(e) => e.stopPropagation()}
-                  >
+                  <div className="mt-3">
                     <Textarea
                       value={task.textValue || ''}
-                      onChange={(e) => handleTextChange(e, task.id)}
+                      onChange={(e) => onSubTaskChange(task.id, task.selectedOption, e.target.value)}
                       placeholder={`Enter ${task.textInput ? task.title.toLowerCase() : 'remarks or justification'}`}
                       className="min-h-[100px] text-sm"
-                      onFocus={(e) => e.stopPropagation()}
                     />
                   </div>
                 )}

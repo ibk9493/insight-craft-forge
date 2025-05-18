@@ -71,11 +71,6 @@ const FormItemContext = React.createContext<FormItemContextValue>(
   {} as FormItemContextValue
 )
 
-// Create a handler for isolated events
-const handleEvent = (e: React.SyntheticEvent) => {
-  e.stopPropagation();
-};
-
 const FormItem = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
@@ -88,10 +83,6 @@ const FormItem = React.forwardRef<
         ref={ref} 
         className={cn("space-y-2", className)} 
         {...props} 
-        onClick={(e) => {
-          handleEvent(e);
-          if (props.onClick) props.onClick(e as React.MouseEvent<HTMLDivElement>);
-        }}
       />
     </FormItemContext.Provider>
   )
@@ -110,10 +101,6 @@ const FormLabel = React.forwardRef<
       className={cn(error && "text-destructive", className)}
       htmlFor={formItemId}
       {...props}
-      onClick={(e) => {
-        handleEvent(e);
-        if (props.onClick) props.onClick(e);
-      }}
     />
   )
 })
@@ -136,10 +123,6 @@ const FormControl = React.forwardRef<
       }
       aria-invalid={!!error}
       {...props}
-      onClick={(e) => {
-        handleEvent(e);
-        if (props.onClick) props.onClick(e);
-      }}
     />
   )
 })
@@ -157,10 +140,6 @@ const FormDescription = React.forwardRef<
       id={formDescriptionId}
       className={cn("text-sm text-muted-foreground", className)}
       {...props}
-      onClick={(e) => {
-        handleEvent(e);
-        if (props.onClick) props.onClick(e as React.MouseEvent<HTMLParagraphElement>);
-      }}
     />
   )
 })
@@ -183,10 +162,6 @@ const FormMessage = React.forwardRef<
       id={formMessageId}
       className={cn("text-sm font-medium text-destructive", className)}
       {...props}
-      onClick={(e) => {
-        handleEvent(e);
-        if (props.onClick) props.onClick(e as React.MouseEvent<HTMLParagraphElement>);
-      }}
     >
       {body}
     </p>
