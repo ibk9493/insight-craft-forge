@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Tab, TabList, TabPanel, TabsContainer } from '@/components/ui/tabs';
+import { TabsContainer, TabList, Tab, TabPanel } from '@/components/ui/tabs';
 import { useUser } from '@/contexts/UserContext';
 import Header from '@/components/layout/Header';
 import JsonUploader from '@/components/admin/JsonUploader';

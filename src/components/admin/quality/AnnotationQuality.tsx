@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   Card, 
@@ -24,7 +23,7 @@ import { QualityMetrics, AnnotatorPerformance } from '@/services/api/types';
 import { AlertTriangle, ArrowUpDown, Search, Shield, Users } from 'lucide-react';
 import { Progress } from "@/components/ui/progress";
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs-wrapper';
 
 interface AnnotationQualityProps {
   qualityMetrics?: QualityMetrics[];
