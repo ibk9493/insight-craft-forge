@@ -24,6 +24,34 @@ const JsonUploader: React.FC = () => {
   const [batchName, setBatchName] = useState<string>('');
   const [batchDescription, setBatchDescription] = useState<string>('');
 
+  // Helper to normalize GitHub discussion data
+  const normalizeDiscussionData = (disc: any): GitHubDiscussion => {
+    // Convert createdAt to created_at for API compatibility
+    if (disc.createdAt && !disc.created_at) {
+      disc.created_at = disc.createdAt;
+    }
+    
+    // Ensure we have proper date format for API
+    if (disc.created_at) {
+      try {
+        // Ensure date format is ISO
+        disc.created_at = new Date(disc.created_at).toISOString();
+      } catch (e) {
+        console.warn(`[JsonUploader] Invalid date format for discussion: ${disc.id || 'unknown'}`);
+        disc.created_at = new Date().toISOString(); // Fallback
+      }
+    } else {
+      disc.created_at = new Date().toISOString(); // Required field
+    }
+    
+    // Extract repository from URL if not provided
+    if (!disc.repository && disc.url) {
+      disc.repository = extractRepositoryFromUrl(disc.url);
+    }
+    
+    return disc;
+  };
+
   const validateJSON = (json: any): { isValid: boolean, errors: string[], validItems: any[] } => {
     const errors: string[] = [];
     const validItems: any[] = [];
@@ -46,6 +74,13 @@ const JsonUploader: React.FC = () => {
         console.warn(`[JsonUploader] Item #${index + 1} missing URL`);
         validationErrors.push(`Item #${index + 1}: Missing required 'url' field`);
         isItemValid = false;
+      }
+      
+      // Ensure created_at is present or can be derived
+      if (!item.created_at && !item.createdAt) {
+        console.warn(`[JsonUploader] Item #${index + 1} missing created_at/createdAt`);
+        validationErrors.push(`Item #${index + 1}: Missing required 'created_at' field (will use current date as fallback)`);
+        // Not failing validation for this, we'll add it automatically
       }
       
       // Other field validations can be less strict since we'll auto-generate missing fields
@@ -78,7 +113,7 @@ const JsonUploader: React.FC = () => {
       
       // If the item is valid, add it to the validItems array
       if (isItemValid) {
-        validItems.push(item);
+        validItems.push(normalizeDiscussionData(item));
       } else {
         console.error(`[JsonUploader] Item #${index + 1} has validation errors:`, validationErrors);
       }
@@ -146,10 +181,15 @@ const JsonUploader: React.FC = () => {
               console.info(`[JsonUploader] Auto-generated repository: ${disc.repository} for URL ${disc.url}`);
             }
             
-            // Ensure createdAt exists
-            if (!disc.createdAt) {
-              disc.createdAt = new Date().toISOString();
-              console.info(`[JsonUploader] Auto-generated createdAt: ${disc.createdAt}`);
+            // Ensure title exists
+            if (!disc.title && disc.question) {
+              // Extract first line from question as title
+              const firstLine = disc.question.split('\n')[0].trim();
+              disc.title = firstLine.substring(0, 120); // Limit title length
+              console.info(`[JsonUploader] Auto-generated title from question: ${disc.title}`);
+            } else if (!disc.title) {
+              disc.title = `Discussion from ${disc.repository || extractRepositoryFromUrl(disc.url)}`;
+              console.info(`[JsonUploader] Auto-generated generic title: ${disc.title}`);
             }
             
             // Process release data if available
@@ -276,16 +316,18 @@ const JsonUploader: React.FC = () => {
             console.log('[JsonUploader] Form reset after successful upload');
           }, 1000);
         } else {
-          const errorMessage = typeof result.message === 'object' 
-            ? safeToString(result.message) 
-            : result.message || 'Upload failed';
+          const errorMessage = typeof result.message === 'string' 
+            ? result.message 
+            : 'Upload failed. Please check the data format.';
           
           setApiError(errorMessage);
           
           if (result.errors && result.errors.length > 0) {
             console.error('[JsonUploader] Upload errors:', result.errors);
             // Make sure errors are properly stringified
-            const errorStrings = result.errors.map(err => safeToString(err));
+            const errorStrings = result.errors.map(err => 
+              typeof err === 'string' ? err : safeToString(err)
+            );
             setApiError(`${errorMessage} - ${errorStrings.join(', ')}`);
           }
           
@@ -460,6 +502,7 @@ const JsonUploader: React.FC = () => {
                 </div>
               )}
               
+              {/* Preview section */}
               {parsedData && parsedData.length > 0 && (
                 <div className="border rounded-md p-3">
                   <p className="font-medium mb-2">Preview (first 3 items):</p>
@@ -470,26 +513,27 @@ const JsonUploader: React.FC = () => {
                         <div><strong>Title:</strong> {item.title || 'Auto-generated'}</div>
                         <div><strong>Repository:</strong> {item.repository || extractRepositoryFromUrl(item.url)}</div>
                         <div className="truncate"><strong>URL:</strong> {item.url}</div>
+                        <div><strong>Created At:</strong> {item.created_at || item.createdAt || 'Auto-generated'}</div>
                         
                         {/* Show enhanced metadata if available */}
-                        {(item.releaseTag || item.repositoryLanguage || item.releaseDate) && (
+                        {(item.release_tag || item.releaseTag || item.repository_language || item.repositoryLanguage || item.release_date || item.releaseDate) && (
                           <div className="mt-1 pt-1 border-t border-gray-200">
-                            {item.releaseTag && (
+                            {(item.release_tag || item.releaseTag) && (
                               <div className="flex items-center text-xs text-gray-600">
                                 <Tag className="w-3 h-3 mr-1" />
-                                <span>Release: {item.releaseTag}</span>
+                                <span>Release: {item.release_tag || item.releaseTag}</span>
                               </div>
                             )}
-                            {item.repositoryLanguage && (
+                            {(item.repository_language || item.repositoryLanguage) && (
                               <div className="flex items-center text-xs text-gray-600">
                                 <Code className="w-3 h-3 mr-1" />
-                                <span>Language: {item.repositoryLanguage}</span>
+                                <span>Language: {item.repository_language || item.repositoryLanguage}</span>
                               </div>
                             )}
-                            {item.releaseDate && (
+                            {(item.release_date || item.releaseDate) && (
                               <div className="flex items-center text-xs text-gray-600">
                                 <Calendar className="w-3 h-3 mr-1" />
-                                <span>Release Date: {new Date(item.releaseDate).toLocaleDateString()}</span>
+                                <span>Release Date: {new Date(item.release_date || item.releaseDate).toLocaleDateString()}</span>
                               </div>
                             )}
                           </div>

@@ -1,3 +1,4 @@
+
 import { toast } from '@/components/ui/sonner';
 import { ApiError } from './types';
 import { mockDiscussions, mockAnnotations } from './mockData';
@@ -66,6 +67,19 @@ export const handleResponse = async <T>(response: Response): Promise<T> => {
       // Try to parse error as JSON
       errorData = await response.json();
       console.error('[API Error] Error response body:', errorData);
+      
+      // If the error contains details in a structured format, format it for better display
+      if (errorData.detail && Array.isArray(errorData.detail)) {
+        const formattedErrors = errorData.detail.map((err: any) => {
+          if (err.msg && err.loc) {
+            return `${err.msg} at ${err.loc.join('.')}`;
+          }
+          return safeToString(err);
+        });
+        
+        errorData.message = formattedErrors.join('; ');
+      }
+      
     } catch (e) {
       // If it's not JSON, get text content for debugging
       const textContent = await response.text();

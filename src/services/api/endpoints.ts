@@ -1,4 +1,3 @@
-
 import { apiRequest } from './helpers';
 import { Discussion, Annotation, TaskStatus, GitHubDiscussion, UploadResult, 
          TaskManagementResult, UserRole, SystemSummary, UserSummary, 
@@ -51,6 +50,52 @@ const safeApiRequest = async <T>(
 // Define the fetchDiscussions function to be used in the redux slice
 export const fetchDiscussions = async (): Promise<Discussion[]> => {
   return await safeApiRequest<Discussion[]>('/api/discussions', 'GET', undefined, undefined, []);
+};
+
+// Helper function to format GitHub discussions for API compatibility
+const formatGitHubDiscussion = (discussion: GitHubDiscussion): GitHubDiscussion => {
+  const formatted = { ...discussion };
+  
+  // Ensure created_at is in ISO format
+  if (discussion.createdAt) {
+    formatted.created_at = new Date(discussion.createdAt).toISOString();
+    delete formatted.createdAt;
+  } else if (discussion.created_at) {
+    // Make sure it's valid ISO format
+    formatted.created_at = new Date(discussion.created_at).toISOString();
+  } else {
+    // Fallback to current date if no date is provided
+    formatted.created_at = new Date().toISOString();
+  }
+  
+  // Handle repository information
+  if (!formatted.repository && formatted.url) {
+    const match = formatted.url.match(/github\.com\/([^\/]+\/[^\/]+)/i);
+    formatted.repository = match ? match[1] : 'unknown/repository';
+  }
+  
+  // Ensure we have a title
+  if (!formatted.title && formatted.question) {
+    // Extract first line from question as title
+    const firstLine = formatted.question.split('\n')[0].trim();
+    formatted.title = firstLine.substring(0, 120); // Limit title length
+  }
+  
+  // Convert any custom fields to standard format expected by the API
+  if (formatted.lang) {
+    formatted.repository_language = formatted.lang;
+    delete formatted.lang;
+  }
+  
+  // Remove any fields that aren't expected by the API schema
+  const unexpectedFields = ['question', 'answer', 'category', 'knowledge', 'code'];
+  unexpectedFields.forEach(field => {
+    if (field in formatted) {
+      delete formatted[field as keyof GitHubDiscussion];
+    }
+  });
+  
+  return formatted;
 };
 
 export const api = {
@@ -154,8 +199,12 @@ export const api = {
     // Upload GitHub discussions from JSON
     uploadDiscussions: (discussions: GitHubDiscussion[], batchName?: string, batchDescription?: string) => {
       console.log('[Admin] Uploading discussions:', discussions.length);
+      
+      // Format each discussion to ensure API compatibility
+      const formattedDiscussions = discussions.map(formatGitHubDiscussion);
+      
       return safeApiRequest<UploadResult>('/api/admin/discussions/upload', 'POST', { 
-        discussions, 
+        discussions: formattedDiscussions, 
         batch_name: batchName, 
         batch_description: batchDescription
       }, undefined, { 
