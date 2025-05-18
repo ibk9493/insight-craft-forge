@@ -1,3 +1,4 @@
+
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 import models
@@ -45,7 +46,9 @@ def get_discussions(db: Session, status: Optional[str] = None) -> List[schemas.D
                 logger.info(f"Found {len(completed_discussions)} completed discussions")
                 discussions_with_tasks = []
                 for disc in completed_discussions:
-                    discussions_with_tasks.append(get_discussion_by_id(db, disc.id))
+                    discussion = get_discussion_by_id(db, disc.id)
+                    if discussion:
+                        discussions_with_tasks.append(discussion)
                 return discussions_with_tasks
                 
             elif status == 'unlocked':
@@ -65,7 +68,9 @@ def get_discussions(db: Session, status: Optional[str] = None) -> List[schemas.D
                 logger.info(f"Found {len(unlocked_discussions)} unlocked discussions")
                 discussions_with_tasks = []
                 for disc in unlocked_discussions:
-                    discussions_with_tasks.append(get_discussion_by_id(db, disc.id))
+                    discussion = get_discussion_by_id(db, disc.id)
+                    if discussion:
+                        discussions_with_tasks.append(discussion)
                 return discussions_with_tasks
                 
             elif status == 'locked':
@@ -85,7 +90,9 @@ def get_discussions(db: Session, status: Optional[str] = None) -> List[schemas.D
                 logger.info(f"Found {len(locked_discussions)} locked discussions")
                 discussions_with_tasks = []
                 for disc in locked_discussions:
-                    discussions_with_tasks.append(get_discussion_by_id(db, disc.id))
+                    discussion = get_discussion_by_id(db, disc.id)
+                    if discussion:
+                        discussions_with_tasks.append(discussion)
                 return discussions_with_tasks
         
         # If no status filter or unknown status, return all with tasks
@@ -134,17 +141,17 @@ def get_discussion_by_id(db: Session, discussion_id: str) -> Optional[schemas.Di
         tasks = {}
         for task_num in range(1, 4):
             task_assoc = next((t for t in task_associations if t.task_number == task_num), None)
+            status = "locked"
+            annotators = 0
+            
             if task_assoc:
-                tasks[f"task{task_num}"] = schemas.TaskState(
-                    status=task_assoc.status,
-                    annotators=task_assoc.annotators
-                )
-            else:
-                # Default task state if no association exists
-                tasks[f"task{task_num}"] = schemas.TaskState(
-                    status="locked",
-                    annotators=0
-                )
+                status = task_assoc.status
+                annotators = task_assoc.annotators
+            
+            tasks[f"task{task_num}"] = schemas.TaskState(
+                status=status,
+                annotators=annotators
+            )
         
         # Convert to schema and return
         discussion = schemas.Discussion(
@@ -157,6 +164,15 @@ def get_discussion_by_id(db: Session, discussion_id: str) -> Optional[schemas.Di
             release_tag=db_discussion.release_tag,
             release_url=db_discussion.release_url,
             release_date=db_discussion.release_date,
+            batch_id=db_discussion.batch_id,
+            # For backward compatibility with older code
+            task1_status=tasks["task1"].status,
+            task1_annotators=tasks["task1"].annotators,
+            task2_status=tasks["task2"].status,
+            task2_annotators=tasks["task2"].annotators,
+            task3_status=tasks["task3"].status,
+            task3_annotators=tasks["task3"].annotators,
+            # New structure for tasks
             tasks=tasks
         )
         
@@ -166,86 +182,7 @@ def get_discussion_by_id(db: Session, discussion_id: str) -> Optional[schemas.Di
         logger.error(f"Error fetching discussion {discussion_id}: {str(e)}")
         return None
 
-def generate_discussion_id(repository: str, discussion_url: str) -> str:
-    """
-    Generate a unique ID for a discussion based on repository and discussion URL
-    
-    Parameters:
-    - repository: Repository name
-    - discussion_url: URL of the discussion
-    
-    Returns:
-    - Generated ID string
-    """
-    try:
-        # Extract discussion number from the URL
-        discussion_number_match = re.search(r'/discussions/(\d+)', discussion_url)
-        if discussion_number_match:
-            discussion_number = discussion_number_match.group(1)
-        else:
-            # Fallback to URL hash if no number found
-            from hashlib import md5
-            discussion_number = md5(discussion_url.encode()).hexdigest()[:8]
-            
-        # Clean repository name for ID
-        repo_part = repository.split('/')[1] if '/' in repository else repository
-        repo_part = re.sub(r'[^a-zA-Z0-9]', '', repo_part)  # Remove non-alphanumeric chars
-        
-        return f"{repo_part}_{discussion_number}"
-    except Exception as e:
-        logger.error(f"Error generating discussion ID: {str(e)}")
-        # Fallback to hash of URL
-        from hashlib import md5
-        return f"discussion_{md5(discussion_url.encode()).hexdigest()[:10]}"
-
-def fetch_discussion_title(url: str) -> str:
-    """
-    Attempt to fetch a discussion title from GitHub
-    
-    Parameters:
-    - url: GitHub discussion URL
-    
-    Returns:
-    - Discussion title or repository name as fallback
-    """
-    try:
-        # This is a placeholder - in a real implementation, you would use GitHub API
-        # to fetch the actual title of the discussion
-        logger.info(f"Attempting to fetch discussion title from {url}")
-        
-        # Extract repository for fallback title
-        repository, _, _ = extract_repository_info_from_url(url)
-        
-        # Try to extract page title from GitHub
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        }
-        
-        # Add GitHub token if available
-        github_token = requests.get('https://github.com')
-        if github_token:
-            headers["Authorization"] = f"token {github_token}"
-            
-        logger.info(f"Making request to GitHub for discussion title: {url}")
-        response = requests.get(url, headers=headers, timeout=5)
-        
-        if response.status_code == 200:
-            # Simple title extraction using regex (basic approach)
-            title_match = re.search(r'<title>(.*?)</title>', response.text)
-            if title_match:
-                raw_title = title_match.group(1)
-                # Clean up title, typically GitHub titles are "Title · Discussion #123 · owner/repo"
-                cleaned_title = re.sub(r'·.*$', '', raw_title).strip()
-                if cleaned_title:
-                    logger.info(f"Successfully extracted title: {cleaned_title}")
-                    return cleaned_title
-        
-        logger.warning(f"Could not extract title, using repository as fallback: {repository}")
-        return repository  # Fallback to repository name
-    except Exception as e:
-        logger.error(f"Error fetching discussion title: {str(e)}")
-        repository, _, _ = extract_repository_info_from_url(url)
-        return repository  # Fallback to repository name
+# ... keep existing code (generate_discussion_id, fetch_discussion_title, and extract_repository functions)
 
 def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> schemas.UploadResult:
     """
@@ -260,9 +197,21 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
     """
     discussions_added = 0
     errors = []
+    batch_id = None
     
     try:
         logger.info(f"Processing upload of {len(upload_data.discussions)} discussions")
+        
+        # Create a batch if batch name is provided
+        if upload_data.batch_name:
+            from services import batch_service
+            batch_data = schemas.BatchUploadCreate(
+                name=upload_data.batch_name,
+                description=upload_data.batch_description
+            )
+            batch = batch_service.create_batch(db, batch_data)
+            batch_id = batch.id
+            logger.info(f"Created batch with ID {batch_id}: {upload_data.batch_name}")
         
         for disc in upload_data.discussions:
             try:
@@ -294,6 +243,9 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
                 # Get repository language if possible
                 language = disc.repository_language
                 
+                # Use batch_id from request or from the batch we created
+                discussion_batch_id = disc.batch_id or batch_id
+                
                 # Create new discussion with enhanced metadata
                 new_discussion = models.Discussion(
                     id=discussion_id,
@@ -304,7 +256,8 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
                     repository_language=language,
                     release_tag=disc.release_tag,
                     release_url=disc.release_url,
-                    release_date=disc.release_date
+                    release_date=disc.release_date,
+                    batch_id=discussion_batch_id
                 )
                 db.add(new_discussion)
                 db.flush()  # Flush to get the ID
@@ -339,6 +292,11 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
                     )
                 )
                 
+                # Update batch discussion count if we have a batch
+                if discussion_batch_id:
+                    from services import batch_service
+                    batch_service.increment_discussion_count(db, discussion_batch_id)
+                
                 discussions_added += 1
                 logger.info(f"Added discussion: {discussion_id}")
             except Exception as e:
@@ -352,6 +310,7 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
             success=True,
             message=f"Successfully uploaded {discussions_added} discussions",
             discussions_added=discussions_added,
+            batch_id=batch_id,
             errors=errors if errors else None
         )
         
@@ -363,6 +322,7 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
             success=False,
             message="Error processing discussions",
             discussions_added=discussions_added,
+            batch_id=batch_id,
             errors=[error_msg] + errors
         )
 

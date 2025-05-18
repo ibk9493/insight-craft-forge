@@ -38,37 +38,50 @@ def check_and_create_tables():
     """
     Check if all tables exist with correct columns and create or recreate them if needed
     """
-    from models import Discussion, Annotation, ConsensusAnnotation, AuthorizedUser, BatchUpload
+    from models import Discussion, Annotation, ConsensusAnnotation, AuthorizedUser, BatchUpload, discussion_task_association
     
     try:
         logger.info("Checking database schema...")
         inspector = inspect(engine)
         
-        # Required columns for the discussions table
-        required_columns = {
+        # Required tables and columns
+        required_tables = {
             'discussions': [
                 'id', 'title', 'url', 'repository', 'created_at', 
                 'repository_language', 'release_tag', 'release_url', 'release_date', 'batch_id'
             ],
             'batch_uploads': [
                 'id', 'name', 'description', 'created_at', 'created_by', 'discussion_count'
+            ],
+            'discussion_task_association': [
+                'discussion_id', 'task_number', 'status', 'annotators'
+            ],
+            'annotations': [
+                'id', 'discussion_id', 'user_id', 'task_id', 'data', 'timestamp'
+            ],
+            'consensus_annotations': [
+                'id', 'discussion_id', 'task_id', 'data', 'timestamp'
+            ],
+            'authorized_users': [
+                'id', 'email', 'role'
             ]
         }
         
         needs_update = False
         
-        # Check if tables exist
-        for table_name, columns in required_columns.items():
-            if table_name in inspector.get_table_names():
-                existing_columns = [col['name'] for col in inspector.get_columns(table_name)]
-                missing_columns = [col for col in columns if col not in existing_columns]
-                
-                if missing_columns:
-                    logger.warning(f"Missing columns in {table_name} table: {missing_columns}")
-                    needs_update = True
-                    break
-            else:
+        # Check if all required tables exist with their columns
+        existing_tables = inspector.get_table_names()
+        for table_name, columns in required_tables.items():
+            if table_name not in existing_tables:
                 logger.warning(f"Missing table: {table_name}")
+                needs_update = True
+                break
+                
+            existing_columns = [col['name'] for col in inspector.get_columns(table_name)]
+            missing_columns = [col for col in columns if col not in existing_columns]
+                
+            if missing_columns:
+                logger.warning(f"Missing columns in {table_name} table: {missing_columns}")
                 needs_update = True
                 break
         
@@ -76,6 +89,35 @@ def check_and_create_tables():
             logger.warning("Database schema needs to be updated")
             logger.warning("Please run reset_db.py to recreate the schema")
             logger.warning("Command: python reset_db.py")
+            
+            # Write warning to a file that will be shown in UI
+            with open("db_schema_info.txt", "w") as f:
+                f.write("""
+⚠️ DATABASE SCHEMA UPDATE REQUIRED ⚠️
+
+The application has detected that your database schema is out of date.
+This happens when new features have been added to the application that require database changes.
+
+To update your database schema, please run the following command:
+
+    python reset_db.py
+
+This will:
+1. Back up your current database
+2. Drop all existing tables
+3. Create new tables with the updated schema
+
+IMPORTANT: This will reset all data in your database. If you have important data,
+make sure to export it first or save the backup file created during the process.
+
+After running the reset script, restart the API server to continue.
+
+Common issues if you don't reset the database:
+- "no such column: discussions.batch_id" errors
+- "module 'schemas' has no attribute 'TaskState'" errors 
+- Other schema-related errors
+
+""")
             
             # Don't auto-recreate tables to prevent data loss
             return False

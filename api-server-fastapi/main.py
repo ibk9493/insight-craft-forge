@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List, Dict, Optional, Union
 import json
+import os
 
 import models
 import schemas
@@ -49,7 +50,19 @@ async def startup_event():
 # Root endpoint
 @app.get("/")
 async def root():
-    return {"message": "SWE-QA Annotation API"}
+    # Check if we need to show the schema warning
+    schema_warning = ""
+    if os.path.exists("db_schema_info.txt"):
+        try:
+            with open("db_schema_info.txt", "r") as f:
+                schema_warning = f.read()
+        except:
+            pass
+    
+    return {
+        "message": "SWE-QA Annotation API", 
+        "schema_warning": schema_warning if schema_warning else None
+    }
 
 # Discussions endpoints
 @app.get("/api/discussions", response_model=List[schemas.Discussion])

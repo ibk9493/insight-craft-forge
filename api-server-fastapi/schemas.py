@@ -66,14 +66,14 @@ class DiscussionCreate(DiscussionBase):
 
 class Discussion(DiscussionBase):
     id: str
-    task1_status: str
-    task1_annotators: int
-    task2_status: str
-    task2_annotators: int
-    task3_status: str
-    task3_annotators: int
+    task1_status: Optional[str] = None
+    task1_annotators: Optional[int] = None
+    task2_status: Optional[str] = None
+    task2_annotators: Optional[int] = None
+    task3_status: Optional[str] = None
+    task3_annotators: Optional[int] = None
     batch_id: Optional[int] = None
-    tasks: Optional[Dict[str, TaskState]] = None
+    tasks: Dict[str, TaskState]
 
     class Config:
         orm_mode = True
