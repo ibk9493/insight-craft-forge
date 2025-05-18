@@ -73,10 +73,34 @@ class Discussion(DiscussionBase):
     task3_status: Optional[str] = None
     task3_annotators: Optional[int] = None
     batch_id: Optional[int] = None
-    tasks: Dict[str, TaskState]
+    tasks: Dict[str, TaskState] = {}
 
     class Config:
         orm_mode = True
+        
+    @classmethod
+    def from_orm(cls, obj):
+        # Get normal attributes
+        data = {}
+        for key, value in obj.__dict__.items():
+            if key != "_sa_instance_state":
+                data[key] = value
+        
+        # If tasks dictionary is not present but task1_status etc are, create tasks dict
+        if not obj.__dict__.get("tasks") and any(f"task{i}_status" in obj.__dict__ for i in range(1, 4)):
+            data["tasks"] = {}
+            for i in range(1, 4):
+                status_key = f"task{i}_status"
+                annotators_key = f"task{i}_annotators"
+                
+                if status_key in data and annotators_key in data:
+                    data["tasks"][str(i)] = {
+                        "status": data[status_key] or "pending",
+                        "annotators": data[annotators_key] or 0,
+                        "user_annotated": None
+                    }
+        
+        return cls(**data)
 
 # Schema for task status update
 class TaskStatusUpdate(BaseModel):

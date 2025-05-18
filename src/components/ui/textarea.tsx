@@ -8,6 +8,27 @@ export interface TextareaProps
 
 const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ className, ...props }, ref) => {
+    // Event handlers to stop propagation
+    const handleClick = (e: React.MouseEvent<HTMLTextAreaElement>) => {
+      e.stopPropagation();
+      if (props.onClick) props.onClick(e);
+    };
+
+    const handleFocus = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+      e.stopPropagation();
+      if (props.onFocus) props.onFocus(e);
+    };
+
+    const handleBlur = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+      e.stopPropagation();
+      if (props.onBlur) props.onBlur(e);
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      e.stopPropagation();
+      if (props.onKeyDown) props.onKeyDown(e);
+    };
+
     return (
       <textarea
         className={cn(
@@ -16,6 +37,10 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
         )}
         ref={ref}
         {...props}
+        onClick={handleClick}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
       />
     )
   }

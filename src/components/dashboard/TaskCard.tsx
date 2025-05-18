@@ -71,10 +71,17 @@ const TaskCard: React.FC<TaskCardProps> = ({
     );
   };
 
-  // Handle textarea change separately to prevent closing
-  const handleTextChange = (taskId: string, value: string, e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    e.stopPropagation(); // Stop event propagation to prevent card collapse
-    onSubTaskChange(taskId, undefined, value);
+  // Handle textarea change
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>, taskId: string) => {
+    e.stopPropagation(); // Prevent event from bubbling up
+    onSubTaskChange(taskId, undefined, e.target.value);
+  };
+
+  // Handle option selection
+  const handleOptionSelect = (e: React.MouseEvent, taskId: string, option: string) => {
+    e.stopPropagation(); // Prevent event from bubbling up
+    e.preventDefault(); // Prevent default behavior
+    onSubTaskChange(taskId, option);
   };
 
   // Separate handler for card header click to toggle expansion
@@ -121,17 +128,11 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 
                 {/* Option buttons */}
                 {task.options && task.options.length > 0 && (
-                  <div 
-                    className="flex flex-wrap gap-2 mt-2" 
-                    onClick={(e) => e.stopPropagation()}
-                  >
+                  <div className="flex flex-wrap gap-2 mt-2">
                     {task.options.map((option) => (
                       <button
                         key={option}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSubTaskChange(task.id, option);
-                        }}
+                        onClick={(e) => handleOptionSelect(e, task.id, option)}
                         className={cn(
                           "text-xs py-1 px-3 rounded-full",
                           task.selectedOption === option
@@ -147,19 +148,16 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 
                 {/* Text input field - shown for explicit textInput or when a Yes/No/True/False option is selected */}
                 {shouldShowRemarks(task) && (
-                  <div 
-                    className="mt-3"
-                    onClick={(e) => e.stopPropagation()} 
-                  >
+                  <div className="mt-3" onClick={(e) => e.stopPropagation()}>
                     <Textarea
                       value={task.textValue || ''}
-                      onChange={(e) => handleTextChange(task.id, e.target.value, e)}
+                      onChange={(e) => handleTextChange(e, task.id)}
                       placeholder={`Enter ${task.textInput ? task.title.toLowerCase() : 'remarks or justification'}`}
                       className="min-h-[100px] text-sm"
-                      onClick={(e) => e.stopPropagation()} 
+                      onClick={(e) => e.stopPropagation()}
                       onFocus={(e) => e.stopPropagation()}
+                      onBlur={(e) => e.stopPropagation()}
                       onKeyDown={(e) => e.stopPropagation()}
-                      onMouseDown={(e) => e.stopPropagation()}
                     />
                   </div>
                 )}
