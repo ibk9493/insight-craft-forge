@@ -158,3 +158,24 @@ class DiscussionUpload(BaseModel):
 # Schema for batch deletion
 class BatchDelete(BaseModel):
     batch_id: int
+
+# Schema for upload result
+class UploadResult(BaseModel):
+    success: bool
+    message: str
+    discussions_added: int
+    batch_id: Optional[int] = None
+    errors: Optional[List[str]] = None
+
+# Schema for task management result
+class TaskManagementResult(BaseModel):
+    success: bool
+    message: str
+    discussion: Optional[Discussion] = None
+
+# Schema for batch management result
+class BatchManagementResult(BaseModel):
+    success: bool
+    message: str
+    batch_id: Optional[int] = None
+
