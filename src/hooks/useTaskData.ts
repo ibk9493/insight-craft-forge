@@ -1,4 +1,3 @@
-
 import { useState, useCallback } from 'react';
 import { SubTask, SubTaskStatus } from '@/components/dashboard/TaskCard';
 import { useAnnotationData } from './useAnnotationData';
@@ -144,20 +143,6 @@ export function useTaskData() {
     }
   ]);
 
-  // Store annotations from multiple annotators
-  const [task1Annotations, setTask1Annotations] = useState<Array<Record<string, string>>>([]);
-  const [task2Annotations, setTask2Annotations] = useState<Array<Record<string, string>>>([]);
-  const [task3Annotations, setTask3Annotations] = useState<Array<Record<string, string>>>([]);
-  
-  // Progress steps
-  const [steps, setSteps] = useState([
-    { id: 1, title: 'Input URL', completed: false },
-    { id: 2, title: 'Task 1', completed: false },
-    { id: 3, title: 'Task 2', completed: false },
-    { id: 4, title: 'Task 3', completed: false },
-    { id: 5, title: 'Summary', completed: false },
-  ]);
-
   // Add annotator counters
   const [task1Annotators, setTask1Annotators] = useState(0);
   const [task2Annotators, setTask2Annotators] = useState(0);
@@ -189,6 +174,20 @@ export function useTaskData() {
       requiredAnnotators: 5,
       currentAnnotators: 0
     }
+  ]);
+
+  // Store annotations from multiple annotators
+  const [task1Annotations, setTask1Annotations] = useState<Array<Record<string, string>>>([]);
+  const [task2Annotations, setTask2Annotations] = useState<Array<Record<string, string>>>([]);
+  const [task3Annotations, setTask3Annotations] = useState<Array<Record<string, string>>>([]);
+  
+  // Progress steps
+  const [steps, setSteps] = useState([
+    { id: 1, title: 'Input URL', completed: false },
+    { id: 2, title: 'Task 1', completed: false },
+    { id: 3, title: 'Task 2', completed: false },
+    { id: 4, title: 'Task 3', completed: false },
+    { id: 5, title: 'Summary', completed: false },
   ]);
 
   const handleSubTaskChange = useCallback((taskSet: string, taskId: string, selectedOption?: string, textValue?: string) => {
@@ -274,9 +273,37 @@ export function useTaskData() {
     }
   }, [task1SubTasks]);
 
+  // Check if maximum annotators has been reached
+  const hasReachedMaxAnnotators = useCallback((taskSet: string): boolean => {
+    try {
+      const requiredAnnotators = taskSet === 'task3' ? 5 : 3;
+      
+      if (taskSet === 'task1') {
+        return task1Annotators >= requiredAnnotators;
+      } 
+      else if (taskSet === 'task2') {
+        return task2Annotators >= requiredAnnotators;
+      }
+      else if (taskSet === 'task3') {
+        return task3Annotators >= requiredAnnotators;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error("Error in hasReachedMaxAnnotators:", error);
+      return false;
+    }
+  }, [task1Annotators, task2Annotators, task3Annotators]);
+
   // Function to save annotation when an annotator completes a task
   const saveAnnotation = useCallback(async (taskSet: string, discussionId?: string) => {
     try {
+      // Check if maximum number of annotators has been reached
+      if (hasReachedMaxAnnotators(taskSet)) {
+        toast.error(`This task already has the maximum number of annotators (${taskSet === 'task3' ? 5 : 3}). Please choose another task.`);
+        return false;
+      }
+      
       let currentAnnotation: Record<string, string> = {};
       
       if (taskSet === 'task1') {
@@ -342,7 +369,7 @@ export function useTaskData() {
       toast.error("Failed to save annotation. Please try again.");
       return false;
     }
-  }, [task1SubTasks, task2SubTasks, task3SubTasks, task1Annotations, task2Annotations, task3Annotations, task1Annotators, task2Annotators, task3Annotators]);
+  }, [task1SubTasks, task2SubTasks, task3SubTasks, task1Annotations, task2Annotations, task3Annotations, task1Annotators, task2Annotators, task3Annotators, hasReachedMaxAnnotators]);
 
   // Determine consensus based on majority rule using the API
   const determineConsensus = useCallback(async (taskSet: string, discussionId: string) => {
@@ -503,6 +530,7 @@ export function useTaskData() {
     getTask3Progress,
     saveAnnotation,
     determineConsensus,
-    resetTasks
+    resetTasks,
+    hasReachedMaxAnnotators
   };
 }

@@ -5,7 +5,7 @@ import Header from '@/components/layout/Header';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Github, ExternalLink, Code, Calendar, Tag, Eye } from 'lucide-react';
+import { Search, Github, ExternalLink, Code, Calendar, Tag, Eye, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useUser } from '@/contexts/UserContext';
 import { useAnnotationData } from '@/hooks/useAnnotationData';
@@ -307,6 +307,17 @@ const Discussions = () => {
       return;
     }
     
+    // Check if the task has reached maximum annotators
+    const task = taskNumber === 1 ? discussion.tasks.task1 : 
+                taskNumber === 2 ? discussion.tasks.task2 : discussion.tasks.task3;
+    
+    const requiredAnnotators = taskNumber === 3 ? 5 : 3;
+    
+    if (task.annotators >= requiredAnnotators) {
+      toast.error(`This task already has the maximum number of annotators (${requiredAnnotators}). Please choose another task.`);
+      return;
+    }
+    
     // For annotators, check if they've already annotated
     const userAnnotationStatus = getUserAnnotationStatus(discussionId, user.id);
     const hasAnnotated = taskNumber === 1 ? userAnnotationStatus.task1 : 
@@ -338,11 +349,14 @@ const Discussions = () => {
                 taskNumber === 2 ? discussion.tasks.task2 : discussion.tasks.task3;
     
     const userAnnotated = task.userAnnotated;
-    const isEnabled = task.status === 'unlocked' || task.status === 'completed' || isPodLead;
     const requiredAnnotators = taskNumber === 3 ? 5 : 3;
+    const maxAnnotatorsReached = task.annotators >= requiredAnnotators && !isPodLead && !userAnnotated;
+    const isEnabled = (task.status === 'unlocked' || task.status === 'completed' || isPodLead) && !maxAnnotatorsReached;
     
     let text = '';
-    if (isPodLead && task.status === 'completed') {
+    if (maxAnnotatorsReached) {
+      text = `Maximum Annotators Reached (${task.annotators}/${requiredAnnotators})`;
+    } else if (isPodLead && task.status === 'completed') {
       text = `Create Consensus (${task.annotators}/${requiredAnnotators})`;
     } else if (userAnnotated) {
       text = `View Your Annotation (${task.annotators}/${requiredAnnotators})`;
@@ -557,14 +571,21 @@ const Discussions = () => {
                       <p className="text-xs text-gray-500 mb-4">
                         Evaluate question relevance, learning value, clarity, and image grounding.
                       </p>
-                      <Button 
-                        onClick={() => startTask(discussion.id, 1)}
-                        disabled={!getTaskButtonState(discussion, 1).isEnabled}
-                        className="w-full text-xs h-8"
-                        variant={discussion.tasks.task1.status === 'completed' ? "outline" : "default"}
-                      >
-                        {getTaskButtonState(discussion, 1).text}
-                      </Button>
+                      {discussion.tasks.task1.annotators >= 3 && !isPodLead && !discussion.tasks.task1.userAnnotated ? (
+                        <div className="flex items-center justify-center space-x-2 text-amber-600 text-xs py-2">
+                          <AlertCircle className="h-4 w-4" />
+                          <span>Maximum annotators reached (3/3)</span>
+                        </div>
+                      ) : (
+                        <Button 
+                          onClick={() => startTask(discussion.id, 1)}
+                          disabled={!getTaskButtonState(discussion, 1).isEnabled}
+                          className="w-full text-xs h-8"
+                          variant={discussion.tasks.task1.status === 'completed' ? "outline" : "default"}
+                        >
+                          {getTaskButtonState(discussion, 1).text}
+                        </Button>
+                      )}
                     </div>
                     
                     {/* Task 2 */}
@@ -578,14 +599,21 @@ const Discussions = () => {
                       <p className="text-xs text-gray-500 mb-4">
                         Evaluate answer completeness, explanation, code execution.
                       </p>
-                      <Button 
-                        onClick={() => startTask(discussion.id, 2)}
-                        disabled={!getTaskButtonState(discussion, 2).isEnabled}
-                        className="w-full text-xs h-8"
-                        variant={discussion.tasks.task2.status === 'completed' ? "outline" : "default"}
-                      >
-                        {getTaskButtonState(discussion, 2).text}
-                      </Button>
+                      {discussion.tasks.task2.annotators >= 3 && !isPodLead && !discussion.tasks.task2.userAnnotated ? (
+                        <div className="flex items-center justify-center space-x-2 text-amber-600 text-xs py-2">
+                          <AlertCircle className="h-4 w-4" />
+                          <span>Maximum annotators reached (3/3)</span>
+                        </div>
+                      ) : (
+                        <Button 
+                          onClick={() => startTask(discussion.id, 2)}
+                          disabled={!getTaskButtonState(discussion, 2).isEnabled}
+                          className="w-full text-xs h-8"
+                          variant={discussion.tasks.task2.status === 'completed' ? "outline" : "default"}
+                        >
+                          {getTaskButtonState(discussion, 2).text}
+                        </Button>
+                      )}
                     </div>
                     
                     {/* Task 3 */}
@@ -599,14 +627,21 @@ const Discussions = () => {
                       <p className="text-xs text-gray-500 mb-4">
                         Rewrite question & answer, classify, provide supporting docs.
                       </p>
-                      <Button 
-                        onClick={() => startTask(discussion.id, 3)}
-                        disabled={!getTaskButtonState(discussion, 3).isEnabled}
-                        className="w-full text-xs h-8"
-                        variant={discussion.tasks.task3.status === 'completed' ? "outline" : "default"}
-                      >
-                        {getTaskButtonState(discussion, 3).text}
-                      </Button>
+                      {discussion.tasks.task3.annotators >= 5 && !isPodLead && !discussion.tasks.task3.userAnnotated ? (
+                        <div className="flex items-center justify-center space-x-2 text-amber-600 text-xs py-2">
+                          <AlertCircle className="h-4 w-4" />
+                          <span>Maximum annotators reached (5/5)</span>
+                        </div>
+                      ) : (
+                        <Button 
+                          onClick={() => startTask(discussion.id, 3)}
+                          disabled={!getTaskButtonState(discussion, 3).isEnabled}
+                          className="w-full text-xs h-8"
+                          variant={discussion.tasks.task3.status === 'completed' ? "outline" : "default"}
+                        >
+                          {getTaskButtonState(discussion, 3).text}
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </CardContent>
