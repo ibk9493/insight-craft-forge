@@ -3,11 +3,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { api, GitHubDiscussion } from '@/services/api';
-import { Upload, X, Check, Tag, Code, Calendar, Package } from 'lucide-react';
+import { Upload, X, Check, Tag, Code, Calendar, Package, AlertCircle } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const JsonUploader: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -15,6 +16,7 @@ const JsonUploader: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [jsonErrors, setJsonErrors] = useState<string[]>([]);
+  const [apiError, setApiError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Batch information
@@ -208,6 +210,17 @@ const JsonUploader: React.FC = () => {
     reader.readAsText(selectedFile);
   };
 
+  const extractRepositoryFromUrl = (url: string): string => {
+    try {
+      const githubUrlPattern = /github\.com\/([^\/]+\/[^\/]+)/i;
+      const match = url.match(githubUrlPattern);
+      return match ? match[1] : 'unknown/repository';
+    } catch (error) {
+      console.error('Error extracting repository from URL:', error);
+      return 'unknown/repository';
+    }
+  };
+
   const handleUpload = async () => {
     if (!parsedData || parsedData.length === 0) {
       toast.error('No valid data to upload');
@@ -222,6 +235,7 @@ const JsonUploader: React.FC = () => {
     
     try {
       setIsUploading(true);
+      setApiError(null); // Reset any previous API errors
       console.log(`[JsonUploader] Starting upload of ${parsedData.length} discussions in batch: ${batchName}`);
       
       // Simulate progress
@@ -236,43 +250,54 @@ const JsonUploader: React.FC = () => {
       }, 100);
       
       // Upload to API with batch information
-      const result = await api.admin.uploadDiscussions(parsedData, batchName, batchDescription);
+      try {
+        const result = await api.admin.uploadDiscussions(parsedData, batchName, batchDescription);
       
-      clearInterval(timer);
-      setUploadProgress(100);
-      console.log('[JsonUploader] Upload result:', result);
-      
-      if (result.success) {
-        toast.success(result.message);
+        clearInterval(timer);
+        setUploadProgress(100);
+        console.log('[JsonUploader] Upload result:', result);
         
-        // Reset the form after successful upload
-        setTimeout(() => {
-          setFile(null);
-          setParsedData(null);
+        if (result.success) {
+          toast.success(result.message);
+          
+          // Reset the form after successful upload
+          setTimeout(() => {
+            setFile(null);
+            setParsedData(null);
+            setIsUploading(false);
+            setUploadProgress(0);
+            setJsonErrors([]);
+            setBatchName('');
+            setBatchDescription('');
+            if (fileInputRef.current) {
+              fileInputRef.current.value = '';
+            }
+            console.log('[JsonUploader] Form reset after successful upload');
+          }, 1000);
+        } else {
+          setApiError(result.message || "Upload failed");
+          if (result.errors && result.errors.length > 0) {
+            console.error('[JsonUploader] Upload errors:', result.errors);
+            setApiError(`${result.message} - ${result.errors.join(', ')}`);
+          }
           setIsUploading(false);
           setUploadProgress(0);
-          setJsonErrors([]);
-          setBatchName('');
-          setBatchDescription('');
-          if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-          }
-          console.log('[JsonUploader] Form reset after successful upload');
-        }, 1000);
-      } else {
-        toast.error(result.message);
-        console.error('[JsonUploader] Upload failed:', result);
-        if (result.errors && result.errors.length > 0) {
-          console.error('[JsonUploader] Upload errors:', result.errors);
+          toast.error(result.message || "Upload failed");
         }
+      } catch (apiError) {
+        clearInterval(timer);
+        console.error('[JsonUploader] API Error:', apiError);
+        setApiError("Connection error. The API server may be unavailable. You can try again or use the Export JSON feature to save your work locally until the server is available.");
         setIsUploading(false);
         setUploadProgress(0);
+        toast.error('Connection error. The API server may be unavailable.');
       }
     } catch (error) {
       console.error('[JsonUploader] Upload error:', error);
       toast.error('Failed to upload discussions');
       setIsUploading(false);
       setUploadProgress(0);
+      setApiError("An unexpected error occurred during upload.");
     }
   };
 
@@ -280,10 +305,41 @@ const JsonUploader: React.FC = () => {
     setFile(null);
     setParsedData(null);
     setJsonErrors([]);
+    setApiError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
     console.log('[JsonUploader] Form cleared');
+  };
+
+  const exportAsJson = () => {
+    if (!parsedData || parsedData.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
+
+    try {
+      // Create JSON string with pretty formatting
+      const jsonData = JSON.stringify(parsedData, null, 2);
+      
+      // Create a Blob and download link
+      const blob = new Blob([jsonData], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const filename = `${batchName || 'discussions'}_${new Date().toISOString().split('T')[0]}.json`;
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast.success('JSON file exported successfully');
+    } catch (error) {
+      console.error('[JsonUploader] Export error:', error);
+      toast.error('Failed to export JSON');
+    }
   };
 
   return (
@@ -296,6 +352,16 @@ const JsonUploader: React.FC = () => {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
+          {apiError && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Upload Failed</AlertTitle>
+              <AlertDescription>
+                {apiError}
+              </AlertDescription>
+            </Alert>
+          )}
+          
           {/* Batch Information Section */}
           {file && (
             <div className="space-y-4 border rounded-md p-4 bg-gray-50">
@@ -464,6 +530,17 @@ const JsonUploader: React.FC = () => {
           <Button variant="outline" onClick={clearFile} disabled={!file || isUploading}>
             Clear
           </Button>
+          
+          {parsedData && parsedData.length > 0 && (
+            <Button 
+              variant="secondary" 
+              onClick={exportAsJson} 
+              disabled={isUploading}
+            >
+              Export JSON
+            </Button>
+          )}
+          
           <Button 
             onClick={handleUpload} 
             disabled={!parsedData || parsedData.length === 0 || isUploading || !batchName.trim()}
@@ -475,17 +552,5 @@ const JsonUploader: React.FC = () => {
     </Card>
   );
 };
-
-// Utility function to extract repository name from GitHub URL
-function extractRepositoryFromUrl(url: string): string {
-  try {
-    const githubUrlPattern = /github\.com\/([^\/]+\/[^\/]+)/i;
-    const match = url.match(githubUrlPattern);
-    return match ? match[1] : 'unknown/repository';
-  } catch (error) {
-    console.error('Error extracting repository from URL:', error);
-    return 'unknown/repository';
-  }
-}
 
 export default JsonUploader;
