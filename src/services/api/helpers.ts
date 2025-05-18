@@ -1,4 +1,3 @@
-
 import { toast } from 'sonner';
 import { ApiError } from './types';
 import { mockDiscussions, mockAnnotations } from './mockData';
@@ -19,13 +18,16 @@ export const USE_MOCK_DATA = false; // Set this to false to disable mock data
 export const formatApiUrl = (endpoint: string): string => {
   if (!API_URL) return endpoint; // If no API URL, just return the endpoint
   
-  // Remove leading slash from endpoint if it exists
-  const cleanEndpoint = endpoint.startsWith('/') ? endpoint.substring(1) : endpoint;
+  // Remove leading slash from endpoint if it exists and API_URL ends with a slash
+  const cleanEndpoint = API_URL.endsWith('/') && endpoint.startsWith('/') 
+    ? endpoint.substring(1) 
+    : endpoint;
   
-  // Ensure API_URL ends with a slash
+  // Ensure proper joining of URL parts
   const baseUrl = API_URL.endsWith('/') ? API_URL : `${API_URL}/`;
+  const formattedEndpoint = cleanEndpoint.startsWith('/') ? cleanEndpoint.substring(1) : cleanEndpoint;
   
-  return `${baseUrl}${cleanEndpoint}`;
+  return `${baseUrl.replace(/\/+$/, '')}/${formattedEndpoint}`;
 };
 
 /**

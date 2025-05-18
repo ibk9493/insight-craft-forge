@@ -3,17 +3,17 @@
 
 // API configuration
 export const API_CONFIG = {
-  // Base URL for the API - ensure it ends with '/api'
-  BASE_URL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api',
+  // Base URL for the API - ensure it doesn't end with '/api' as it's added in the endpoint paths
+  BASE_URL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
   
   // Whether to use mock data - Default to false to ensure API calls
   USE_MOCK: import.meta.env.VITE_USE_MOCK_DATA === 'true',
   
   // API endpoints
   ENDPOINTS: {
-    DISCUSSIONS: '/discussions',
-    ANNOTATIONS: '/annotations',
-    CONSENSUS: '/consensus'
+    DISCUSSIONS: '/api/discussions',
+    ANNOTATIONS: '/api/annotations',
+    CONSENSUS: '/api/consensus'
   },
   
   // API version
