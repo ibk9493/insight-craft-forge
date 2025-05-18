@@ -6,7 +6,13 @@ export interface TextareaProps
   extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {}
 
 const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ className, ...props }, ref) => {
+  ({ className, onClick, ...props }, ref) => {
+    // Add onClick handler to stop propagation
+    const handleClick = (e: React.MouseEvent<HTMLTextAreaElement>) => {
+      e.stopPropagation();
+      if (onClick) onClick(e);
+    };
+    
     return (
       <textarea
         className={cn(
@@ -14,6 +20,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
           className
         )}
         ref={ref}
+        onClick={handleClick}
         {...props}
       />
     )
