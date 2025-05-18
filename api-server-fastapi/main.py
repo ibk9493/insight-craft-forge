@@ -31,8 +31,11 @@ async def root():
 
 # Discussions endpoints
 @app.get("/api/discussions", response_model=List[schemas.Discussion])
-def get_all_discussions(db: Session = Depends(get_db)):
-    discussions = discussions_service.get_all_discussions(db)
+def get_all_discussions(
+    status: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    discussions = discussions_service.get_discussions(db, status)
     return discussions
 
 @app.get("/api/discussions/{discussion_id}", response_model=schemas.Discussion)

@@ -292,7 +292,7 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
                     logger.info(f"Generated discussion title: {title}")
                 
                 # Get repository language if possible
-                language = disc.repositoryLanguage
+                language = disc.repository_language
                 
                 # Create new discussion with enhanced metadata
                 new_discussion = models.Discussion(
@@ -300,24 +300,24 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
                     title=title,
                     url=disc.url,
                     repository=repository,
-                    created_at=disc.createdAt,
+                    created_at=disc.created_at,
                     repository_language=language,
-                    release_tag=disc.releaseTag,
-                    release_url=disc.releaseUrl,
-                    release_date=disc.releaseDate
+                    release_tag=disc.release_tag,
+                    release_url=disc.release_url,
+                    release_date=disc.release_date
                 )
                 db.add(new_discussion)
                 db.flush()  # Flush to get the ID
                 
                 # Add task associations
-                tasks = disc.tasks or schemas.GitHubDiscussionTasks()
+                tasks = disc.tasks or {}
                 
                 db.execute(
                     models.discussion_task_association.insert().values(
                         discussion_id=new_discussion.id,
                         task_number=1,
-                        status=tasks.task1.status if tasks.task1 else "locked",
-                        annotators=tasks.task1.annotators if tasks.task1 else 0
+                        status=tasks.get("task1", {}).get("status", "locked"),
+                        annotators=tasks.get("task1", {}).get("annotators", 0)
                     )
                 )
                 
@@ -325,8 +325,8 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
                     models.discussion_task_association.insert().values(
                         discussion_id=new_discussion.id,
                         task_number=2,
-                        status=tasks.task2.status if tasks.task2 else "locked",
-                        annotators=tasks.task2.annotators if tasks.task2 else 0
+                        status=tasks.get("task2", {}).get("status", "locked"),
+                        annotators=tasks.get("task2", {}).get("annotators", 0)
                     )
                 )
                 
@@ -334,8 +334,8 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
                     models.discussion_task_association.insert().values(
                         discussion_id=new_discussion.id,
                         task_number=3,
-                        status=tasks.task3.status if tasks.task3 else "locked",
-                        annotators=tasks.task3.annotators if tasks.task3 else 0
+                        status=tasks.get("task3", {}).get("status", "locked"),
+                        annotators=tasks.get("task3", {}).get("annotators", 0)
                     )
                 )
                 
@@ -366,49 +366,51 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
             errors=[error_msg] + errors
         )
 
-def update_task_status(db: Session, task_update: schemas.TaskStatusUpdate) -> schemas.TaskManagementResult:
+def update_task_status(db: Session, discussion_id: str, task_id: int, status: str) -> schemas.TaskManagementResult:
     """
     Update the status of a specific task for a discussion.
     
     Parameters:
     - db: Database session
-    - task_update: TaskStatusUpdate object containing discussion_id, task_id, and status
+    - discussion_id: The ID of the discussion
+    - task_id: The ID of the task to update
+    - status: The new status for the task
     
     Returns:
     - TaskManagementResult with success/failure information
     """
     try:
-        logger.info(f"Updating task {task_update.task_id} status to {task_update.status} for discussion {task_update.discussion_id}")
+        logger.info(f"Updating task {task_id} status to {status} for discussion {discussion_id}")
         
         # Check if discussion exists
-        discussion = db.query(models.Discussion).filter(models.Discussion.id == task_update.discussion_id).first()
+        discussion = db.query(models.Discussion).filter(models.Discussion.id == discussion_id).first()
         if not discussion:
-            logger.warning(f"Discussion with ID {task_update.discussion_id} not found")
+            logger.warning(f"Discussion with ID {discussion_id} not found")
             return schemas.TaskManagementResult(
                 success=False,
-                message=f"Discussion with ID {task_update.discussion_id} not found"
+                message=f"Discussion with ID {discussion_id} not found"
             )
         
         # Update the task status
         result = db.execute(
             models.discussion_task_association.update().where(
                 and_(
-                    models.discussion_task_association.c.discussion_id == task_update.discussion_id,
-                    models.discussion_task_association.c.task_number == task_update.task_id
+                    models.discussion_task_association.c.discussion_id == discussion_id,
+                    models.discussion_task_association.c.task_number == task_id
                 )
             ).values(
-                status=task_update.status
+                status=status
             )
         )
         
         if result.rowcount == 0:
-            logger.info(f"Creating new task association for discussion {task_update.discussion_id}, task {task_update.task_id}")
+            logger.info(f"Creating new task association for discussion {discussion_id}, task {task_id}")
             # Create task association if it doesn't exist
             db.execute(
                 models.discussion_task_association.insert().values(
-                    discussion_id=task_update.discussion_id,
-                    task_number=task_update.task_id,
-                    status=task_update.status,
+                    discussion_id=discussion_id,
+                    task_number=task_id,
+                    status=status,
                     annotators=0
                 )
             )
@@ -416,12 +418,12 @@ def update_task_status(db: Session, task_update: schemas.TaskStatusUpdate) -> sc
         db.commit()
         
         # Get updated discussion with tasks for response
-        updated_discussion = get_discussion_by_id(db, task_update.discussion_id)
+        updated_discussion = get_discussion_by_id(db, discussion_id)
         
-        logger.info(f"Successfully updated task {task_update.task_id} status to {task_update.status}")
+        logger.info(f"Successfully updated task {task_id} status to {status}")
         return schemas.TaskManagementResult(
             success=True,
-            message=f"Task {task_update.task_id} status updated to {task_update.status}",
+            message=f"Task {task_id} status updated to {status}",
             discussion=updated_discussion
         )
         
