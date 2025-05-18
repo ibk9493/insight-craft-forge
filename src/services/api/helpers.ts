@@ -1,3 +1,4 @@
+
 import { toast } from 'sonner';
 import { ApiError } from './types';
 import { mockDiscussions, mockAnnotations } from './mockData';
@@ -28,6 +29,26 @@ export const formatApiUrl = (endpoint: string): string => {
   const formattedEndpoint = cleanEndpoint.startsWith('/') ? cleanEndpoint.substring(1) : cleanEndpoint;
   
   return `${baseUrl.replace(/\/+$/, '')}/${formattedEndpoint}`;
+};
+
+/**
+ * Safely converts any value to a string suitable for display
+ * @param value - Any value to convert to a string
+ * @returns A string representation of the value
+ */
+export const safeToString = (value: unknown): string => {
+  if (value === null) return 'null';
+  if (value === undefined) return 'undefined';
+  
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch (e) {
+      return '[Object]';
+    }
+  }
+  
+  return String(value);
 };
 
 /**
@@ -154,7 +175,7 @@ export const apiRequest = async <T>(
     return await handleResponse<T>(response);
   } catch (error) {
     if ((error as ApiError).message) {
-      toast.error((error as ApiError).message);
+      toast.error(safeToString((error as ApiError).message));
     } else {
       toast.error('An error occurred while connecting to the server');
     }

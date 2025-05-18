@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { safeToString } from '@/services/api/helpers';
 
 const JsonUploader: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -275,14 +276,22 @@ const JsonUploader: React.FC = () => {
             console.log('[JsonUploader] Form reset after successful upload');
           }, 1000);
         } else {
-          setApiError(result.message || "Upload failed");
+          const errorMessage = typeof result.message === 'object' 
+            ? safeToString(result.message) 
+            : result.message || 'Upload failed';
+          
+          setApiError(errorMessage);
+          
           if (result.errors && result.errors.length > 0) {
             console.error('[JsonUploader] Upload errors:', result.errors);
-            setApiError(`${result.message} - ${result.errors.join(', ')}`);
+            // Make sure errors are properly stringified
+            const errorStrings = result.errors.map(err => safeToString(err));
+            setApiError(`${errorMessage} - ${errorStrings.join(', ')}`);
           }
+          
           setIsUploading(false);
           setUploadProgress(0);
-          toast.error(result.message || "Upload failed");
+          toast.error(errorMessage);
         }
       } catch (apiError) {
         clearInterval(timer);
