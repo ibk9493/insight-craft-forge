@@ -19,16 +19,22 @@ const BatchManager: React.FC = () => {
   const [selectedBatch, setSelectedBatch] = useState<BatchUpload | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   // Load batches from API
   const fetchBatches = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const fetchedBatches = await api.batches.getAllBatches();
+      const response = await api.batches.getAllBatches();
+      // Ensure we always have an array, even if API returns null/undefined or an object
+      const fetchedBatches = Array.isArray(response) ? response : [];
       setBatches(fetchedBatches);
     } catch (error) {
       console.error('Error fetching batches:', error);
       toast.error('Failed to load batch data');
+      setError('Failed to load batches. Please try again later.');
+      setBatches([]); // Reset to empty array on error
     } finally {
       setLoading(false);
     }
@@ -64,10 +70,12 @@ const BatchManager: React.FC = () => {
   };
 
   // Filter batches based on search term
-  const filteredBatches = batches.filter(batch => 
-    batch.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (batch.description && batch.description.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredBatches = Array.isArray(batches) 
+    ? batches.filter(batch => 
+        batch.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (batch.description && batch.description.toLowerCase().includes(searchTerm.toLowerCase()))
+      )
+    : [];
 
   return (
     <div className="space-y-6">
@@ -102,7 +110,12 @@ const BatchManager: React.FC = () => {
               <div className="flex justify-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
               </div>
-            ) : batches.length === 0 ? (
+            ) : error ? (
+              <div className="text-center py-8 border rounded-md border-dashed">
+                <p className="text-red-500 mb-2">{error}</p>
+                <Button variant="outline" onClick={fetchBatches}>Retry</Button>
+              </div>
+            ) : filteredBatches.length === 0 ? (
               <div className="text-center py-8 border rounded-md border-dashed">
                 <PackagePlus className="mx-auto h-12 w-12 text-gray-400 mb-3" />
                 <h3 className="text-lg font-medium text-gray-900 mb-1">No batches found</h3>

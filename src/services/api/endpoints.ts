@@ -1,3 +1,4 @@
+
 import { apiRequest } from './helpers';
 import { Discussion, Annotation, TaskStatus, GitHubDiscussion, UploadResult, 
          TaskManagementResult, UserRole, SystemSummary, UserSummary, 
@@ -35,6 +36,12 @@ const safeApiRequest = async <T>(
     if (fallback !== undefined) {
       return fallback;
     } else {
+      // Return appropriate fallback based on expected return type
+      // This handles the case where batches.filter is not a function
+      if (url.includes('batches') && !url.includes('batch')) {
+        // For batch list endpoints, return empty array
+        return ([] as unknown) as T;
+      }
       // Return empty array for array types, empty object for object types
       return (Array.isArray(fallback) ? [] : {}) as T;
     }
@@ -43,44 +50,44 @@ const safeApiRequest = async <T>(
 
 // Define the fetchDiscussions function to be used in the redux slice
 export const fetchDiscussions = async (): Promise<Discussion[]> => {
-  return await safeApiRequest<Discussion[]>('/discussions', 'GET', undefined, undefined, []);
+  return await safeApiRequest<Discussion[]>('/api/discussions', 'GET', undefined, undefined, []);
 };
 
 export const api = {
   // Discussion endpoints
   discussions: {
-    getAll: () => safeApiRequest<Discussion[]>('/discussions', 'GET', undefined, undefined, []),
-    getById: (id: string) => safeApiRequest<Discussion>(`/discussions/${id}`, 'GET', undefined, undefined, {} as Discussion),
+    getAll: () => safeApiRequest<Discussion[]>('/api/discussions', 'GET', undefined, undefined, []),
+    getById: (id: string) => safeApiRequest<Discussion>(`/api/discussions/${id}`, 'GET', undefined, undefined, {} as Discussion),
     getByStatus: (status: TaskStatus) => 
-      safeApiRequest<Discussion[]>(`/discussions?status=${status}`, 'GET', undefined, undefined, []),
+      safeApiRequest<Discussion[]>(`/api/discussions?status=${status}`, 'GET', undefined, undefined, []),
     getByBatch: (batchId: number) => 
-      safeApiRequest<Discussion[]>(`/discussions?batchId=${batchId}`, 'GET', undefined, undefined, []),
+      safeApiRequest<Discussion[]>(`/api/discussions?batchId=${batchId}`, 'GET', undefined, undefined, []),
   },
 
   // Annotation endpoints
   annotations: {
     getByDiscussionId: (discussionId: string) => 
-      safeApiRequest<Annotation[]>(`/annotations?discussionId=${discussionId}`, 'GET', undefined, undefined, []),
+      safeApiRequest<Annotation[]>(`/api/annotations?discussionId=${discussionId}`, 'GET', undefined, undefined, []),
     getByTaskAndDiscussion: (discussionId: string, taskId: number) => 
-      safeApiRequest<Annotation[]>(`/annotations?discussionId=${discussionId}&taskId=${taskId}`, 'GET', undefined, undefined, []),
+      safeApiRequest<Annotation[]>(`/api/annotations?discussionId=${discussionId}&taskId=${taskId}`, 'GET', undefined, undefined, []),
     getUserAnnotation: (discussionId: string, userId: string, taskId: number) => 
-      safeApiRequest<Annotation>(`/annotations?discussionId=${discussionId}&userId=${userId}&taskId=${taskId}`, 'GET', undefined, undefined, {} as Annotation),
+      safeApiRequest<Annotation>(`/api/annotations?discussionId=${discussionId}&userId=${userId}&taskId=${taskId}`, 'GET', undefined, undefined, {} as Annotation),
     save: (annotation: Omit<Annotation, 'timestamp'>) => 
-      safeApiRequest<Annotation>('/annotations', 'POST', annotation, undefined, {} as Annotation),
+      safeApiRequest<Annotation>('/api/annotations', 'POST', annotation, undefined, {} as Annotation),
     update: (annotation: Annotation) => 
-      safeApiRequest<Annotation>(`/annotations/${annotation.discussionId}/${annotation.userId}/${annotation.taskId}`, 'PUT', annotation, undefined, {} as Annotation),
+      safeApiRequest<Annotation>(`/api/annotations/${annotation.discussionId}/${annotation.userId}/${annotation.taskId}`, 'PUT', annotation, undefined, {} as Annotation),
     upload: (file: File, discussionId: string) => {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('discussionId', discussionId);
       console.log(`[File Upload] Uploading file for discussion: ${discussionId}`, file.name, file.type, file.size);
-      return safeApiRequest<{fileUrl: string}>('/files/upload', 'POST', formData, {
+      return safeApiRequest<{fileUrl: string}>('/api/files/upload', 'POST', formData, {
         'Content-Type': undefined as any
       }, { fileUrl: '' });
     },
     // Method for pod leads to override annotations
     podLeadOverride: (podLeadId: string, annotatorId: string, discussionId: string, taskId: number, data: Record<string, string | boolean>) => 
-      safeApiRequest<Annotation>('/pod-lead/annotations/override', 'POST', {
+      safeApiRequest<Annotation>('/api/pod-lead/annotations/override', 'POST', {
         pod_lead_id: podLeadId,
         annotator_id: annotatorId,
         discussion_id: discussionId,
@@ -92,19 +99,19 @@ export const api = {
   // Consensus endpoints
   consensus: {
     get: (discussionId: string, taskId: number) => 
-      safeApiRequest<Annotation>(`/consensus?discussionId=${discussionId}&taskId=${taskId}`, 'GET', undefined, undefined, {} as Annotation),
+      safeApiRequest<Annotation>(`/api/consensus?discussionId=${discussionId}&taskId=${taskId}`, 'GET', undefined, undefined, {} as Annotation),
     save: (consensus: Omit<Annotation, 'timestamp'>) => 
-      safeApiRequest<Annotation>('/consensus', 'POST', consensus, undefined, {} as Annotation),
+      safeApiRequest<Annotation>('/api/consensus', 'POST', consensus, undefined, {} as Annotation),
     calculate: (discussionId: string, taskId: number) => 
-      safeApiRequest<{result: string, agreement: boolean}>(`/consensus/calculate?discussionId=${discussionId}&taskId=${taskId}`, 'GET', undefined, undefined, { result: '', agreement: false }),
+      safeApiRequest<{result: string, agreement: boolean}>(`/api/consensus/calculate?discussionId=${discussionId}&taskId=${taskId}`, 'GET', undefined, undefined, { result: '', agreement: false }),
     override: (discussionId: string, taskId: number, data: Record<string, string | boolean>) =>
-      safeApiRequest<Annotation>('/consensus/override', 'POST', { discussionId, taskId, data }, undefined, {} as Annotation),
+      safeApiRequest<Annotation>('/api/consensus/override', 'POST', { discussionId, taskId, data }, undefined, {} as Annotation),
   },
   
   // Code download endpoint
   code: {
     getDownloadUrl: (discussionId: string, repo: string) => 
-      safeApiRequest<{downloadUrl: string}>(`/code/download?discussionId=${discussionId}&repo=${repo}`, 'GET', undefined, undefined, { downloadUrl: '' })
+      safeApiRequest<{downloadUrl: string}>(`/api/code/download?discussionId=${discussionId}&repo=${repo}`, 'GET', undefined, undefined, { downloadUrl: '' })
   },
   
   // Authentication endpoints
@@ -113,32 +120,32 @@ export const api = {
       // In a real app, this would send the token to your backend
       console.log('[Auth] Verifying Google token:', token.substring(0, 20) + '...');
       
-      return safeApiRequest<{success: boolean, user: any}>('/auth/google', 'POST', { token }, undefined, { success: false, user: null });
+      return safeApiRequest<{success: boolean, user: any}>('/api/auth/google', 'POST', { token }, undefined, { success: false, user: null });
     },
     
     // Sign up a new user
     signupUser: (email: string, password: string) => {
       console.log('[Auth] Signing up user:', email);
-      return safeApiRequest<{success: boolean, userId: string}>('/auth/signup', 'POST', { email, password }, undefined, { success: false, userId: '' });
+      return safeApiRequest<{success: boolean, userId: string}>('/api/auth/signup', 'POST', { email, password }, undefined, { success: false, userId: '' });
     },
     
     // Get authorized users endpoint
     getAuthorizedUsers: () => {
       console.log('[Auth] Getting authorized users');
       // In production, always make the API call
-      return safeApiRequest<{email: string, role: UserRole}[]>('/auth/authorized-users', 'GET', undefined, undefined, []);
+      return safeApiRequest<{email: string, role: UserRole}[]>('/api/auth/authorized-users', 'GET', undefined, undefined, []);
     },
     
     // Add authorized user endpoint
     addAuthorizedUser: (email: string, role: UserRole) => {
       console.log('[Auth] Adding authorized user:', email, role);
-      return safeApiRequest<{success: boolean}>('/auth/authorized-users', 'POST', { email, role }, undefined, { success: false });
+      return safeApiRequest<{success: boolean}>('/api/auth/authorized-users', 'POST', { email, role }, undefined, { success: false });
     },
     
     // Remove authorized user endpoint
     removeAuthorizedUser: (email: string) => {
       console.log('[Auth] Removing authorized user:', email);
-      return safeApiRequest<{success: boolean}>(`/auth/authorized-users/${encodeURIComponent(email)}`, 'DELETE', undefined, undefined, { success: false });
+      return safeApiRequest<{success: boolean}>(`/api/auth/authorized-users/${encodeURIComponent(email)}`, 'DELETE', undefined, undefined, { success: false });
     }
   },
   
@@ -147,7 +154,7 @@ export const api = {
     // Upload GitHub discussions from JSON
     uploadDiscussions: (discussions: GitHubDiscussion[], batchName?: string, batchDescription?: string) => {
       console.log('[Admin] Uploading discussions:', discussions.length);
-      return safeApiRequest<UploadResult>('/admin/discussions/upload', 'POST', { 
+      return safeApiRequest<UploadResult>('/api/admin/discussions/upload', 'POST', { 
         discussions, 
         batch_name: batchName, 
         batch_description: batchDescription
@@ -163,9 +170,9 @@ export const api = {
     updateTaskStatus: (discussionId: string, taskId: number, status: TaskStatus) => {
       console.log(`[Admin] Updating task status: ${discussionId}, Task ${taskId} to ${status}`);
       // Use proper field names to match backend expectations
-      return safeApiRequest<TaskManagementResult>('/admin/tasks/status', 'PUT', { 
-        discussionId,
-        taskId, 
+      return safeApiRequest<TaskManagementResult>('/api/admin/tasks/status', 'PUT', { 
+        discussion_id: discussionId,
+        task_id: taskId, 
         status 
       }, undefined, {
         success: false,
@@ -176,7 +183,7 @@ export const api = {
     // NEW: Bulk update task status
     bulkUpdateTaskStatus: (discussionIds: string[], taskId: number, status: TaskStatus) => {
       console.log(`[Admin] Bulk updating task status for ${discussionIds.length} discussions, Task ${taskId} to ${status}`);
-      return safeApiRequest<BulkActionResult>('/admin/tasks/bulk-status', 'PUT', {
+      return safeApiRequest<BulkActionResult>('/api/admin/tasks/bulk-status', 'PUT', {
         discussionIds,
         taskId,
         status
@@ -191,7 +198,7 @@ export const api = {
     // Override annotation values
     overrideAnnotation: (annotation: Annotation) => {
       console.log('[Admin] Overriding annotation:', annotation.discussionId, annotation.taskId);
-      return safeApiRequest<Annotation>('/admin/annotations/override', 'PUT', annotation, undefined, {} as Annotation);
+      return safeApiRequest<Annotation>('/api/admin/annotations/override', 'PUT', annotation, undefined, {} as Annotation);
     },
     
     // NEW: Get quality metrics
@@ -203,7 +210,7 @@ export const api = {
         agreementScore: number,
         annotatorCount: number,
         conflictAreas: string[]
-      }[]>('/admin/quality/metrics', 'GET', undefined, undefined, []);
+      }[]>('/api/admin/quality/metrics', 'GET', undefined, undefined, []);
     },
     
     // NEW: Get annotator performance
@@ -214,7 +221,7 @@ export const api = {
         completedTasks: number,
         averageTime: number,
         agreement: number
-      }[]>('/admin/quality/performance', 'GET', undefined, undefined, []);
+      }[]>('/api/admin/quality/performance', 'GET', undefined, undefined, []);
     }
   },
   
@@ -223,19 +230,19 @@ export const api = {
     // Get all batches
     getAllBatches: () => {
       console.log('[Batches] Getting all batches');
-      return safeApiRequest<BatchUpload[]>('/batches', 'GET', undefined, undefined, []);
+      return safeApiRequest<BatchUpload[]>('/api/batches', 'GET', undefined, undefined, []);
     },
 
     // Get batch by ID
     getBatchById: (batchId: number) => {
       console.log(`[Batches] Getting batch with ID: ${batchId}`);
-      return safeApiRequest<BatchUpload>(`/batches/${batchId}`, 'GET', undefined, undefined, {} as BatchUpload);
+      return safeApiRequest<BatchUpload>(`/api/batches/${batchId}`, 'GET', undefined, undefined, {} as BatchUpload);
     },
 
     // Create a new batch
     createBatch: (name: string, description?: string) => {
       console.log(`[Batches] Creating new batch: ${name}`);
-      return safeApiRequest<BatchManagementResult>('/batches', 'POST', { name, description }, undefined, {
+      return safeApiRequest<BatchManagementResult>('/api/batches', 'POST', { name, description }, undefined, {
         success: false,
         message: 'Failed to create batch'
       });
@@ -244,7 +251,7 @@ export const api = {
     // Delete a batch
     deleteBatch: (batchId: number) => {
       console.log(`[Batches] Deleting batch with ID: ${batchId}`);
-      return safeApiRequest<BatchManagementResult>(`/batches/${batchId}`, 'DELETE', undefined, undefined, {
+      return safeApiRequest<BatchManagementResult>(`/api/batches/${batchId}`, 'DELETE', undefined, undefined, {
         success: false,
         message: 'Failed to delete batch'
       });
@@ -253,7 +260,7 @@ export const api = {
     // Get discussions in a batch
     getBatchDiscussions: (batchId: number) => {
       console.log(`[Batches] Getting discussions for batch ID: ${batchId}`);
-      return safeApiRequest<Discussion[]>(`/batches/${batchId}/discussions`, 'GET', undefined, undefined, []);
+      return safeApiRequest<Discussion[]>(`/api/batches/${batchId}/discussions`, 'GET', undefined, undefined, []);
     }
   },
   

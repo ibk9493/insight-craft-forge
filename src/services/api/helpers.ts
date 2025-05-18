@@ -293,6 +293,53 @@ export function getMockData<T>(endpoint: string): T {
     ] as unknown as T;
   }
   
+  if (endpoint.startsWith('/api/batches') || endpoint === '/batches') {
+    // For batch endpoints, always return an array for list endpoints
+    if (endpoint === '/api/batches' || endpoint === '/batches') {
+      console.log('[API Mock] Returning mock batches list');
+      return ([
+        {
+          id: 1,
+          name: 'May 2025 Batch',
+          description: 'Discussions from May 2025',
+          created_at: '2025-05-01T00:00:00Z',
+          created_by: 'admin@example.com',
+          discussion_count: 45
+        },
+        {
+          id: 2,
+          name: 'April 2025 Batch',
+          description: 'Discussions from April 2025',
+          created_at: '2025-04-01T00:00:00Z',
+          created_by: 'admin@example.com',
+          discussion_count: 32
+        }
+      ]) as unknown as T;
+    }
+    
+    // For specific batch ID, return a single batch
+    const batchIdMatch = endpoint.match(/\/batches\/(\d+)$/);
+    if (batchIdMatch) {
+      const batchId = parseInt(batchIdMatch[1]);
+      console.log(`[API Mock] Looking for batch with ID: ${batchId}`);
+      return {
+        id: batchId,
+        name: `Batch ${batchId}`,
+        description: `Description for batch ${batchId}`,
+        created_at: '2025-05-01T00:00:00Z',
+        created_by: 'admin@example.com',
+        discussion_count: 20
+      } as unknown as T;
+    }
+    
+    // For batch discussions, return an array of discussions
+    const batchDiscussionsMatch = endpoint.match(/\/batches\/(\d+)\/discussions/);
+    if (batchDiscussionsMatch) {
+      console.log('[API Mock] Returning mock batch discussions');
+      return mockDiscussions.slice(0, 5) as unknown as T;
+    }
+  }
+  
   // For system summary stats
   if (endpoint.startsWith('/api/summary/stats')) {
     console.log('[API Mock] Returning mock system summary stats');
@@ -345,7 +392,16 @@ export function getMockData<T>(endpoint: string): T {
     ] as unknown as T;
   }
   
-  // Default empty response
-  console.log('[API Mock] No specific mock data for endpoint, returning empty object');
-  return {} as T;
+  // Default empty response - use appropriate defaults based on expected return type
+  console.log('[API Mock] No specific mock data for endpoint, returning empty fallback');
+  
+  // Try to infer the appropriate default value based on usage patterns and endpoint name
+  if (endpoint.includes('list') || endpoint.endsWith('s') || 
+      endpoint.includes('all') || endpoint.includes('get')) {
+    // For endpoints likely returning lists
+    return ([] as unknown) as T;
+  } else {
+    // For endpoints likely returning objects
+    return ({} as unknown) as T;
+  }
 }
