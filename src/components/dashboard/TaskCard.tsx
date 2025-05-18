@@ -113,7 +113,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   <p className="text-gray-500 text-xs mb-2">{task.description}</p>
                 )}
                 
-                {/* Option buttons - simplified */}
+                {/* Option buttons */}
                 {task.options && task.options.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-2">
                     {task.options.map((option) => (
@@ -136,15 +136,12 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   </div>
                 )}
                 
-                {/* Textarea implementation - simplified as requested */}
+                {/* Textarea - completely simplified for better input handling */}
                 {shouldShowRemarks(task) && (
-                  <div className="mt-3">
+                  <div className="mt-3" onClick={(e) => e.stopPropagation()}>
                     <Textarea
                       value={task.textValue || ''}
-                      onChange={(e) => {
-                        onSubTaskChange(task.id, task.selectedOption, e.target.value);
-                      }}
-                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => onSubTaskChange(task.id, task.selectedOption, e.target.value)}
                       placeholder={`Enter ${task.textInput ? task.title.toLowerCase() : 'remarks or justification'}`}
                       className="min-h-[100px] text-sm w-full"
                     />
