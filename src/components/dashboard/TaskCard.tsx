@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, CheckCircle, AlertCircle, HelpCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Textarea } from '@/components/ui/textarea';
+import { Progress } from '@/components/ui/progress';
 
 export type SubTaskStatus = 'pending' | 'completed' | 'failed' | 'na';
 
@@ -71,6 +72,19 @@ const TaskCard: React.FC<TaskCardProps> = ({
     setExpanded(!expanded);
   };
 
+  // Calculate progress percentage
+  const getProgressPercentage = () => {
+    if (subTasks.length === 0) return 0;
+    
+    const completedCount = subTasks.filter(
+      task => task.status === 'completed' || task.status === 'na'
+    ).length;
+    
+    return Math.round((completedCount / subTasks.length) * 100);
+  };
+
+  const progressPercentage = getProgressPercentage();
+
   return (
     <div className={cn(
       'border rounded-lg overflow-hidden transition-all duration-300 mb-4',
@@ -93,6 +107,15 @@ const TaskCard: React.FC<TaskCardProps> = ({
           {status === 'completed' && <span className="text-sm text-green-600 mr-2">Completed</span>}
           {status === 'inProgress' && <span className="text-sm text-blue-600 mr-2">In Progress</span>}
         </div>
+      </div>
+      
+      {/* Progress indicator */}
+      <div className="px-4 pb-2">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs text-gray-500">{progressPercentage}% complete</span>
+          <span className="text-xs text-gray-500">{subTasks.filter(task => task.status === 'completed' || task.status === 'na').length}/{subTasks.length} tasks</span>
+        </div>
+        <Progress value={progressPercentage} className="h-2" />
       </div>
       
       {/* Card content */}
