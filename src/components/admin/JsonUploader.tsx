@@ -26,22 +26,22 @@ const JsonUploader: React.FC = () => {
 
   // Helper to normalize GitHub discussion data
   const normalizeDiscussionData = (disc: any): GitHubDiscussion => {
-    // Convert createdAt to created_at for API compatibility
-    if (disc.createdAt && !disc.created_at) {
-      disc.created_at = disc.createdAt;
+    // Convert createdAt to createdAt for API compatibility
+    if (disc.createdAt && !disc.createdAt) {
+      disc.createdAt = disc.createdAt;
     }
     
     // Ensure we have proper date format for API
-    if (disc.created_at) {
+    if (disc.createdAt) {
       try {
         // Ensure date format is ISO
-        disc.created_at = new Date(disc.created_at).toISOString();
+        disc.createdAt = new Date(disc.createdAt).toISOString();
       } catch (e) {
         console.warn(`[JsonUploader] Invalid date format for discussion: ${disc.id || 'unknown'}`);
-        disc.created_at = new Date().toISOString(); // Fallback
+        disc.createdAt = new Date().toISOString(); // Fallback
       }
     } else {
-      disc.created_at = new Date().toISOString(); // Required field
+      disc.createdAt = new Date().toISOString(); // Required field
     }
     
     // Extract repository from URL if not provided
@@ -77,9 +77,9 @@ const JsonUploader: React.FC = () => {
       }
       
       // Ensure created_at is present or can be derived
-      if (!item.created_at && !item.createdAt) {
+      if (!item.createdAt && !item.createdAt) {
         console.warn(`[JsonUploader] Item #${index + 1} missing created_at/createdAt`);
-        validationErrors.push(`Item #${index + 1}: Missing required 'created_at' field (will use current date as fallback)`);
+        validationErrors.push(`Item #${index + 1}: Missing required 'createdAt' field (will use current date as fallback)`);
         // Not failing validation for this, we'll add it automatically
       }
       
@@ -513,27 +513,27 @@ const JsonUploader: React.FC = () => {
                         <div><strong>Title:</strong> {item.title || 'Auto-generated'}</div>
                         <div><strong>Repository:</strong> {item.repository || extractRepositoryFromUrl(item.url)}</div>
                         <div className="truncate"><strong>URL:</strong> {item.url}</div>
-                        <div><strong>Created At:</strong> {item.created_at || item.createdAt || 'Auto-generated'}</div>
+                        <div><strong>Created At:</strong> {item.createdAt || 'Auto-generated'}</div>
                         
                         {/* Show enhanced metadata if available */}
-                        {(item.release_tag || item.releaseTag || item.repository_language || item.repositoryLanguage || item.release_date || item.releaseDate) && (
+                        {(item.releaseTag || item.repositoryLanguage || item.releaseDate) && (
                           <div className="mt-1 pt-1 border-t border-gray-200">
-                            {(item.release_tag || item.releaseTag) && (
+                            {item.releaseTag && (
                               <div className="flex items-center text-xs text-gray-600">
                                 <Tag className="w-3 h-3 mr-1" />
-                                <span>Release: {item.release_tag || item.releaseTag}</span>
+                                <span>Release: {item.releaseTag}</span>
                               </div>
                             )}
-                            {(item.repository_language || item.repositoryLanguage) && (
+                            {item.repositoryLanguage && (
                               <div className="flex items-center text-xs text-gray-600">
                                 <Code className="w-3 h-3 mr-1" />
-                                <span>Language: {item.repository_language || item.repositoryLanguage}</span>
+                                <span>Language: {item.repositoryLanguage}</span>
                               </div>
                             )}
-                            {(item.release_date || item.releaseDate) && (
+                            {item.releaseDate && (
                               <div className="flex items-center text-xs text-gray-600">
                                 <Calendar className="w-3 h-3 mr-1" />
-                                <span>Release Date: {new Date(item.release_date || item.releaseDate).toLocaleDateString()}</span>
+                                <span>Release Date: {new Date(item.releaseDate).toLocaleDateString()}</span>
                               </div>
                             )}
                           </div>

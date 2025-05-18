@@ -58,14 +58,13 @@ const formatGitHubDiscussion = (discussion: GitHubDiscussion): GitHubDiscussion 
   
   // Ensure created_at is in ISO format
   if (discussion.createdAt) {
-    formatted.created_at = new Date(discussion.createdAt).toISOString();
-    delete formatted.createdAt;
-  } else if (discussion.created_at) {
+    formatted.createdAt = new Date(discussion.createdAt).toISOString();
+  } else if (discussion.createdAt) {
     // Make sure it's valid ISO format
-    formatted.created_at = new Date(discussion.created_at).toISOString();
+    formatted.createdAt = new Date(discussion.createdAt).toISOString();
   } else {
     // Fallback to current date if no date is provided
-    formatted.created_at = new Date().toISOString();
+    formatted.createdAt = new Date().toISOString();
   }
   
   // Handle repository information
@@ -75,16 +74,15 @@ const formatGitHubDiscussion = (discussion: GitHubDiscussion): GitHubDiscussion 
   }
   
   // Ensure we have a title
-  if (!formatted.title && formatted.question) {
+  if (!formatted.title && formatted.title) {
     // Extract first line from question as title
-    const firstLine = formatted.question.split('\n')[0].trim();
+    const firstLine = formatted.title.split('\n')[0].trim();
     formatted.title = firstLine.substring(0, 120); // Limit title length
   }
   
   // Convert any custom fields to standard format expected by the API
-  if (formatted.lang) {
-    formatted.repository_language = formatted.lang;
-    delete formatted.lang;
+  if (formatted.repositoryLanguage) {
+    formatted.repositoryLanguage = formatted.repositoryLanguage;
   }
   
   // Remove any fields that aren't expected by the API schema
