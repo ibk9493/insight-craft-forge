@@ -1,7 +1,6 @@
 
 import { toast } from '@/components/ui/sonner';
 import { ApiError } from './types';
-import { mockDiscussions, mockAnnotations } from './mockData';
 import { API_CONFIG } from '@/config';
 
 /**
@@ -195,6 +194,33 @@ export const apiRequest = async <T>(
     
     // Don't fall back to mock data anymore
     throw error;
+  }
+};
+
+/**
+ * Makes API requests with error handling and provides a fallback value on failure
+ * 
+ * @param endpoint - API endpoint path (without base URL)
+ * @param method - HTTP method (GET, POST, PUT, DELETE)
+ * @param body - Request body for POST/PUT requests
+ * @param headers - Additional headers to include
+ * @param fallbackValue - Value to return if the request fails
+ * @returns The API response data or fallbackValue if the request fails
+ */
+export const safeApiRequest = async <T>(
+  endpoint: string,
+  method: string = 'GET',
+  body?: unknown,
+  headers?: Record<string, string>,
+  fallbackValue: T = {} as T
+): Promise<T> => {
+  try {
+    const response = await apiRequest<T>(endpoint, method, body, headers);
+    console.log(`[API] ${method} ${endpoint} successful`);
+    return response;
+  } catch (error) {
+    console.error(`[API Error] ${method} ${endpoint} - Failed: `, error);
+    return fallbackValue;
   }
 };
 
