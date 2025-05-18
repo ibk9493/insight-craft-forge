@@ -1,6 +1,6 @@
 
 import { useTheme } from "next-themes"
-import { Toaster as Sonner } from "sonner"
+import { Toaster as Sonner, toast as originalToast } from "sonner"
 import type { ToasterProps } from "sonner"
 
 const Toaster = ({ ...props }: ToasterProps) => {
@@ -28,9 +28,6 @@ const Toaster = ({ ...props }: ToasterProps) => {
 
 // Create a custom wrapper for toast to ensure objects are stringified
 const customToast = (() => {
-  // Import the original toast
-  const { toast: originalToast } = require("sonner");
-  
   // Create our wrapped version
   const wrappedToast = {
     ...originalToast,
@@ -85,3 +82,4 @@ const formatToastMessage = (message: any): string => {
 
 export { Toaster };
 export { customToast as toast };
+
