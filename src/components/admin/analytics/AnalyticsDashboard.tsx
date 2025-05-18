@@ -6,11 +6,12 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Grid, List, BarChart3, PieChart as PieChartIcon, Calendar } from 'lucide-react';
+import { Grid, List, BarChart3, PieChart as PieChartIcon, Calendar, Download } from 'lucide-react';
 import { SystemSummary, AnnotationActivity, RepositoryBreakdown } from '@/services/api/types';
 import { DateRange } from 'react-day-picker';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 interface AnalyticsDashboardProps {
   systemSummary: SystemSummary;
@@ -57,6 +58,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
     to: new Date()
   });
   const [chartView, setChartView] = useState<'bar' | 'pie'>('bar');
+  const [isExporting, setIsExporting] = useState(false);
 
   // Handle date range change
   const handleDateRangeChange = (range: DateRange | undefined) => {
@@ -73,10 +75,58 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   };
 
   // Handle export
-  const handleExport = (format: 'csv' | 'json') => {
-    if (onExport) {
-      onExport(format);
+  const handleExport = async (format: 'csv' | 'json') => {
+    setIsExporting(true);
+    
+    try {
+      if (onExport) {
+        await onExport(format);
+      } else {
+        // Fallback export if no handler is provided
+        const data = {
+          systemSummary,
+          annotationActivity,
+          repositoryBreakdown,
+          exportedAt: new Date().toISOString(),
+          dateRange
+        };
+        
+        const blob = new Blob(
+          [format === 'json' ? JSON.stringify(data, null, 2) : convertToCSV(data)], 
+          { type: format === 'json' ? 'application/json' : 'text/csv' }
+        );
+        
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `analytics-export-${new Date().toISOString().split('T')[0]}.${format}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        toast.success(`Export completed as ${format.toUpperCase()}`);
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error(`Failed to export as ${format.toUpperCase()}`);
+    } finally {
+      setIsExporting(false);
     }
+  };
+  
+  // Helper function to convert data to CSV format
+  const convertToCSV = (data: any) => {
+    // Simple CSV conversion - in a real app, this would be more sophisticated
+    const replacer = (key: string, value: any) => value === null ? '' : value;
+    const header = Object.keys(data.systemSummary || {});
+    let csv = header.join(',') + '\n';
+    
+    csv += header.map(key => 
+      JSON.stringify((data.systemSummary || {})[key], replacer)
+    ).join(',');
+    
+    return csv;
   };
 
   // Ensure systemSummary always has valid values even if the API fails
@@ -106,15 +156,29 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
               value={dateRange}
               onValueChange={handleDateRangeChange}
             />
-            <Select defaultValue="csv" onValueChange={(value) => handleExport(value as 'csv' | 'json')}>
-              <SelectTrigger className="w-[120px]">
-                <SelectValue placeholder="Export" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="csv">Export CSV</SelectItem>
-                <SelectItem value="json">Export JSON</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="relative">
+              <Button 
+                variant="outline" 
+                className="flex items-center gap-2"
+                disabled={isExporting}
+                onClick={() => handleExport('csv')}
+              >
+                <Download className="h-4 w-4" />
+                <span>{isExporting ? 'Exporting...' : 'Export'}</span>
+              </Button>
+              <Select 
+                onValueChange={(value) => handleExport(value as 'csv' | 'json')}
+                disabled={isExporting}
+              >
+                <SelectTrigger className="w-[120px] sr-only">
+                  <SelectValue placeholder="Export Format" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="csv">CSV</SelectItem>
+                  <SelectItem value="json">JSON</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
       </CardHeader>

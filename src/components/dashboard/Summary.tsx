@@ -1,5 +1,4 @@
-
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Download, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -14,26 +13,6 @@ interface SummaryProps {
 
 const Summary: React.FC<SummaryProps> = ({ results }) => {
   const [isGenerating, setIsGenerating] = useState(false);
-  
-  useEffect(() => {
-    // Log the results for debugging
-    console.log('[Summary] Displaying results:', results);
-    
-    // Check if we have any data
-    const hasTask1Data = Object.keys(results.task1Results).length > 0;
-    const hasTask2Data = Object.keys(results.task2Results).length > 0;
-    const hasTask3Data = Object.keys(results.task3Results).length > 0;
-    
-    if (!hasTask1Data && !hasTask2Data && !hasTask3Data) {
-      console.warn('[Summary] No data available to display');
-    } else {
-      console.info('[Summary] Data found for display:', { 
-        task1Count: Object.keys(results.task1Results).length,
-        task2Count: Object.keys(results.task2Results).length,
-        task3Count: Object.keys(results.task3Results).length
-      });
-    }
-  }, [results]);
   
   const generateJson = async () => {
     try {
