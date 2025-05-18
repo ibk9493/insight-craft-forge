@@ -1,4 +1,5 @@
 
+
 DATABASE SCHEMA UPDATE REQUIRED
 
 The application has detected that your database schema is out of date.
@@ -17,3 +18,4 @@ Note: This will reset all data in your database. If you have important data,
 make sure to export it first or save the backup file created during the process.
 
 After running the reset script, restart the API server to continue.
+

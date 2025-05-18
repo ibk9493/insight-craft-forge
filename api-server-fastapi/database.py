@@ -74,8 +74,8 @@ def check_and_create_tables():
         
         if needs_update:
             logger.warning("Database schema needs to be updated")
-            logger.warning("Please run reset_database.py to recreate the schema")
-            logger.warning("Command: python reset_database.py")
+            logger.warning("Please run reset_db.py to recreate the schema")
+            logger.warning("Command: python reset_db.py")
             
             # Don't auto-recreate tables to prevent data loss
             return False
