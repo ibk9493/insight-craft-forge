@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
@@ -304,7 +303,7 @@ const DiscussionFilters: React.FC<DiscussionFiltersProps> = ({
                   <SelectValue placeholder="Select a batch" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Batches</SelectItem>
+                  <SelectItem value="all_batches">All Batches</SelectItem>
                   {availableBatches.map(batch => (
                     <SelectItem key={batch.id} value={batch.id.toString()}>
                       {batch.name}
@@ -328,60 +327,62 @@ const DiscussionFilters: React.FC<DiscussionFiltersProps> = ({
       </Popover>
       
       {/* Active filters display */}
-      {activeFilterCount > 0 && (
-        <div className="flex flex-wrap gap-2 mt-2">
-          {filters.status !== 'all' && (
-            <Badge variant="secondary" className="flex items-center gap-1">
-              Status: {filters.status}
-              <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleStatusChange('all')} />
-            </Badge>
-          )}
-          
-          {filters.showMyAnnotations && (
-            <Badge variant="secondary" className="flex items-center gap-1">
-              My Annotations
-              <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleMyAnnotationsChange(false)} />
-            </Badge>
-          )}
-          
-          {filters.repositoryLanguage.map(lang => (
-            <Badge key={lang} variant="secondary" className="flex items-center gap-1">
-              <Code className="h-3.5 w-3.5 mr-1" />
-              {lang}
-              <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleLanguageToggle(lang)} />
-            </Badge>
-          ))}
-          
-          {filters.releaseTag.map(tag => (
-            <Badge key={tag} variant="secondary" className="flex items-center gap-1">
-              <Tag className="h-3.5 w-3.5 mr-1" />
-              {tag}
-              <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleTagToggle(tag)} />
-            </Badge>
-          ))}
-          
-          {filters.fromDate && (
-            <Badge variant="secondary" className="flex items-center gap-1">
-              From: {format(filters.fromDate, "PP")}
-              <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleFromDateChange(undefined)} />
-            </Badge>
-          )}
-          
-          {filters.toDate && (
-            <Badge variant="secondary" className="flex items-center gap-1">
-              To: {format(filters.toDate, "PP")}
-              <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleToDateChange(undefined)} />
-            </Badge>
-          )}
-          
-          {filters.batchId && (
-            <Badge variant="secondary" className="flex items-center gap-1">
-              Batch: {availableBatches.find(b => b.id.toString() === filters.batchId)?.name || filters.batchId}
-              <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleBatchChange('')} />
-            </Badge>
-          )}
-        </div>
-      )}
+      <div className="flex flex-wrap gap-2 mt-2">
+        {activeFilterCount > 0 && (
+          <div className="flex flex-wrap gap-2 mt-2">
+            {filters.status !== 'all' && (
+              <Badge variant="secondary" className="flex items-center gap-1">
+                Status: {filters.status}
+                <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleStatusChange('all')} />
+              </Badge>
+            )}
+            
+            {filters.showMyAnnotations && (
+              <Badge variant="secondary" className="flex items-center gap-1">
+                My Annotations
+                <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleMyAnnotationsChange(false)} />
+              </Badge>
+            )}
+            
+            {filters.repositoryLanguage.map(lang => (
+              <Badge key={lang} variant="secondary" className="flex items-center gap-1">
+                <Code className="h-3.5 w-3.5 mr-1" />
+                {lang}
+                <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleLanguageToggle(lang)} />
+              </Badge>
+            ))}
+            
+            {filters.releaseTag.map(tag => (
+              <Badge key={tag} variant="secondary" className="flex items-center gap-1">
+                <Tag className="h-3.5 w-3.5 mr-1" />
+                {tag}
+                <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleTagToggle(tag)} />
+              </Badge>
+            ))}
+            
+            {filters.fromDate && (
+              <Badge variant="secondary" className="flex items-center gap-1">
+                From: {format(filters.fromDate, "PP")}
+                <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleFromDateChange(undefined)} />
+              </Badge>
+            )}
+            
+            {filters.toDate && (
+              <Badge variant="secondary" className="flex items-center gap-1">
+                To: {format(filters.toDate, "PP")}
+                <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleToDateChange(undefined)} />
+              </Badge>
+            )}
+            
+            {filters.batchId && (
+              <Badge variant="secondary" className="flex items-center gap-1">
+                Batch: {availableBatches.find(b => b.id.toString() === filters.batchId)?.name || filters.batchId}
+                <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleBatchChange('')} />
+              </Badge>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
