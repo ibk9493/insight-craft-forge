@@ -1,4 +1,3 @@
-
 import { apiRequest } from './helpers';
 import { Discussion, Annotation, TaskStatus, GitHubDiscussion, UploadResult, 
          TaskManagementResult, UserRole, SystemSummary, UserSummary, 
@@ -278,7 +277,15 @@ export const api = {
         totalAnnotations: 0,
         uniqueAnnotators: 0,
         totalBatches: 0,
-        batchesBreakdown: []
+        batchesBreakdown: [],
+        trainerBreakdown: [],
+        taskProgression: {
+          stuck_in_task1: 0,
+          stuck_in_task2: 0,
+          reached_task3: 0,
+          fully_completed: 0
+        },
+        consensus_annotations: 0
       });
     },
     
