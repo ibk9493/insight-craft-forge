@@ -8,25 +8,9 @@ export interface TextareaProps
 
 const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ className, ...props }, ref) => {
-    // Event handlers to stop propagation
-    const handleClick = (e: React.MouseEvent<HTMLTextAreaElement>) => {
+    // Create event handlers that completely isolate the events
+    const handleEvent = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
       e.stopPropagation();
-      if (props.onClick) props.onClick(e);
-    };
-
-    const handleFocus = (e: React.FocusEvent<HTMLTextAreaElement>) => {
-      e.stopPropagation();
-      if (props.onFocus) props.onFocus(e);
-    };
-
-    const handleBlur = (e: React.FocusEvent<HTMLTextAreaElement>) => {
-      e.stopPropagation();
-      if (props.onBlur) props.onBlur(e);
-    };
-
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      e.stopPropagation();
-      if (props.onKeyDown) props.onKeyDown(e);
     };
 
     return (
@@ -37,10 +21,26 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
         )}
         ref={ref}
         {...props}
-        onClick={handleClick}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
-        onKeyDown={handleKeyDown}
+        onClick={e => {
+          handleEvent(e);
+          if (props.onClick) props.onClick(e as React.MouseEvent<HTMLTextAreaElement>);
+        }}
+        onFocus={e => {
+          handleEvent(e);
+          if (props.onFocus) props.onFocus(e);
+        }}
+        onBlur={e => {
+          handleEvent(e);
+          if (props.onBlur) props.onBlur(e);
+        }}
+        onKeyDown={e => {
+          handleEvent(e);
+          if (props.onKeyDown) props.onKeyDown(e);
+        }}
+        onChange={e => {
+          handleEvent(e);
+          if (props.onChange) props.onChange(e);
+        }}
       />
     )
   }

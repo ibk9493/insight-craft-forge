@@ -85,7 +85,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
   };
 
   // Separate handler for card header click to toggle expansion
-  const toggleExpand = () => {
+  const toggleExpand = (e: React.MouseEvent) => {
     setExpanded(!expanded);
   };
 
@@ -117,7 +117,11 @@ const TaskCard: React.FC<TaskCardProps> = ({
           <p className="text-gray-600 mb-4 text-sm">{description}</p>
           <div className="space-y-4">
             {subTasks.map((task) => (
-              <div key={task.id} className="bg-white border rounded-md p-3">
+              <div 
+                key={task.id} 
+                className="bg-white border rounded-md p-3"
+                onClick={(e) => e.stopPropagation()} // Stop click propagation on the task item
+              >
                 <div className="flex items-center mb-2">
                   {getStatusIcon(task.status)}
                   <span className="ml-2 font-medium text-sm">{task.title}</span>
@@ -148,16 +152,16 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 
                 {/* Text input field - shown for explicit textInput or when a Yes/No/True/False option is selected */}
                 {shouldShowRemarks(task) && (
-                  <div className="mt-3" onClick={(e) => e.stopPropagation()}>
+                  <div 
+                    className="mt-3" 
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <Textarea
                       value={task.textValue || ''}
                       onChange={(e) => handleTextChange(e, task.id)}
                       placeholder={`Enter ${task.textInput ? task.title.toLowerCase() : 'remarks or justification'}`}
                       className="min-h-[100px] text-sm"
-                      onClick={(e) => e.stopPropagation()}
                       onFocus={(e) => e.stopPropagation()}
-                      onBlur={(e) => e.stopPropagation()}
-                      onKeyDown={(e) => e.stopPropagation()}
                     />
                   </div>
                 )}

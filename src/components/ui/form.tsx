@@ -71,6 +71,11 @@ const FormItemContext = React.createContext<FormItemContextValue>(
   {} as FormItemContextValue
 )
 
+// Create a handler for isolated events
+const handleEvent = (e: React.SyntheticEvent) => {
+  e.stopPropagation();
+};
+
 const FormItem = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
@@ -84,10 +89,8 @@ const FormItem = React.forwardRef<
         className={cn("space-y-2", className)} 
         {...props} 
         onClick={(e) => {
-          // Execute the original onClick if it exists
+          handleEvent(e);
           if (props.onClick) props.onClick(e as React.MouseEvent<HTMLDivElement>);
-          // Prevent the event from propagating further in case it's not handled
-          e.stopPropagation();
         }}
       />
     </FormItemContext.Provider>
@@ -108,10 +111,8 @@ const FormLabel = React.forwardRef<
       htmlFor={formItemId}
       {...props}
       onClick={(e) => {
-        // Execute the original onClick if it exists
+        handleEvent(e);
         if (props.onClick) props.onClick(e);
-        // Prevent the event from bubbling up
-        e.stopPropagation();
       }}
     />
   )
@@ -136,10 +137,8 @@ const FormControl = React.forwardRef<
       aria-invalid={!!error}
       {...props}
       onClick={(e) => {
-        // Execute the original onClick if it exists
+        handleEvent(e);
         if (props.onClick) props.onClick(e);
-        // Prevent the event from bubbling up
-        e.stopPropagation();
       }}
     />
   )
@@ -159,10 +158,8 @@ const FormDescription = React.forwardRef<
       className={cn("text-sm text-muted-foreground", className)}
       {...props}
       onClick={(e) => {
-        // Execute the original onClick if it exists
+        handleEvent(e);
         if (props.onClick) props.onClick(e as React.MouseEvent<HTMLParagraphElement>);
-        // Prevent the event from bubbling up
-        e.stopPropagation();
       }}
     />
   )
@@ -187,10 +184,8 @@ const FormMessage = React.forwardRef<
       className={cn("text-sm font-medium text-destructive", className)}
       {...props}
       onClick={(e) => {
-        // Execute the original onClick if it exists
+        handleEvent(e);
         if (props.onClick) props.onClick(e as React.MouseEvent<HTMLParagraphElement>);
-        // Prevent the event from bubbling up
-        e.stopPropagation();
       }}
     >
       {body}
