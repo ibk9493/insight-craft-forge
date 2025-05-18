@@ -8,6 +8,18 @@ from typing import List, Optional
 def get_authorized_users(db: Session) -> List[schemas.AuthorizedUser]:
     users = db.query(models.AuthorizedUser).all()
     
+    # If no users exist, add the default admin user
+    if not users:
+        # Add Ibrahim as admin (will be added when first request comes)
+        admin_user = models.AuthorizedUser(
+            email="ibrahim.u@turing.com",
+            role="admin"
+        )
+        db.add(admin_user)
+        db.commit()
+        db.refresh(admin_user)
+        users = [admin_user]
+    
     return [
         schemas.AuthorizedUser(
             id=user.id,

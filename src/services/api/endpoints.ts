@@ -1,3 +1,4 @@
+
 import { apiRequest } from './helpers';
 import { Discussion, Annotation, TaskStatus, GitHubDiscussion, UploadResult, 
          TaskManagementResult, UserRole, SystemSummary, UserSummary, 
@@ -179,7 +180,7 @@ export const api = {
       });
     },
     
-    // NEW: Bulk update task status
+    // Bulk update task status
     bulkUpdateTaskStatus: (discussionIds: string[], taskId: number, status: TaskStatus) => {
       console.log(`[Admin] Bulk updating task status for ${discussionIds.length} discussions, Task ${taskId} to ${status}`);
       return safeApiRequest<BulkActionResult>('/api/admin/tasks/bulk-status', 'PUT', {
@@ -200,7 +201,7 @@ export const api = {
       return safeApiRequest<Annotation>('/api/admin/annotations/override', 'PUT', annotation, undefined, {} as Annotation);
     },
     
-    // NEW: Get quality metrics
+    // Get quality metrics
     getQualityMetrics: () => {
       console.log('[Admin] Getting annotation quality metrics');
       return safeApiRequest<{
@@ -212,7 +213,7 @@ export const api = {
       }[]>('/api/admin/quality/metrics', 'GET', undefined, undefined, []);
     },
     
-    // NEW: Get annotator performance
+    // Get annotator performance
     getAnnotatorPerformance: () => {
       console.log('[Admin] Getting annotator performance data');
       return safeApiRequest<{
@@ -310,7 +311,7 @@ export const api = {
       });
     },
     
-    // NEW: Get annotation activity data
+    // Get annotation activity data
     getAnnotationActivity: (fromDate?: string, toDate?: string) => {
       const dateParams = [];
       if (fromDate) dateParams.push(`fromDate=${fromDate}`);
@@ -321,7 +322,7 @@ export const api = {
       return safeApiRequest<{date: string, count: number}[]>(`/api/summary/activity${queryString}`, 'GET', undefined, undefined, []);
     },
     
-    // NEW: Get repository breakdown
+    // Get repository breakdown
     getRepositoryBreakdown: () => {
       console.log('[Summary] Getting repository breakdown');
       return safeApiRequest<{repository: string, count: number}[]>('/api/summary/repositories', 'GET', undefined, undefined, []);

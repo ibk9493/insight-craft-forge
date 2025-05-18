@@ -24,6 +24,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Setup default admin user on startup
+@app.on_event("startup")
+async def startup_event():
+    db = next(get_db())
+    # Add Ibrahim as admin user if not exists
+    try:
+        admin_user = schemas.AuthorizedUserCreate(
+            email="ibrahim.u@turing.com",
+            role="admin"
+        )
+        auth_service.add_or_update_authorized_user(db, admin_user)
+    except Exception as e:
+        print(f"Error adding default admin user: {str(e)}")
+
 # Root endpoint
 @app.get("/")
 async def root():
@@ -157,3 +171,20 @@ def update_batch(batch_id: int, batch_data: schemas.BatchUploadCreate, db: Sessi
             "success": False,
             "message": "Batch not found or update failed"
         }
+
+# Authentication endpoints for authorized users
+@app.get("/api/auth/authorized-users", response_model=List[schemas.AuthorizedUser])
+def get_authorized_users(db: Session = Depends(get_db)):
+    """Get all authorized users"""
+    return auth_service.get_authorized_users(db)
+
+@app.post("/api/auth/authorized-users", response_model=schemas.AuthorizedUser)
+def add_authorized_user(user: schemas.AuthorizedUserCreate, db: Session = Depends(get_db)):
+    """Add or update an authorized user"""
+    return auth_service.add_or_update_authorized_user(db, user)
+
+@app.delete("/api/auth/authorized-users/{email}")
+def remove_authorized_user(email: str, db: Session = Depends(get_db)):
+    """Remove an authorized user"""
+    auth_service.remove_authorized_user(db, email)
+    return {"message": f"User {email} removed from authorized users"}
