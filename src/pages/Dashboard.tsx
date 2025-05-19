@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import UrlInput from '@/components/dashboard/UrlInput';
-import TaskCard from '@/components/dashboard/TaskCard';
+import TaskCard, { SubTask, SubTaskStatus } from '@/components/dashboard/TaskCard';
 import TaskGrid from '@/components/dashboard/TaskGrid';
 import ProgressStepper from '@/components/dashboard/ProgressStepper';
 import Summary from '@/components/dashboard/Summary';
@@ -14,10 +14,11 @@ import { useDashboardState } from '@/hooks/useDashboardState';
 import { useTaskSubtasks } from '@/hooks/useTaskSubtasks';
 import { useTaskProgress } from '@/hooks/useTaskProgress';
 import { useAnnotationHandlers } from '@/hooks/useAnnotationHandlers';
-import { TaskId } from '@/hooks/annotations/useAnnotationTypes';
+import { Annotation, TaskId } from '@/hooks/annotations/useAnnotationTypes';
 import DiscussionDetailsModal from '@/components/dashboard/DiscussionDetailsModal';
 import { useAppDispatch } from '@/hooks';
 import { openModal } from '@/store/discussionModalSlice';
+import { toast } from 'sonner';
 
 const Dashboard = () => {
   // Use the dashboard state hook
@@ -181,6 +182,94 @@ const Dashboard = () => {
     }
   };
 
+  const handleUseAnnotationForConsensus = (annotation: Annotation) => {
+    if (!annotation || !annotation.data) {
+      toast.error("Selected annotation has no data to use.");
+      return;
+    }
+
+    let baseSubTasks: SubTask[] = [];
+    // Use a deep copy of the original task structure
+    if (currentStep === TaskId.QUESTION_QUALITY) {
+      baseSubTasks = JSON.parse(JSON.stringify(task1SubTasks)); 
+    } else if (currentStep === TaskId.ANSWER_QUALITY) {
+      baseSubTasks = JSON.parse(JSON.stringify(task2SubTasks));
+    } else if (currentStep === TaskId.REWRITE) {
+      baseSubTasks = JSON.parse(JSON.stringify(task3SubTasks));
+    } else {
+      toast.error("Invalid task step for consensus.");
+      return;
+    }
+
+    // Replicated logic from mapAnnotationToSubTasks
+    const mappedSubTasks: SubTask[] = baseSubTasks.map(task => {
+      const savedValue = annotation.data[task.id];
+      const savedTextValue = annotation.data[`${task.id}_text`];
+
+      if (task.id === 'short_answer_list' && Array.isArray(savedValue)) {
+        return {
+          ...task,
+          selectedOption: '',
+          status: 'completed' as SubTaskStatus,
+          textValue: savedValue.join('\n')
+        };
+      } else if (task.id === 'supporting_docs' && Array.isArray(savedValue)) {
+        const formattedDocs = savedValue.map(doc =>
+          (typeof doc === 'object' && doc.link && doc.paragraph)
+            ? { link: doc.link, paragraph: doc.paragraph }
+            : doc
+        );
+        return {
+          ...task,
+          selectedOption: '',
+          status: 'completed' as SubTaskStatus,
+          textValue: JSON.stringify(formattedDocs, null, 2)
+        };
+      } else if (savedValue !== undefined) {
+        let selectedOption = '';
+        if (typeof savedValue === 'boolean') {
+          if (task.options && task.options.length > 0) {
+            const trueOption = task.options.find(o => o.toLowerCase() === 'true' || o.toLowerCase() === 'yes');
+            const falseOption = task.options.find(o => o.toLowerCase() === 'false' || o.toLowerCase() === 'no');
+            if (savedValue === true && trueOption) selectedOption = trueOption;
+            else if (savedValue === false && falseOption) selectedOption = falseOption;
+          } else {
+            selectedOption = savedValue ? 'Yes' : 'No';
+          }
+        } else if (typeof savedValue === 'string') {
+           if (task.options && task.options.length > 0 && task.options.includes(savedValue)) {
+            selectedOption = savedValue;
+          } else if (!task.options || task.options.length === 0) {
+            selectedOption = savedValue;
+          }
+        }
+        return {
+          ...task,
+          selectedOption,
+          status: 'completed' as SubTaskStatus,
+          textValue: typeof savedTextValue === 'string' ? savedTextValue : (task.textValue || '')
+        };
+      }
+      return task;
+    });
+
+    switch (currentStep) {
+      case TaskId.QUESTION_QUALITY:
+        setConsensusTask1(mappedSubTasks);
+        break;
+      case TaskId.ANSWER_QUALITY:
+        setConsensusTask2(mappedSubTasks);
+        break;
+      case TaskId.REWRITE:
+        setConsensusTask3(mappedSubTasks);
+        break;
+      default:
+        toast.error("Cannot determine which consensus task to update.");
+        return;
+    }
+    toast.success("Consensus form populated with selected annotation.");
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <Header />
@@ -293,6 +382,7 @@ const Dashboard = () => {
                   discussionId={discussionId || ""} 
                   currentStep={currentStep} 
                   getAnnotationsForTask={getAnnotationsForTask}
+                  onUseForConsensus={handleUseAnnotationForConsensus}
                 />
               </>
             )}
@@ -326,6 +416,7 @@ const Dashboard = () => {
                   discussionId={discussionId || ""} 
                   currentStep={currentStep} 
                   getAnnotationsForTask={getAnnotationsForTask}
+                  onUseForConsensus={handleUseAnnotationForConsensus}
                 />
               </>
             )}
@@ -359,6 +450,7 @@ const Dashboard = () => {
                   discussionId={discussionId || ""} 
                   currentStep={currentStep} 
                   getAnnotationsForTask={getAnnotationsForTask}
+                  onUseForConsensus={handleUseAnnotationForConsensus}
                 />
               </>
             )}

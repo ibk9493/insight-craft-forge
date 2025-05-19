@@ -405,14 +405,9 @@ export const api = {
       });
     },
     
-    overrideAnnotation: (discussionId: string, userId: string, taskId: number, data: Record<string, any>) => {
-      console.log('[Admin] Overriding annotation:', discussionId, taskId);
-      return safeApiRequest<Annotation>('/api/admin/annotations/override', 'PUT', {
-        discussion_id: discussionId,
-        user_id: userId,
-        task_id: taskId,
-        data
-      }, undefined, {} as Annotation);
+    overrideAnnotation: (annotation: Annotation) => {
+      console.log('[Admin] Overriding annotation:', annotation.discussion_id, annotation.task_id);
+      return safeApiRequest<Annotation>('/api/admin/annotations/override', 'PUT', annotation, undefined, {} as Annotation);
     },
     
     getQualityMetrics: () => {

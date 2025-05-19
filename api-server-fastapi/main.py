@@ -254,6 +254,7 @@ def update_batch(batch_id: int, batch_data: schemas.BatchUploadCreate, db: Sessi
             "success": False,
             "message": "Batch not found or update failed"
         }
+
 @app.get("/api/summary/report", response_model=List[Dict[str, Any]])
 async def get_summary_report(
     format: str = Query("json", description="Output format (json or csv)"),
@@ -413,6 +414,7 @@ async def get_summary_report(
         pass
     
     return result
+
 # Authentication endpoints for authorized users
 @app.get("/api/auth/authorized-users", response_model=List[schemas.AuthorizedUser])
 def get_authorized_users(db: Session = Depends(get_db)):
@@ -964,3 +966,38 @@ async def override_consensus(
     """Override the consensus annotation for a discussion task. Only admins can do this."""
     result = consensus_service.override_consensus(db, override_data)
     return result
+# Consensus Endpoints
+@app.get("/api/consensus", response_model=Optional[schemas.Annotation])
+def get_consensus_route(
+    discussion_id: str = Query(...),
+    task_id: int = Query(...),
+    db: Session = Depends(get_db)
+):
+    consensus = consensus_service.get_consensus(db, discussion_id, task_id)
+    if not consensus:
+        # Return None or an empty dict/list if that's how your frontend expects a "not found"
+        # For now, FastAPI will handle a None response model correctly (e.g., null in JSON)
+        return None
+    return consensus
+
+@app.post("/api/consensus", response_model=schemas.Annotation)
+def create_or_update_consensus_route(
+    consensus_data: schemas.AnnotationCreate, 
+    db: Session = Depends(get_db)
+):
+    return consensus_service.create_or_update_consensus(db, consensus_data)
+
+@app.post("/api/consensus/calculate", response_model=Dict[str, Any])
+def calculate_consensus_route(
+    discussion_id: str = Query(...),
+    task_id: int = Query(...),
+    db: Session = Depends(get_db)
+):
+    return consensus_service.calculate_consensus(db, discussion_id, task_id)
+
+@app.post("/api/consensus/override", response_model=schemas.Annotation)
+def override_consensus_route(
+    override_data: schemas.ConsensusOverride, 
+    db: Session = Depends(get_db)
+):
+    return consensus_service.override_consensus(db, override_data)
