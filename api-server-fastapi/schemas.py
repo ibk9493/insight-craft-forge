@@ -52,7 +52,17 @@ class TaskState(BaseModel):
     status: str
     annotators: int
     user_annotated: Optional[bool] = None
-
+    
+    model_config ={
+        "from_attributes" : True,
+        "schema_extra" :{
+            "example": {
+                "status": "unlocked",
+                "annotators": 2,
+                "user_annotated": True
+            }
+        }
+    }
 # Base class for Discussion
 class DiscussionBase(BaseModel):
     title: str
@@ -77,11 +87,13 @@ class Discussion(DiscussionBase):
     task3_annotators: Optional[int] = None
     batch_id: Optional[int] = None
     tasks: Dict[str, TaskState] = {}
+    annotations: Optional[Dict[str, Any]] = None  # Added this field
 
     model_config = {
         "from_attributes": True,  # Replaces orm_mode=True
         "populate_by_name": True  # Helps with field aliases
-    }        
+    }
+          
     @classmethod
     def from_orm(cls, obj):
         # Get normal attributes

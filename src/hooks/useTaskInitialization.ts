@@ -1,7 +1,6 @@
-
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { SubTask } from '@/components/dashboard/TaskCard';
+import { SubTask, SubTaskStatus } from '@/components/dashboard/TaskCard';
 import { User } from '@/contexts/UserContext';
 import { api } from '@/services/api/endpoints';
 import { TaskId } from './annotations/useAnnotationTypes';
@@ -76,28 +75,37 @@ export function useTaskInitialization({
             // This is important when switching between different discussions
             switch (currentStep) {
               case TaskId.QUESTION_QUALITY:
-                setTask1SubTasks(prev => prev.map(task => ({
+                // Get current tasks and reset them
+                const resetTask1 = loadUserAnnotation(discussionId, TaskId.QUESTION_QUALITY) || [];
+                const resetTasks1 = resetTask1.map((task: SubTask) => ({
                   ...task,
                   selectedOption: undefined, 
                   textValue: '',
-                  status: task.id === 'consensus' ? 'pending' : 'pending' 
-                })));
+                  status: task.id === 'consensus' ? task.status : 'pending' as SubTaskStatus 
+                }));
+                setTask1SubTasks(resetTasks1);
                 break;
               case TaskId.ANSWER_QUALITY:
-                setTask2SubTasks(prev => prev.map(task => ({
+                // Get current tasks and reset them
+                const resetTask2 = loadUserAnnotation(discussionId, TaskId.ANSWER_QUALITY) || [];
+                const resetTasks2 = resetTask2.map((task: SubTask) => ({
                   ...task,
                   selectedOption: undefined,
                   textValue: '',
-                  status: task.id === 'consensus' ? 'pending' : 'pending'
-                })));
+                  status: task.id === 'consensus' ? task.status : 'pending' as SubTaskStatus
+                }));
+                setTask2SubTasks(resetTasks2);
                 break;
               case TaskId.REWRITE:
-                setTask3SubTasks(prev => prev.map(task => ({
+                // Get current tasks and reset them
+                const resetTask3 = loadUserAnnotation(discussionId, TaskId.REWRITE) || [];
+                const resetTasks3 = resetTask3.map((task: SubTask) => ({
                   ...task,
                   selectedOption: undefined,
                   textValue: '',
-                  status: task.id === 'consensus' ? 'pending' : 'pending'
-                })));
+                  status: task.id === 'consensus' ? task.status : 'pending' as SubTaskStatus
+                }));
+                setTask3SubTasks(resetTasks3);
                 break;
             }
           }
@@ -124,7 +132,7 @@ export function useTaskInitialization({
         // Optionally, fetch updated status for the current discussion only
         try {
           if (discussionId) {
-            const updatedDiscussion = await api.discussions.getDiscussionById(discussionId);
+            const updatedDiscussion = await api.discussions.getById(discussionId);
             if (updatedDiscussion) {
               console.log("Fetched updated task status for current discussion:", updatedDiscussion);
             }

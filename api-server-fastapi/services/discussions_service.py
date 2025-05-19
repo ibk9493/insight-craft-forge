@@ -1,6 +1,6 @@
 
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_ , exc
 import models
 import schemas
 import re
@@ -197,14 +197,14 @@ def _get_discussions_with_status(db: Session, status_name: str, filter_func) -> 
 
 def get_discussion_by_id(db: Session, discussion_id: str) -> Optional[schemas.Discussion]:
     """
-    Get a specific discussion by ID, including its task status information.
+    Get a specific discussion by ID, including its task status information and all annotations.
     
     Parameters:
     - db: Database session
     - discussion_id: The unique ID of the discussion to retrieve
     
     Returns:
-    - Discussion with task status information, or None if not found
+    - Discussion with task status information and all annotations, or None if not found
     """
     if not discussion_id:
         logger.warning("Empty discussion_id provided")
@@ -240,6 +240,43 @@ def get_discussion_by_id(db: Session, discussion_id: str) -> Optional[schemas.Di
                 annotators=annotators
             )
         
+        # Get all annotations for this discussion
+        annotations = {}
+        for task_num in range(1, 4):
+            task_annotations = db.query(models.Annotation).filter(
+                models.Annotation.discussion_id == discussion_id,
+                models.Annotation.task_id == task_num
+            ).all()
+            
+            annotations[f"task{task_num}_annotations"] = [
+                schemas.Annotation(
+                    id=annotation.id,
+                    discussion_id=annotation.discussion_id,
+                    user_id=annotation.user_id,
+                    task_id=annotation.task_id,
+                    data=annotation.data,
+                    timestamp=annotation.timestamp
+                ) for annotation in task_annotations
+            ]
+            
+            # Get consensus annotation if available
+            consensus = db.query(models.ConsensusAnnotation).filter(
+                models.ConsensusAnnotation.discussion_id == discussion_id,
+                models.ConsensusAnnotation.task_id == task_num
+            ).first()
+            
+            if consensus:
+                annotations[f"task{task_num}_consensus"] = schemas.Annotation(
+                    id=0,  # Use a placeholder ID for consensus
+                    discussion_id=consensus.discussion_id,
+                    user_id="consensus",
+                    task_id=consensus.task_id,
+                    data=consensus.data,
+                    timestamp=consensus.timestamp
+                )
+            else:
+                annotations[f"task{task_num}_consensus"] = None
+        
         # Convert to schema and return
         discussion = schemas.Discussion(
             id=db_discussion.id,
@@ -260,10 +297,12 @@ def get_discussion_by_id(db: Session, discussion_id: str) -> Optional[schemas.Di
             task3_status=tasks["task3"].status,
             task3_annotators=tasks["task3"].annotators,
             # New structure for tasks
-            tasks=tasks
+            tasks=tasks,
+            # Adding annotations data
+            annotations=annotations
         )
         
-        logger.info(f"Successfully fetched discussion: {discussion_id}")
+        logger.info(f"Successfully fetched discussion with annotations: {discussion_id}")
         return discussion
     except exc.SQLAlchemyError as e:
         logger.error(f"Database error in get_discussion_by_id: {str(e)}")
@@ -271,7 +310,8 @@ def get_discussion_by_id(db: Session, discussion_id: str) -> Optional[schemas.Di
     except Exception as e:
         logger.error(f"Error fetching discussion {discussion_id}: {str(e)}")
         return None
-
+    
+    
 def generate_discussion_id(repository: str, url: str) -> str:
     """
     Generate a unique discussion ID based on repository and URL.

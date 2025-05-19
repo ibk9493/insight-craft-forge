@@ -1,6 +1,5 @@
-
 import { useState, useCallback } from 'react';
-import { SubTask, SubTaskStatus } from '@/components/dashboard/TaskCard';
+import { SubTask, SubTaskStatus, SupportingDoc } from '@/components/dashboard/TaskCard';
 import { useAnnotationData } from './useAnnotationData';
 import { toast } from 'sonner';
 
@@ -10,8 +9,30 @@ interface ConsensusResult {
   agreement?: boolean;
 }
 
+// Clone a subtask array for creating new sections
+const cloneSubtasks = (subtasks: SubTask[]): SubTask[] => {
+  return subtasks.map(task => ({
+    ...task,
+    id: task.id,
+    title: task.title,
+    status: 'pending' as SubTaskStatus,
+    options: task.options ? [...task.options] : undefined,
+    selectedOption: undefined,
+    description: task.description,
+    textInput: task.textInput,
+    textValue: '',
+    textValues: task.multiline ? [''] : undefined,
+    supportingDocs: task.structuredInput ? [{ link: '', paragraph: '' }] : undefined,
+    multiline: task.multiline,
+    structuredInput: task.structuredInput,
+    requiresRemarks: task.requiresRemarks,
+    placeholder: task.placeholder
+  }));
+};
+
 export function useTaskData() {
   const { calculateConsensus } = useAnnotationData();
+  
   // Task 1 subtasks
   const [task1SubTasks, setTask1SubTasks] = useState<SubTask[]>([
     {
@@ -19,28 +40,32 @@ export function useTaskData() {
       title: 'Relevance Check',
       status: 'pending' as SubTaskStatus,
       options: ['Yes', 'No'],
-      description: 'Check if the question is relevant to the topic'
+      description: 'Check if the question is relevant to the topic',
+      requiresRemarks: true
     },
     {
       id: 'learning',
       title: 'Learning Value Check',
       status: 'pending' as SubTaskStatus,
       options: ['Yes', 'No'],
-      description: 'Check if the question has learning value'
+      description: 'Check if the question has learning value',
+      requiresRemarks: true
     },
     {
       id: 'clarity',
       title: 'Clarity Check',
       status: 'pending' as SubTaskStatus,
       options: ['Yes', 'No'],
-      description: 'Check if the question is clear'
+      description: 'Check if the question is clear',
+      requiresRemarks: true
     },
     {
       id: 'grounded',
       title: 'Image Grounded Check',
       status: 'pending' as SubTaskStatus,
       options: ['True', 'False', 'N/A'],
-      description: 'Check if images are properly referenced (if any)'
+      description: 'Check if images are properly referenced (if any)',
+      requiresRemarks: true
     },
     {
       id: 'consensus',
@@ -58,28 +83,32 @@ export function useTaskData() {
       title: 'Addresses All Aspects',
       status: 'pending' as SubTaskStatus,
       options: ['Yes', 'No'],
-      description: 'Check if the answer addresses all aspects of the question'
+      description: 'Check if the answer addresses all aspects of the question',
+      requiresRemarks: true
     },
     {
       id: 'explanation',
       title: 'Explanation Provided',
       status: 'pending' as SubTaskStatus,
       options: ['Yes', 'No'],
-      description: 'Check if the answer provides an explanation'
+      description: 'Check if the answer provides an explanation',
+      requiresRemarks: true
     },
     {
       id: 'execution',
       title: 'Manual Code Execution Check',
       status: 'pending' as SubTaskStatus,
       options: ['Executable', 'Not Executable', 'N/A'],
-      description: 'Check if the provided code is executable'
+      description: 'Check if the provided code is executable',
+      requiresRemarks: true
     },
     {
       id: 'download',
       title: 'Provide Code Download Link',
       status: 'pending' as SubTaskStatus,
       options: ['Provided', 'Not Provided', 'N/A'],
-      description: 'Check if a code download link is provided'
+      description: 'Check if a code download link is provided',
+      requiresRemarks: true
     },
     {
       id: 'consensus',
@@ -90,7 +119,7 @@ export function useTaskData() {
     }
   ]);
   
-  // Task 3 subtasks
+  // Task 3 subtasks with improved support for multi-line answers and structured data
   const [task3SubTasks, setTask3SubTasks] = useState<SubTask[]>([
     {
       id: 'rewrite',
@@ -106,9 +135,11 @@ export function useTaskData() {
       title: 'Prepare Short Answer List',
       status: 'pending' as SubTaskStatus,
       options: ['Completed', 'Not Needed'],
-      description: 'Break down into atomic, concise claims',
+      description: 'Break down into atomic, concise claims (one per line)',
       textInput: true,
-      textValue: ''
+      textValues: [''], // Initialize with one empty entry
+      multiline: true,
+      placeholder: 'Enter a short answer claim'
     },
     {
       id: 'longAnswer',
@@ -131,9 +162,9 @@ export function useTaskData() {
       title: 'Provide Supporting Docs',
       status: 'pending' as SubTaskStatus,
       options: ['Provided', 'Not Needed'],
-      description: 'Annotate relevant references',
-      textInput: true,
-      textValue: ''
+      description: 'Add supporting documentation with links and paragraphs',
+      structuredInput: true, // Using structured input instead of textInput
+      supportingDocs: [{ link: '', paragraph: '' }], // Initialize with one empty set
     },
     {
       id: 'consensus',
@@ -143,6 +174,9 @@ export function useTaskData() {
       description: 'System-determined consensus based on annotator submissions'
     }
   ]);
+
+  // Task 3 additional sections (for multiple forms)
+  const [task3Sections, setTask3Sections] = useState<SubTask[][]>([]);
 
   // Add annotator counters
   const [task1Annotators, setTask1Annotators] = useState(0);
@@ -178,9 +212,9 @@ export function useTaskData() {
   ]);
 
   // Store annotations from multiple annotators
-  const [task1Annotations, setTask1Annotations] = useState<Array<Record<string, string>>>([]);
-  const [task2Annotations, setTask2Annotations] = useState<Array<Record<string, string>>>([]);
-  const [task3Annotations, setTask3Annotations] = useState<Array<Record<string, string>>>([]);
+  const [task1Annotations, setTask1Annotations] = useState<Array<Record<string, any>>>([]);
+  const [task2Annotations, setTask2Annotations] = useState<Array<Record<string, any>>>([]);
+  const [task3Annotations, setTask3Annotations] = useState<Array<Record<string, any>>>([]);
   
   // Progress steps
   const [steps, setSteps] = useState([
@@ -191,7 +225,49 @@ export function useTaskData() {
     { id: 5, title: 'Summary', completed: false },
   ]);
 
-  const handleSubTaskChange = useCallback((taskSet: string, taskId: string, selectedOption?: string, textValue?: string) => {
+  // Add a new section to Task 3
+  const addTask3Section = useCallback(() => {
+    try {
+      // Clone the base subtasks but remove the consensus task
+      const newSectionTasks = cloneSubtasks(
+        task3SubTasks.filter(task => task.id !== 'consensus')
+      );
+      
+      setTask3Sections([...task3Sections, newSectionTasks]);
+      toast.success('Added new form section');
+    } catch (error) {
+      console.error("Error adding task section:", error);
+      toast.error("Failed to add section. Please try again.");
+    }
+  }, [task3SubTasks, task3Sections]);
+
+  // Remove a section from Task 3
+  const removeTask3Section = useCallback((sectionIndex: number) => {
+    try {
+      if (sectionIndex < 0 || sectionIndex >= task3Sections.length) {
+        return;
+      }
+      
+      const updatedSections = [...task3Sections];
+      updatedSections.splice(sectionIndex, 1);
+      setTask3Sections(updatedSections);
+      
+      toast.success('Removed form section');
+    } catch (error) {
+      console.error("Error removing task section:", error);
+      toast.error("Failed to remove section. Please try again.");
+    }
+  }, [task3Sections]);
+
+  const handleSubTaskChange = useCallback((
+    taskSet: string, 
+    taskId: string, 
+    selectedOption?: string, 
+    textValue?: string, 
+    textValues?: string[],
+    supportingDocs?: SupportingDoc[],
+    sectionIndex?: number
+  ) => {
     let updated: SubTask[] = [];
 
     // Skip changes to consensus fields as they're system-determined
@@ -200,6 +276,32 @@ export function useTaskData() {
     }
 
     try {
+      // Handle updates to additional sections for Task 3
+      if (taskSet === 'task3' && sectionIndex !== undefined) {
+        if (sectionIndex < 0 || sectionIndex >= task3Sections.length) {
+          console.error(`Invalid section index: ${sectionIndex}`);
+          return;
+        }
+        
+        const updatedSections = [...task3Sections];
+        updatedSections[sectionIndex] = updatedSections[sectionIndex].map(task => 
+          task.id === taskId 
+            ? { 
+                ...task, 
+                selectedOption, 
+                textValue: textValue !== undefined ? textValue : task.textValue,
+                textValues: textValues !== undefined ? textValues : task.textValues,
+                supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
+                status: selectedOption ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
+              } 
+            : task
+        );
+        
+        setTask3Sections(updatedSections);
+        return;
+      }
+      
+      // Handle updates to main tasks
       if (taskSet === 'task1') {
         updated = task1SubTasks.map(task => 
           task.id === taskId 
@@ -207,6 +309,8 @@ export function useTaskData() {
                 ...task, 
                 selectedOption, 
                 textValue: textValue !== undefined ? textValue : task.textValue,
+                textValues: textValues !== undefined ? textValues : task.textValues,
+                supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
                 status: selectedOption ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
               } 
             : task
@@ -219,6 +323,8 @@ export function useTaskData() {
                 ...task, 
                 selectedOption, 
                 textValue: textValue !== undefined ? textValue : task.textValue,
+                textValues: textValues !== undefined ? textValues : task.textValues,
+                supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
                 status: selectedOption ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
               } 
             : task
@@ -231,6 +337,8 @@ export function useTaskData() {
                 ...task, 
                 selectedOption, 
                 textValue: textValue !== undefined ? textValue : task.textValue,
+                textValues: textValues !== undefined ? textValues : task.textValues,
+                supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
                 status: selectedOption ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
               } 
             : task
@@ -243,7 +351,7 @@ export function useTaskData() {
       console.error("Error in handleSubTaskChange:", error);
       toast.error("Failed to update task. Please try again.");
     }
-  }, [task1SubTasks, task2SubTasks, task3SubTasks]);
+  }, [task1SubTasks, task2SubTasks, task3SubTasks, task3Sections]);
 
   const checkForSubtaskLogic = useCallback((taskSet: string, taskId: string, selectedOption?: string) => {
     try {
@@ -305,12 +413,16 @@ export function useTaskData() {
         return false;
       }
       
-      let currentAnnotation: Record<string, string> = {};
+      let currentAnnotation: Record<string, any> = {};
       
       if (taskSet === 'task1') {
         task1SubTasks.forEach(task => {
           if (task.id !== 'consensus' && task.selectedOption) {
             currentAnnotation[task.id] = task.selectedOption;
+            // Include textValue if available
+            if (task.textValue) {
+              currentAnnotation[`${task.id}_text`] = task.textValue;
+            }
           }
         });
         setTask1Annotations([...task1Annotations, currentAnnotation]);
@@ -328,6 +440,10 @@ export function useTaskData() {
         task2SubTasks.forEach(task => {
           if (task.id !== 'consensus' && task.selectedOption) {
             currentAnnotation[task.id] = task.selectedOption;
+            // Include textValue if available
+            if (task.textValue) {
+              currentAnnotation[`${task.id}_text`] = task.textValue;
+            }
           }
         });
         setTask2Annotations([...task2Annotations, currentAnnotation]);
@@ -342,16 +458,61 @@ export function useTaskData() {
         return true;
       }
       else if (taskSet === 'task3') {
+        // Main form
+        const mainFormData: Record<string, any> = {};
+        
         task3SubTasks.forEach(task => {
           if (task.id !== 'consensus') {
             if (task.selectedOption) {
-              currentAnnotation[task.id] = task.selectedOption;
+              mainFormData[task.id] = task.selectedOption;
             }
+            
+            // Handle different types of inputs
             if (task.textInput && task.textValue) {
-              currentAnnotation[`${task.id}_text`] = task.textValue;
+              mainFormData[`${task.id}_text`] = task.textValue;
+            }
+            
+            if (task.multiline && task.textValues && task.textValues.length > 0) {
+              mainFormData[`${task.id}_values`] = task.textValues;
+            }
+            
+            if (task.structuredInput && task.supportingDocs && task.supportingDocs.length > 0) {
+              mainFormData[`${task.id}_docs`] = task.supportingDocs;
             }
           }
         });
+        
+        // Add main form data to annotation
+        currentAnnotation.mainForm = mainFormData;
+        
+        // Additional sections
+        if (task3Sections.length > 0) {
+          currentAnnotation.additionalSections = task3Sections.map((sectionTasks, index) => {
+            const sectionData: Record<string, any> = { sectionIndex: index };
+            
+            sectionTasks.forEach(task => {
+              if (task.selectedOption) {
+                sectionData[task.id] = task.selectedOption;
+              }
+              
+              // Handle different types of inputs
+              if (task.textInput && task.textValue) {
+                sectionData[`${task.id}_text`] = task.textValue;
+              }
+              
+              if (task.multiline && task.textValues && task.textValues.length > 0) {
+                sectionData[`${task.id}_values`] = task.textValues;
+              }
+              
+              if (task.structuredInput && task.supportingDocs && task.supportingDocs.length > 0) {
+                sectionData[`${task.id}_docs`] = task.supportingDocs;
+              }
+            });
+            
+            return sectionData;
+          });
+        }
+        
         setTask3Annotations([...task3Annotations, currentAnnotation]);
         
         // If we have 5 annotators, determine consensus
@@ -370,7 +531,7 @@ export function useTaskData() {
       toast.error("Failed to save annotation. Please try again.");
       return false;
     }
-  }, [task1SubTasks, task2SubTasks, task3SubTasks, task1Annotations, task2Annotations, task3Annotations, task1Annotators, task2Annotators, task3Annotators, hasReachedMaxAnnotators]);
+  }, [task1SubTasks, task2SubTasks, task3SubTasks, task3Sections, task1Annotations, task2Annotations, task3Annotations, task1Annotators, task2Annotators, task3Annotators, hasReachedMaxAnnotators]);
 
   // Determine consensus based on majority rule using the API
   const determineConsensus = useCallback(async (taskSet: string, discussionId: string) => {
@@ -455,15 +616,32 @@ export function useTaskData() {
 
   const getTask3Progress = useCallback(() => {
     try {
-      const completed = task3SubTasks.filter(t => t.status === 'completed' || t.status === 'na').length;
-      if (completed === task3SubTasks.length) return 'completed';
-      if (completed > 0) return 'inProgress';
+      const mainCompleted = task3SubTasks.filter(t => t.status === 'completed' || t.status === 'na').length;
+      const mainTotal = task3SubTasks.length;
+      
+      // Check all additional sections
+      let sectionsCompleted = 0;
+      let sectionsTotal = 0;
+      
+      task3Sections.forEach(section => {
+        const sectionCompleted = section.filter(t => t.status === 'completed' || t.status === 'na').length;
+        const sectionTotal = section.length;
+        
+        sectionsCompleted += sectionCompleted;
+        sectionsTotal += sectionTotal;
+      });
+      
+      const totalCompleted = mainCompleted + sectionsCompleted;
+      const totalTasks = mainTotal + sectionsTotal;
+      
+      if (totalCompleted === totalTasks) return 'completed';
+      if (totalCompleted > 0) return 'inProgress';
       return 'pending';
     } catch (error) {
       console.error("Error getting task progress:", error);
       return 'pending';
     }
-  }, [task3SubTasks]);
+  }, [task3SubTasks, task3Sections]);
 
   // Reset all tasks for a new discussion
   const resetTasks = useCallback(() => {
@@ -485,12 +663,32 @@ export function useTaskData() {
       })));
       
       // Reset task3
-      setTask3SubTasks(prev => prev.map(task => ({
-        ...task,
-        selectedOption: undefined,
-        status: 'pending' as SubTaskStatus,
-        textValue: ''
-      })));
+      setTask3SubTasks(prev => prev.map(task => {
+        // Basic reset for all tasks
+        const resetTask = {
+          ...task,
+          selectedOption: undefined,
+          status: 'pending' as SubTaskStatus,
+        };
+        
+        // Reset different types of inputs
+        if ('textValue' in task) {
+          resetTask.textValue = '';
+        }
+        
+        if ('textValues' in task) {
+          resetTask.textValues = [''];
+        }
+        
+        if ('supportingDocs' in task) {
+          resetTask.supportingDocs = [{ link: '', paragraph: '' }];
+        }
+        
+        return resetTask;
+      }));
+      
+      // Clear all additional sections
+      setTask3Sections([]);
       
       // Reset annotations
       setTask1Annotations([]);
@@ -519,6 +717,9 @@ export function useTaskData() {
     task1SubTasks, setTask1SubTasks,
     task2SubTasks, setTask2SubTasks,
     task3SubTasks, setTask3SubTasks,
+    task3Sections, setTask3Sections,
+    addTask3Section,
+    removeTask3Section,
     task1Annotators, setTask1Annotators,
     task2Annotators, setTask2Annotators,
     task3Annotators, setTask3Annotators,

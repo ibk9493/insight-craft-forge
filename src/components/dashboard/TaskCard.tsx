@@ -1,11 +1,18 @@
-
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, CheckCircle, AlertCircle, HelpCircle } from 'lucide-react';
+import { ChevronDown, ChevronRight, CheckCircle, AlertCircle, HelpCircle, Plus, X, Copy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
+import { Button } from '@/components/ui/button';
 
 export type SubTaskStatus = 'pending' | 'completed' | 'failed' | 'na';
+
+// New interface for supporting docs
+export interface SupportingDoc {
+  link: string;
+  paragraph: string;
+}
 
 export interface SubTask {
   id: string;
@@ -16,7 +23,13 @@ export interface SubTask {
   description?: string;
   textInput?: boolean;
   textValue?: string;
+  textValues?: string[]; // For simple multiline fields
+  supportingDocs?: SupportingDoc[]; // New field for structured supporting docs
+  multiline?: boolean;
+  structuredInput?: boolean; // Flag for structured inputs like supporting docs
   requiresRemarks?: boolean;
+  placeholder?: string;
+  sections?: SubTask[][]; // New field for multiple form sections
 }
 
 interface TaskCardProps {
@@ -24,8 +37,19 @@ interface TaskCardProps {
   description: string;
   subTasks: SubTask[];
   status: 'pending' | 'inProgress' | 'completed';
-  onSubTaskChange: (taskId: string, selectedOption?: string, textValue?: string) => void;
+  onSubTaskChange: (
+    taskId: string, 
+    selectedOption?: string, 
+    textValue?: string, 
+    textValues?: string[], 
+    supportingDocs?: SupportingDoc[],
+    sectionIndex?: number
+  ) => void;
+  onAddSection?: () => void; // New prop for adding sections
+  onRemoveSection?: (sectionIndex: number) => void; // New prop for removing sections
+  sections?: SubTask[][]; // New prop for multiple sections
   active?: boolean;
+  allowMultipleSections?: boolean; // New prop to toggle multiple sections feature
 }
 
 const TaskCard: React.FC<TaskCardProps> = ({
@@ -34,9 +58,45 @@ const TaskCard: React.FC<TaskCardProps> = ({
   subTasks,
   status,
   onSubTaskChange,
-  active = false
+  onAddSection,
+  onRemoveSection,
+  sections = [],
+  active = false,
+  allowMultipleSections = false
 }) => {
   const [expanded, setExpanded] = useState(active);
+  
+  // Track multiple text fields for each subtask
+  const [multilineFields, setMultilineFields] = useState<Record<string, string[]>>({});
+  
+  // Track supporting doc fields
+  const [supportingDocFields, setSupportingDocFields] = useState<Record<string, SupportingDoc[]>>({});
+
+  // Initialize multiline fields if they don't exist
+  React.useEffect(() => {
+    const initialFields: Record<string, string[]> = {};
+    const initialDocFields: Record<string, SupportingDoc[]> = {};
+    
+    subTasks.forEach(task => {
+      if (task.multiline && !task.structuredInput && !multilineFields[task.id]) {
+        // Initialize with one empty field or with existing values if available
+        initialFields[task.id] = task.textValues || [''];
+      }
+      
+      if (task.structuredInput && !supportingDocFields[task.id]) {
+        // Initialize supporting docs with one empty set or existing values
+        initialDocFields[task.id] = task.supportingDocs || [{ link: '', paragraph: '' }];
+      }
+    });
+    
+    if (Object.keys(initialFields).length > 0) {
+      setMultilineFields(prev => ({...prev, ...initialFields}));
+    }
+    
+    if (Object.keys(initialDocFields).length > 0) {
+      setSupportingDocFields(prev => ({...prev, ...initialDocFields}));
+    }
+  }, [subTasks]);
 
   const getStatusIcon = (status: SubTask['status']) => {
     switch (status) {
@@ -83,7 +143,324 @@ const TaskCard: React.FC<TaskCardProps> = ({
     return Math.round((completedCount / subTasks.length) * 100);
   };
 
+  // Add a new field for multiline input
+  const addField = (taskId: string) => {
+    setMultilineFields(prev => {
+      const currentFields = prev[taskId] || [''];
+      return {
+        ...prev,
+        [taskId]: [...currentFields, '']
+      };
+    });
+  };
+
+  // Add a new supporting doc field set
+  const addSupportingDocField = (taskId: string) => {
+    setSupportingDocFields(prev => {
+      const currentFields = prev[taskId] || [{ link: '', paragraph: '' }];
+      const newFields = [...currentFields, { link: '', paragraph: '' }];
+      
+      // Update the parent component
+      onSubTaskChange(
+        taskId, 
+        subTasks.find(t => t.id === taskId)?.selectedOption, 
+        undefined, 
+        undefined, 
+        newFields
+      );
+      
+      return {
+        ...prev,
+        [taskId]: newFields
+      };
+    });
+  };
+
+  // Remove a field from multiline input
+  const removeField = (taskId: string, index: number) => {
+    setMultilineFields(prev => {
+      const currentFields = [...(prev[taskId] || [''])];
+      if (currentFields.length > 1) { // Don't remove the last field
+        currentFields.splice(index, 1);
+      } else {
+        currentFields[0] = ''; // Clear the last field instead of removing it
+      }
+      
+      // Update the parent component
+      const newTextValues = [...currentFields];
+      onSubTaskChange(taskId, subTasks.find(t => t.id === taskId)?.selectedOption, undefined, newTextValues);
+      
+      return {
+        ...prev,
+        [taskId]: currentFields
+      };
+    });
+  };
+
+  // Remove a supporting doc field
+  const removeSupportingDocField = (taskId: string, index: number) => {
+    setSupportingDocFields(prev => {
+      const currentFields = [...(prev[taskId] || [{ link: '', paragraph: '' }])];
+      if (currentFields.length > 1) { // Don't remove the last field
+        currentFields.splice(index, 1);
+      } else {
+        currentFields[0] = { link: '', paragraph: '' }; // Clear the last field instead of removing it
+      }
+      
+      // Update the parent component
+      onSubTaskChange(
+        taskId, 
+        subTasks.find(t => t.id === taskId)?.selectedOption, 
+        undefined, 
+        undefined, 
+        currentFields
+      );
+      
+      return {
+        ...prev,
+        [taskId]: currentFields
+      };
+    });
+  };
+
+  // Handle changes in multiline fields
+  const handleMultilineChange = (taskId: string, index: number, value: string) => {
+    setMultilineFields(prev => {
+      const currentFields = [...(prev[taskId] || [''])];
+      currentFields[index] = value;
+      
+      // Update the parent component
+      const newTextValues = [...currentFields];
+      onSubTaskChange(taskId, subTasks.find(t => t.id === taskId)?.selectedOption, undefined, newTextValues);
+      
+      return {
+        ...prev,
+        [taskId]: currentFields
+      };
+    });
+  };
+
+  // Handle changes in supporting doc fields
+  const handleSupportingDocChange = (taskId: string, index: number, field: 'link' | 'paragraph', value: string) => {
+    setSupportingDocFields(prev => {
+      const currentFields = [...(prev[taskId] || [{ link: '', paragraph: '' }])];
+      currentFields[index] = {
+        ...currentFields[index],
+        [field]: value
+      };
+      
+      // Update the parent component
+      onSubTaskChange(
+        taskId, 
+        subTasks.find(t => t.id === taskId)?.selectedOption, 
+        undefined, 
+        undefined, 
+        currentFields
+      );
+      
+      return {
+        ...prev,
+        [taskId]: currentFields
+      };
+    });
+  };
+
+  // Handle changes for a specific section
+  const handleSectionSubTaskChange = (sectionIndex: number, taskId: string, selectedOption?: string, textValue?: string, textValues?: string[], supportingDocs?: SupportingDoc[]) => {
+    onSubTaskChange(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex);
+  };
+
   const progressPercentage = getProgressPercentage();
+
+  // Render a task form with all of its subtasks
+  const renderTaskForm = (tasks: SubTask[], sectionIndex?: number) => (
+    <div className="space-y-4">
+      {tasks.map((task) => (
+        <div key={task.id + (sectionIndex !== undefined ? `-section-${sectionIndex}` : '')} className="bg-white border rounded-md p-3">
+          {/* Task title and status */}
+          <div className="flex items-center mb-2">
+            {getStatusIcon(task.status)}
+            <span className="ml-2 font-medium text-sm">{task.title}</span>
+          </div>
+          
+          {/* Task description */}
+          {task.description && (
+            <p className="text-gray-500 text-xs mb-2">{task.description}</p>
+          )}
+          
+          {/* Option buttons */}
+          {task.options && task.options.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {task.options.map((option) => (
+                <button
+                  key={option}
+                  onClick={() => {
+                    if (sectionIndex !== undefined) {
+                      handleSectionSubTaskChange(sectionIndex, task.id, option, task.textValue);
+                    } else {
+                      onSubTaskChange(task.id, option, task.textValue);
+                    }
+                  }}
+                  className={cn(
+                    "text-xs py-1 px-3 rounded-full",
+                    task.selectedOption === option
+                      ? "bg-dashboard-blue text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  )}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          )}
+          
+          {/* Standard text input */}
+          {shouldShowRemarks(task) && !task.multiline && !task.structuredInput && (
+            <div className="mt-3">
+              <Textarea
+                value={task.textValue || ''}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  if (sectionIndex !== undefined) {
+                    handleSectionSubTaskChange(sectionIndex, task.id, task.selectedOption, e.target.value);
+                  } else {
+                    onSubTaskChange(task.id, task.selectedOption, e.target.value);
+                  }
+                }}
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                placeholder={task.placeholder || `Enter ${task.textInput ? task.title.toLowerCase() : 'remarks or justification'}`}
+                className="min-h-[100px] text-sm w-full"
+              />
+            </div>
+          )}
+          
+          {/* Multiple input fields for multiline tasks (non-structured) */}
+          {task.multiline && !task.structuredInput && (
+            <div className="mt-3 space-y-3">
+              {(multilineFields[task.id] || [''])?.map((fieldValue, index) => (
+                <div key={`${task.id}-field-${index}`} className="flex gap-2">
+                  <Textarea
+                    value={fieldValue}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      handleMultilineChange(task.id, index, e.target.value);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    placeholder={task.placeholder || `Enter ${task.title.toLowerCase()} item ${index + 1}`}
+                    className="min-h-[100px] text-sm flex-1"
+                  />
+                  {/* Remove button - only show if there's more than one field */}
+                  {multilineFields[task.id]?.length > 1 && (
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeField(task.id, index);
+                      }}
+                      className="h-8 w-8 self-start"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+              
+              {/* Add button for multiline fields */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  addField(task.id);
+                }}
+                className="flex items-center mt-2"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                <span>Add {task.title.toLowerCase()} item</span>
+              </Button>
+            </div>
+          )}
+          
+          {/* Structured input fields for supporting docs */}
+          {task.structuredInput && (
+            <div className="mt-3 space-y-4">
+              {(supportingDocFields[task.id] || [{ link: '', paragraph: '' }])?.map((docField, index) => (
+                <div key={`${task.id}-doc-${index}`} className="p-3 border rounded-md bg-gray-50">
+                  <div className="flex justify-between mb-2">
+                    <span className="text-xs font-medium text-gray-500">Supporting Document #{index + 1}</span>
+                    
+                    {/* Remove button - only show if there's more than one field */}
+                    {supportingDocFields[task.id]?.length > 1 && (
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeSupportingDocField(task.id, index);
+                        }}
+                        className="h-6 w-6 -mt-1 -mr-1"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {/* Link input field */}
+                  <div className="mb-2">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Link</label>
+                    <Input
+                      value={docField.link}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        handleSupportingDocChange(task.id, index, 'link', e.target.value);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      placeholder="https://example.com/docs/file.html"
+                      className="text-sm w-full"
+                    />
+                  </div>
+                  
+                  {/* Paragraph input field */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Supporting Paragraph</label>
+                    <Textarea
+                      value={docField.paragraph}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        handleSupportingDocChange(task.id, index, 'paragraph', e.target.value);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      placeholder="The relevant section of documentation"
+                      className="min-h-[80px] text-sm w-full"
+                    />
+                  </div>
+                </div>
+              ))}
+              
+              {/* Add button for supporting docs */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  addSupportingDocField(task.id);
+                }}
+                className="flex items-center"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                <span>Add supporting document</span>
+              </Button>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <div className={cn(
@@ -122,61 +499,53 @@ const TaskCard: React.FC<TaskCardProps> = ({
       {expanded && (
         <div className="p-4 pt-0 animate-fadeIn">
           <p className="text-gray-600 mb-4 text-sm">{description}</p>
-          <div className="space-y-4">
-            {subTasks.map((task) => (
-              <div key={task.id} className="bg-white border rounded-md p-3">
-                {/* Task title and status */}
-                <div className="flex items-center mb-2">
-                  {getStatusIcon(task.status)}
-                  <span className="ml-2 font-medium text-sm">{task.title}</span>
-                </div>
+          
+          {/* Main form */}
+          {renderTaskForm(subTasks)}
+          
+          {/* Additional sections if enabled */}
+          {allowMultipleSections && sections.map((sectionTasks, index) => (
+            <div key={`section-${index}`} className="mt-6 border-t pt-4">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-sm font-medium">Additional Form Section #{index + 1}</h3>
                 
-                {/* Task description */}
-                {task.description && (
-                  <p className="text-gray-500 text-xs mb-2">{task.description}</p>
-                )}
-                
-                {/* Option buttons */}
-                {task.options && task.options.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {task.options.map((option) => (
-                      <button
-                        key={option}
-                        onClick={() => onSubTaskChange(task.id, option, task.textValue)}
-                        className={cn(
-                          "text-xs py-1 px-3 rounded-full",
-                          task.selectedOption === option
-                            ? "bg-dashboard-blue text-white"
-                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                        )}
-                      >
-                        {option}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                
-                {/* Textarea - with isolated event handling */}
-                {shouldShowRemarks(task) && (
-                  <div className="mt-3">
-                    <Textarea
-                      value={task.textValue || ''}
-                      onChange={(e) => {
-                        // Use stopPropagation only for click events
-                        e.stopPropagation();
-                        // Always pass the task.id, current selectedOption, and new text value
-                        onSubTaskChange(task.id, task.selectedOption, e.target.value);
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      placeholder={`Enter ${task.textInput ? task.title.toLowerCase() : 'remarks or justification'}`}
-                      className="min-h-[100px] text-sm w-full"
-                    />
-                  </div>
+                {/* Remove section button */}
+                {sections.length > 0 && onRemoveSection && (
+                  <Button 
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemoveSection(index);
+                    }}
+                    className="text-red-500 border-red-200 hover:bg-red-50"
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    <span>Remove Section</span>
+                  </Button>
                 )}
               </div>
-            ))}
-          </div>
+              
+              {renderTaskForm(sectionTasks, index)}
+            </div>
+          ))}
+          
+          {/* Add section button */}
+          {allowMultipleSections && onAddSection && (
+            <div className="mt-6 flex justify-center">
+              <Button
+                variant="outline"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddSection();
+                }}
+                className="flex items-center"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                <span>Add Another Form Section</span>
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>
