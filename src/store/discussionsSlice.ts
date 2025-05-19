@@ -1,12 +1,13 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { Discussion } from '@/services/api/types';
-import { fetchDiscussions as fetchDiscussionsApi } from '@/services/api/endpoints';
+import { fetchDiscussions as fetchDiscussionsApi, getDiscussionById } from '@/services/api/endpoints';
 
 interface DiscussionsState {
   discussions: Discussion[];
   loading: boolean;
   error: string | null;
   lastFetched: number | null;
+  selectedDiscussion: Discussion | null;
 }
 
 const initialState: DiscussionsState = {
@@ -14,6 +15,7 @@ const initialState: DiscussionsState = {
   loading: false,
   error: null,
   lastFetched: null,
+  selectedDiscussion: null,
 };
 
 // Only fetch if data is stale (older than 5 minutes)
@@ -35,10 +37,42 @@ export const fetchDiscussions = createAsyncThunk(
   }
 );
 
+// Fetch a single discussion by ID
+export const fetchDiscussionById = createAsyncThunk(
+  'discussions/fetchById',
+  async (discussionId: string, { getState, dispatch }) => {
+    const { discussions } = getState() as { discussions: DiscussionsState };
+    
+    // First try to find the discussion in the existing list
+    const existingDiscussion = discussions.discussions.find(d => d.id === discussionId);
+    
+    if (existingDiscussion) {
+      return existingDiscussion;
+    }
+    
+    // If not found or cache is stale, fetch from API
+    const fetchedDiscussion = await getDiscussionById(discussionId);
+    
+    // If the discussions list isn't populated yet, also fetch all discussions
+    if (discussions.discussions.length === 0) {
+      dispatch(fetchDiscussions());
+    }
+    
+    return fetchedDiscussion;
+  }
+);
+
 export const discussionsSlice = createSlice({
   name: 'discussions',
   initialState,
-  reducers: {},
+  reducers: {
+    setSelectedDiscussion: (state, action: PayloadAction<Discussion | null>) => {
+      state.selectedDiscussion = action.payload;
+    },
+    clearDiscussionCache: (state) => {
+      state.lastFetched = null;
+    }
+  },
   extraReducers: (builder) => {
     builder
       .addCase(fetchDiscussions.pending, (state) => {
@@ -53,8 +87,22 @@ export const discussionsSlice = createSlice({
       .addCase(fetchDiscussions.rejected, (state, action) => {
         state.loading = false;
         state.error = action.error.message || 'Failed to fetch discussions';
+      })
+      .addCase(fetchDiscussionById.fulfilled, (state, action: PayloadAction<Discussion>) => {
+        // Update the discussion in the list if it exists
+        const index = state.discussions.findIndex(d => d.id === action.payload.id);
+        if (index >= 0) {
+          state.discussions[index] = action.payload;
+        } else {
+          // Otherwise add it to the list
+          state.discussions.push(action.payload);
+        }
+        // Also set as selected discussion
+        state.selectedDiscussion = action.payload;
       });
   },
 });
+
+export const { setSelectedDiscussion, clearDiscussionCache } = discussionsSlice.actions;
 
 export default discussionsSlice.reducer;

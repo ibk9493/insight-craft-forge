@@ -1,4 +1,3 @@
-
 import React, { useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import UrlInput from '@/components/dashboard/UrlInput';
@@ -9,7 +8,7 @@ import Summary from '@/components/dashboard/Summary';
 import DashboardNavigation from '@/components/dashboard/DashboardNavigation';
 import DashboardBreadcrumb from '@/components/dashboard/DashboardBreadcrumb';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, FileText, Eye } from 'lucide-react';
+import { CheckCircle, Eye } from 'lucide-react';
 import AnnotatorView from '@/components/dashboard/AnnotatorView';
 import { useDashboardState } from '@/hooks/useDashboardState';
 import { useTaskSubtasks } from '@/hooks/useTaskSubtasks';
@@ -19,6 +18,7 @@ import { TaskId } from '@/hooks/annotations/useAnnotationTypes';
 import DiscussionDetailsModal from '@/components/dashboard/DiscussionDetailsModal';
 import { useAppDispatch } from '@/hooks';
 import { openModal } from '@/store/discussionModalSlice';
+import { useTaskInitialization } from '@/hooks/useTaskInitialization';
 
 const Dashboard = () => {
   // Use the dashboard state hook
@@ -106,52 +106,22 @@ const Dashboard = () => {
     overrideAnnotation: undefined
   });
 
-  // Initialize data when task or discussion changes
-  useEffect(() => {
-    if (discussionId && user && currentStep > 0 && currentStep <= 3) {
-      console.log(`Loading data for discussion: ${discussionId}, task: ${currentStep}, mode: ${viewMode}`);
-      
-      if (viewMode === 'detail') {
-        // Load user's existing annotation only for the current task
-        const updatedSubTasks = loadUserAnnotation(discussionId, currentStep);
-        
-        if (updatedSubTasks) {
-          console.log("Loaded user annotation successfully:", updatedSubTasks);
-          switch (currentStep) {
-            case TaskId.QUESTION_QUALITY:
-              setTask1SubTasks(updatedSubTasks);
-              break;
-            case TaskId.ANSWER_QUALITY:
-              setTask2SubTasks(updatedSubTasks);
-              break;
-            case TaskId.REWRITE:
-              setTask3SubTasks(updatedSubTasks);
-              break;
-          }
-        } else {
-          console.log("No saved annotation found or error loading");
-        }
-      } else if (viewMode === 'consensus' && isPodLead) {
-        // Prepare consensus view only for the current task
-        const consensusTasks = prepareConsensusView(discussionId, currentStep);
-        
-        if (consensusTasks && consensusTasks.length > 0) {
-          console.log("Loaded consensus view successfully");
-          switch (currentStep) {
-            case TaskId.QUESTION_QUALITY:
-              setConsensusTask1(consensusTasks);
-              break;
-            case TaskId.ANSWER_QUALITY:
-              setConsensusTask2(consensusTasks);
-              break;
-            case TaskId.REWRITE:
-              setConsensusTask3(consensusTasks);
-              break;
-          }
-        }
-      }
-    }
-  }, [discussionId, currentStep, viewMode, user, isPodLead]);
+  // Use our new task initialization hook to optimize data loading
+  const { loading: taskInitLoading } = useTaskInitialization({
+    discussionId,
+    currentStep,
+    viewMode,
+    user,
+    isPodLead,
+    loadUserAnnotation,
+    prepareConsensusView,
+    setTask1SubTasks,
+    setTask2SubTasks,
+    setTask3SubTasks,
+    setConsensusTask1,
+    setConsensusTask2,
+    setConsensusTask3
+  });
 
   // Process Task 3 special fields before saving
   const preProcessTask3Fields = () => {
@@ -183,7 +153,7 @@ const Dashboard = () => {
     if (supportingDocsTask && supportingDocsTask.textValue) {
       try {
         // Try to parse as JSON first
-        let parsedDocs;
+        let parsedDocs: Array<{link: string, paragraph: string}> = [];
         try {
           parsedDocs = JSON.parse(supportingDocsTask.textValue);
         } catch (e) {
@@ -191,12 +161,12 @@ const Dashboard = () => {
           const lines = supportingDocsTask.textValue.split('\n');
           parsedDocs = [];
           
-          let currentDoc = {};
+          let currentDoc: {link?: string, paragraph?: string} = {};
           for (const line of lines) {
             const trimmedLine = line.trim();
             if (trimmedLine.startsWith('link:') || trimmedLine.startsWith('Link:')) {
-              if (Object.keys(currentDoc).length > 0) {
-                parsedDocs.push(currentDoc);
+              if (currentDoc.link || currentDoc.paragraph) {
+                parsedDocs.push(currentDoc as {link: string, paragraph: string});
                 currentDoc = {};
               }
               currentDoc.link = trimmedLine.substring(5).trim();
@@ -212,8 +182,8 @@ const Dashboard = () => {
             }
           }
           
-          if (Object.keys(currentDoc).length > 0) {
-            parsedDocs.push(currentDoc);
+          if (currentDoc.link || currentDoc.paragraph) {
+            parsedDocs.push(currentDoc as {link: string, paragraph: string});
           }
         }
         
