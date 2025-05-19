@@ -48,7 +48,7 @@ const MOCK_USERS = [
   { id: '1', username: 'annotator1', password: 'password', role: 'annotator' as UserRole },
   { id: '2', username: 'annotator2', password: 'password', role: 'annotator' as UserRole },
   { id: '3', username: 'annotator3', password: 'password', role: 'annotator' as UserRole },
-  { id: '4', username: 'lead', password: 'password', role: 'pod_lead' as UserRole },
+  { id: '4', username: 'lead@gmail.com', password: 'password', role: 'pod_lead' as UserRole },
   { id: '5', username: 'google.user@example.com', provider: 'google', role: 'annotator' as UserRole },
   { id: '6', username: 'admin', password: 'admin123', role: 'admin' as UserRole },
   { id: '7', username: 'ibrahim.u@turing.com', password: 'admin123', role: 'admin' as UserRole },

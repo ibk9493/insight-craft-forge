@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Annotation } from '@/services/api';
@@ -10,6 +9,7 @@ interface AnnotatorViewProps {
   discussionId: string;
   currentStep: number;
   getAnnotationsForTask: (discussionId: string, taskId: number) => Annotation[];
+  onUseForConsensus?: (annotation: Annotation) => void;
 }
 
 const formatKey = (key: string): string => {
@@ -38,7 +38,8 @@ const formatValue = (value: any): string => {
 const AnnotatorView: React.FC<AnnotatorViewProps> = ({
   discussionId,
   currentStep,
-  getAnnotationsForTask
+  getAnnotationsForTask,
+  onUseForConsensus
 }) => {
   if (!discussionId) return null;
   
@@ -62,51 +63,61 @@ const AnnotatorView: React.FC<AnnotatorViewProps> = ({
       </p>
       
       <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-        {annotations.map((annotation, index) => (
-          <Card key={index} className="text-sm">
-            <CardHeader className="py-3">
-              <CardTitle className="text-base flex justify-between">
-                <span>Annotator {index + 1}</span>
-                <span className="text-xs text-gray-500">{new Date(annotation.timestamp).toLocaleString()}</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="py-3">
-              <div className="space-y-2">
-                {Object.entries(annotation.data || {})
-                  .filter(([key]) => !key.startsWith('_')) // Filter out metadata fields
-                  .map(([key, value]) => {
-                    // Skip displaying text fields directly - they're shown with their parent
-                    if (key.endsWith('_text')) return null;
-                    
-                    const textKey = `${key}_text`;
-                    const hasTextValue = annotation.data[textKey] !== undefined;
-                    
-                    return (
-                      <div key={key} className="mb-3">
-                        <div className="font-medium text-xs uppercase text-gray-500">{formatKey(key)}</div>
-                        <div className="text-gray-800">{formatValue(value)}</div>
-                        
-                        {/* Display text value if available */}
-                        {hasTextValue && (
-                          <div className="mt-1 bg-gray-50 p-2 rounded text-xs">
-                            {formatValue(annotation.data[textKey])}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-              </div>
-            </CardContent>
-            <CardFooter className="pt-0 pb-3">
-              <div className="flex justify-end w-full">
-                <Button variant="ghost" size="sm" className="text-xs">
-                  <Check className="h-3 w-3 mr-1" />
-                  Use for consensus
-                </Button>
-              </div>
-            </CardFooter>
-          </Card>
-        ))}
+        {annotations.map((annotation, index) => {
+          // Log the specific annotation being processed
+          console.log(`[AnnotatorView] Rendering annotation index ${index}:`, JSON.stringify(annotation, null, 2));
+          
+          return (
+            <Card key={annotation.id || index} className="text-sm">
+              <CardHeader className="py-3">
+                <CardTitle className="text-base flex justify-between">
+                  <span>Annotator {index + 1}</span>
+                  <span className="text-xs text-gray-500">{new Date(annotation.timestamp).toLocaleString()}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="py-3">
+                <div className="space-y-2">
+                  {Object.entries(annotation.data || {})
+                    .filter(([key]) => !key.startsWith('_')) // Filter out metadata fields
+                    .map(([key, value]) => {
+                      // Skip displaying text fields directly - they're shown with their parent
+                      if (key.endsWith('_text')) return null;
+                      
+                      const textKey = `${key}_text`;
+                      const hasTextValue = annotation.data[textKey] !== undefined;
+                      
+                      return (
+                        <div key={key} className="mb-3">
+                          <div className="font-medium text-xs uppercase text-gray-500">{formatKey(key)}</div>
+                          <div className="text-gray-800">{formatValue(value)}</div>
+                          
+                          {/* Display text value if available */}
+                          {hasTextValue && (
+                            <div className="mt-1 bg-gray-50 p-2 rounded text-xs">
+                              {formatValue(annotation.data[textKey])}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              </CardContent>
+              <CardFooter className="pt-0 pb-3">
+                <div className="flex justify-end w-full">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="text-xs"
+                    onClick={() => onUseForConsensus?.(annotation)}
+                  >
+                    <Check className="h-3 w-3 mr-1" />
+                    Use for consensus
+                  </Button>
+                </div>
+              </CardFooter>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );
