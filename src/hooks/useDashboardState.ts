@@ -34,7 +34,8 @@ export function useDashboardState() {
     getAnnotationsForTask,
     saveAnnotation,
     saveConsensusAnnotation,
-    getConsensusAnnotation
+    getConsensusAnnotation,
+    annotationsLoaded
   } = useAnnotationData();
 
   // Progress steps
@@ -296,6 +297,7 @@ export function useDashboardState() {
     saveConsensusAnnotation,
     getConsensusAnnotation,
     discussions,
-    currentDiscussion
+    currentDiscussion,
+    annotationsLoaded
   };
 }

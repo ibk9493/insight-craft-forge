@@ -1,4 +1,3 @@
-
 // API types for the annotation system
 
 export interface Discussion {
@@ -22,9 +21,9 @@ export interface Discussion {
 }
 
 export interface Annotation {
-  discussionId: string;
-  userId: string;
-  taskId: number;
+  discussion_id: string;
+  user_id: string;
+  task_id: number;
   data: Record<string, string | boolean>;
   timestamp: string;
 }

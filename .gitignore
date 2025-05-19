@@ -23,3 +23,11 @@ dist-ssr
 *.sln
 *.sw?
 **__pycache__**
+
+# Lockfiles
+package-lock.json
+
+# Databases
+swe_qa.db
+*.db
+package-lock.json

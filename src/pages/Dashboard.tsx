@@ -46,7 +46,8 @@ const Dashboard = () => {
     saveConsensusAnnotation,
     getConsensusAnnotation,
     discussions,
-    currentDiscussion
+    currentDiscussion,
+    annotationsLoaded
   } = useDashboardState();
 
   const dispatch = useAppDispatch();
@@ -107,8 +108,8 @@ const Dashboard = () => {
 
   // Initialize data when task or discussion changes
   useEffect(() => {
-    if (discussionId && user && currentStep > 0 && currentStep <= 3) {
-      console.log(`Loading data for discussion: ${discussionId}, task: ${currentStep}, mode: ${viewMode}`);
+    if (discussionId && user && currentStep > 0 && currentStep <= 3 && annotationsLoaded) {
+      console.log(`Loading data for discussion: ${discussionId}, task: ${currentStep}, mode: ${viewMode}, annotationsLoaded: ${annotationsLoaded}`);
       
       if (viewMode === 'detail') {
         // Load user's existing annotation only for the current task
@@ -150,7 +151,7 @@ const Dashboard = () => {
         }
       }
     }
-  }, [discussionId, currentStep, viewMode, user, isPodLead]);
+  }, [discussionId, currentStep, viewMode, user, isPodLead, annotationsLoaded]);
 
   // Get summary data for all tasks
   const getSummaryData = () => {

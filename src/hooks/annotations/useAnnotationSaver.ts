@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { SubTask } from '@/components/dashboard/TaskCard';
 import { Annotation } from '@/services/api';
@@ -96,9 +95,9 @@ export function useAnnotationSaver({
         
         // Save annotation - force this to NOT use mock data
         const success = await saveAnnotation({
-          userId: user.id,
-          discussionId,
-          taskId,
+          user_id: user.id,
+          discussion_id: discussionId,
+          task_id: taskId,
           data: taskData
         });
         
@@ -134,9 +133,9 @@ export function useAnnotationSaver({
         
         // Save consensus annotation
         const success = await saveConsensusAnnotation({
-          userId: user.id,
-          discussionId,
-          taskId,
+          user_id: user.id,
+          discussion_id: discussionId,
+          task_id: taskId,
           data: taskData
         });
         
