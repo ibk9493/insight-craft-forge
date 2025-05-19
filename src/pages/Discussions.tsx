@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Header from '@/components/layout/Header';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -287,7 +286,8 @@ const Discussions = () => {
     setFilterValues(newFilters);
   };
 
-  const startTask = (discussionId: string, taskNumber: number) => {
+  // Optimized function to load only the specific task data
+  const startTask = useCallback((discussionId: string, taskNumber: number) => {
     if (!user) {
       toast.error("You must be logged in to annotate");
       navigate('/');
@@ -329,7 +329,7 @@ const Discussions = () => {
     }
     
     navigate(`/dashboard?discussionId=${discussionId}&task=${taskNumber}`);
-  };
+  }, [discussions, getUserAnnotationStatus, isPodLead, navigate, user]);
 
   const getTaskStatusClass = (status: 'locked' | 'unlocked' | 'completed', userAnnotated?: boolean) => {
     if (userAnnotated) return 'bg-purple-100 text-purple-800';

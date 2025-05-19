@@ -8,7 +8,7 @@ import Summary from '@/components/dashboard/Summary';
 import DashboardNavigation from '@/components/dashboard/DashboardNavigation';
 import DashboardBreadcrumb from '@/components/dashboard/DashboardBreadcrumb';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, FileText, Eye } from 'lucide-react';
+import { CheckCircle, Eye } from 'lucide-react';
 import AnnotatorView from '@/components/dashboard/AnnotatorView';
 import { useDashboardState } from '@/hooks/useDashboardState';
 import { useTaskSubtasks } from '@/hooks/useTaskSubtasks';
@@ -18,6 +18,7 @@ import { TaskId } from '@/hooks/annotations/useAnnotationTypes';
 import DiscussionDetailsModal from '@/components/dashboard/DiscussionDetailsModal';
 import { useAppDispatch } from '@/hooks';
 import { openModal } from '@/store/discussionModalSlice';
+import { useTaskInitialization } from '@/hooks/useTaskInitialization';
 
 const Dashboard = () => {
   // Use the dashboard state hook
@@ -105,52 +106,104 @@ const Dashboard = () => {
     overrideAnnotation: undefined
   });
 
-  // Initialize data when task or discussion changes
-  useEffect(() => {
-    if (discussionId && user && currentStep > 0 && currentStep <= 3) {
-      console.log(`Loading data for discussion: ${discussionId}, task: ${currentStep}, mode: ${viewMode}`);
+  // Use our new task initialization hook to optimize data loading
+  const { loading: taskInitLoading } = useTaskInitialization({
+    discussionId,
+    currentStep,
+    viewMode,
+    user,
+    isPodLead,
+    loadUserAnnotation,
+    prepareConsensusView,
+    setTask1SubTasks,
+    setTask2SubTasks,
+    setTask3SubTasks,
+    setConsensusTask1,
+    setConsensusTask2,
+    setConsensusTask3
+  });
+
+  // Process Task 3 special fields before saving
+  const preProcessTask3Fields = () => {
+    let updatedTask3SubTasks = [...task3SubTasks];
+    
+    // Process multiple short answers list field
+    const shortAnswerTask = updatedTask3SubTasks.find(task => task.id === 'short_answer_list');
+    if (shortAnswerTask && shortAnswerTask.textValue) {
+      // Split by new lines to get array of short answers
+      const shortAnswers = shortAnswerTask.textValue
+        .split('\n')
+        .map(item => item.trim())
+        .filter(item => item.length > 0);
       
-      if (viewMode === 'detail') {
-        // Load user's existing annotation only for the current task
-        const updatedSubTasks = loadUserAnnotation(discussionId, currentStep);
-        
-        if (updatedSubTasks) {
-          console.log("Loaded user annotation successfully:", updatedSubTasks);
-          switch (currentStep) {
-            case TaskId.QUESTION_QUALITY:
-              setTask1SubTasks(updatedSubTasks);
-              break;
-            case TaskId.ANSWER_QUALITY:
-              setTask2SubTasks(updatedSubTasks);
-              break;
-            case TaskId.REWRITE:
-              setTask3SubTasks(updatedSubTasks);
-              break;
-          }
-        } else {
-          console.log("No saved annotation found or error loading");
+      // Update the task with array format for saving
+      updatedTask3SubTasks = updatedTask3SubTasks.map(task => {
+        if (task.id === 'short_answer_list') {
+          return {
+            ...task,
+            arrayValue: shortAnswers
+          };
         }
-      } else if (viewMode === 'consensus' && isPodLead) {
-        // Prepare consensus view only for the current task
-        const consensusTasks = prepareConsensusView(discussionId, currentStep);
-        
-        if (consensusTasks && consensusTasks.length > 0) {
-          console.log("Loaded consensus view successfully");
-          switch (currentStep) {
-            case TaskId.QUESTION_QUALITY:
-              setConsensusTask1(consensusTasks);
-              break;
-            case TaskId.ANSWER_QUALITY:
-              setConsensusTask2(consensusTasks);
-              break;
-            case TaskId.REWRITE:
-              setConsensusTask3(consensusTasks);
-              break;
+        return task;
+      });
+    }
+    
+    // Process supporting docs field
+    const supportingDocsTask = updatedTask3SubTasks.find(task => task.id === 'supporting_docs');
+    if (supportingDocsTask && supportingDocsTask.textValue) {
+      try {
+        // Try to parse as JSON first
+        let parsedDocs: Array<{link: string, paragraph: string}> = [];
+        try {
+          parsedDocs = JSON.parse(supportingDocsTask.textValue);
+        } catch (e) {
+          // If not valid JSON, try to parse line by line format
+          const lines = supportingDocsTask.textValue.split('\n');
+          parsedDocs = [];
+          
+          let currentDoc: {link?: string, paragraph?: string} = {};
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (trimmedLine.startsWith('link:') || trimmedLine.startsWith('Link:')) {
+              if (currentDoc.link || currentDoc.paragraph) {
+                parsedDocs.push(currentDoc as {link: string, paragraph: string});
+                currentDoc = {};
+              }
+              currentDoc.link = trimmedLine.substring(5).trim();
+            } else if (trimmedLine.startsWith('paragraph:') || trimmedLine.startsWith('Paragraph:')) {
+              currentDoc.paragraph = trimmedLine.substring(10).trim();
+            } else if (Object.keys(currentDoc).length > 0) {
+              // Add to the current paragraph
+              if (currentDoc.paragraph) {
+                currentDoc.paragraph += ' ' + trimmedLine;
+              } else {
+                currentDoc.paragraph = trimmedLine;
+              }
+            }
+          }
+          
+          if (currentDoc.link || currentDoc.paragraph) {
+            parsedDocs.push(currentDoc as {link: string, paragraph: string});
           }
         }
+        
+        // Update the task with array format for saving
+        updatedTask3SubTasks = updatedTask3SubTasks.map(task => {
+          if (task.id === 'supporting_docs') {
+            return {
+              ...task,
+              arrayValue: parsedDocs
+            };
+          }
+          return task;
+        });
+      } catch (e) {
+        console.error('Error parsing supporting docs:', e);
       }
     }
-  }, [discussionId, currentStep, viewMode, user, isPodLead]);
+    
+    return updatedTask3SubTasks;
+  };
 
   // Get summary data for all tasks
   const getSummaryData = () => {
@@ -163,6 +216,12 @@ const Dashboard = () => {
 
   // Handle the save button click
   const onSaveClick = async () => {
+    // Pre-process Task 3 fields if needed
+    if (currentStep === TaskId.REWRITE) {
+      const processedSubTasks = preProcessTask3Fields();
+      setTask3SubTasks(processedSubTasks);
+    }
+    
     await handleSaveAnnotation(
       discussionId, 
       currentStep, 

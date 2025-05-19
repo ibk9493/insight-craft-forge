@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { SubTask, SubTaskStatus } from '@/components/dashboard/TaskCard';
 import { Annotation } from '@/services/api';
@@ -50,7 +51,29 @@ export function useAnnotationLoader({
         let savedValue = annotation.data[task.id];
         const savedTextValue = annotation.data[`${task.id}_text`];
         
-        if (savedValue !== undefined) {
+        // Handle arrays for short answer lists and supporting docs
+        if (task.id === 'short_answer_list' && Array.isArray(savedValue)) {
+          return {
+            ...task,
+            selectedOption: '',
+            status: 'completed' as SubTaskStatus,
+            textValue: savedValue.join('\n')
+          };
+        } else if (task.id === 'supporting_docs' && Array.isArray(savedValue)) {
+          // Format as JSON string for display
+          const formattedDocs = savedValue.map(doc => {
+            if (typeof doc === 'object' && doc.link && doc.paragraph) {
+              return { link: doc.link, paragraph: doc.paragraph };
+            }
+            return doc;
+          });
+          return {
+            ...task,
+            selectedOption: '',
+            status: 'completed' as SubTaskStatus,
+            textValue: JSON.stringify(formattedDocs, null, 2)
+          };
+        } else if (savedValue !== undefined) {
           let status: SubTaskStatus = 'completed';
           let selectedOption = '';
           
@@ -124,7 +147,28 @@ export function useAnnotationLoader({
       const savedValue = annotation.data[task.id];
       const savedTextValue = annotation.data[`${task.id}_text`];
       
-      if (savedValue !== undefined) {
+      if (task.id === 'short_answer_list' && Array.isArray(savedValue)) {
+        return {
+          ...task,
+          selectedOption: '',
+          status: 'completed' as SubTaskStatus,
+          textValue: savedValue.join('\n')
+        };
+      } else if (task.id === 'supporting_docs' && Array.isArray(savedValue)) {
+        // Format as JSON string for display
+        const formattedDocs = savedValue.map(doc => {
+          if (typeof doc === 'object' && doc.link && doc.paragraph) {
+            return { link: doc.link, paragraph: doc.paragraph };
+          }
+          return doc;
+        });
+        return {
+          ...task,
+          selectedOption: '',
+          status: 'completed' as SubTaskStatus,
+          textValue: JSON.stringify(formattedDocs, null, 2)
+        };
+      } else if (savedValue !== undefined) {
         let status: SubTaskStatus = 'completed';
         let selectedOption = '';
         
@@ -150,9 +194,23 @@ export function useAnnotationLoader({
     // Convert all annotations to form fields format and count occurrences
     const fieldCounts: Record<string, Record<string, number>> = {};
     const textValues: Record<string, string[]> = {};
+    const shortAnswerLists: string[][] = [];
+    const supportingDocs: any[][] = [];
     
     annotations.forEach(annotation => {
       Object.entries(annotation.data).forEach(([key, value]) => {
+        // Special handling for short_answer_list
+        if (key === 'short_answer_list' && Array.isArray(value)) {
+          shortAnswerLists.push(value);
+          return;
+        }
+        
+        // Special handling for supporting_docs
+        if (key === 'supporting_docs' && Array.isArray(value)) {
+          supportingDocs.push(value);
+          return;
+        }
+        
         // Skip text fields, we'll handle them separately
         if (key.endsWith('_text')) {
           const baseKey = key.replace('_text', '');
@@ -187,6 +245,42 @@ export function useAnnotationLoader({
     
     // Find most common value for each field
     return consensusTasks.map(task => {
+      // Special handling for short_answer_list
+      if (task.id === 'short_answer_list' && shortAnswerLists.length > 0) {
+        // Collect all answers across all annotators
+        const allAnswers = shortAnswerLists.flat();
+        return {
+          ...task,
+          selectedOption: '',
+          textValue: allAnswers.join('\n'),
+          status: 'completed' as SubTaskStatus
+        };
+      }
+      
+      // Special handling for supporting_docs
+      if (task.id === 'supporting_docs' && supportingDocs.length > 0) {
+        // Collect all unique supporting docs
+        const allDocs: any[] = [];
+        supportingDocs.forEach(docList => {
+          docList.forEach(doc => {
+            // Check if this doc is already in allDocs
+            const exists = allDocs.some(existingDoc => 
+              existingDoc.link === doc.link && existingDoc.paragraph === doc.paragraph
+            );
+            if (!exists) {
+              allDocs.push(doc);
+            }
+          });
+        });
+        
+        return {
+          ...task,
+          selectedOption: '',
+          textValue: JSON.stringify(allDocs, null, 2),
+          status: 'completed' as SubTaskStatus
+        };
+      }
+      
       const counts = fieldCounts[task.id];
       if (!counts) return task;
       
