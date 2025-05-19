@@ -266,7 +266,7 @@ export const api = {
     },
     
     overrideAnnotation: (annotation: Annotation) => {
-      console.log('[Admin] Overriding annotation:', annotation.discussionId, annotation.taskId);
+      console.log('[Admin] Overriding annotation:', annotation.discussion_id, annotation.task_id);
       return safeApiRequest<Annotation>('/api/admin/annotations/override', 'PUT', annotation, undefined, {} as Annotation);
     },
     
