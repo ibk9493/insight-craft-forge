@@ -25,11 +25,17 @@ export function useAnnotationLoader({
   const [loading, setLoading] = useState(false);
 
   // Load user's annotation for a specific task
-  const loadUserAnnotation = (discussionId: string, taskId: number, userId: string): SubTask[] | null => {
+  const loadUserAnnotation = (discussionId: string, taskId: number, userId: string = 'current'): SubTask[] | null => {
     try {
+      // If userId is 'current', use default behavior
       const annotation = getUserAnnotation(discussionId, userId, taskId);
       
-      if (!annotation) return null;
+      if (!annotation) {
+        console.log(`No annotation found for discussion: ${discussionId}, task: ${taskId}`);
+        return null;
+      }
+      
+      console.log(`Loading annotation for task ${taskId}:`, annotation.data);
       
       // Create a deep copy of the tasks based on which task we're loading
       let tasksCopy: SubTask[] = [];
@@ -42,27 +48,33 @@ export function useAnnotationLoader({
       }
       
       // Map the saved data back to the form fields
-      return tasksCopy.map(task => {
-        const savedValue = annotation.data[task.id];
+      const updatedTasks = tasksCopy.map(task => {
+        let savedValue = annotation.data[task.id];
         const savedTextValue = annotation.data[`${task.id}_text`];
         
         if (savedValue !== undefined) {
+          let status: SubTaskStatus = 'completed';
+          let selectedOption = '';
+          
+          // Handle boolean values by converting to strings
           if (typeof savedValue === 'boolean') {
-            return {
-              ...task,
-              selectedOption: savedValue ? 'True' : 'False', // Convert boolean to string option
-              textValue: typeof savedTextValue === 'string' ? savedTextValue : (task.textValue || '') // Ensure textValue is string
-            };
+            selectedOption = savedValue ? 'True' : 'False';
           } else if (typeof savedValue === 'string') {
-            return {
-              ...task,
-              selectedOption: savedValue,
-              textValue: typeof savedTextValue === 'string' ? savedTextValue : (task.textValue || '')
-            };
+            selectedOption = savedValue;
           }
+          
+          return {
+            ...task,
+            selectedOption,
+            status,
+            textValue: typeof savedTextValue === 'string' ? savedTextValue : (task.textValue || '')
+          };
         }
+        
         return task;
       });
+      
+      return updatedTasks;
     } catch (error) {
       console.error('Failed to load annotation:', error);
       toast.error('Failed to load annotation');
@@ -88,6 +100,7 @@ export function useAnnotationLoader({
       
       // If we have an existing consensus annotation, use it
       if (consensusAnnotation) {
+        console.log("Using existing consensus annotation:", consensusAnnotation.data);
         return mapAnnotationToSubTasks(consensusTasks, consensusAnnotation);
       }
       
@@ -98,6 +111,7 @@ export function useAnnotationLoader({
         return consensusTasks;
       }
       
+      console.log(`Generating consensus from ${annotations.length} annotations`);
       return generateConsensusFromAnnotations(consensusTasks, annotations);
     } catch (error) {
       console.error('Failed to prepare consensus view:', error);
@@ -113,19 +127,21 @@ export function useAnnotationLoader({
       const savedTextValue = annotation.data[`${task.id}_text`];
       
       if (savedValue !== undefined) {
+        let status: SubTaskStatus = 'completed';
+        let selectedOption = '';
+        
         if (typeof savedValue === 'boolean') {
-          return {
-            ...task,
-            selectedOption: savedValue ? 'True' : 'False',
-            textValue: typeof savedTextValue === 'string' ? savedTextValue : (task.textValue || '')
-          };
+          selectedOption = savedValue ? 'True' : 'False';
         } else if (typeof savedValue === 'string') {
-          return {
-            ...task,
-            selectedOption: savedValue,
-            textValue: typeof savedTextValue === 'string' ? savedTextValue : (task.textValue || '')
-          };
+          selectedOption = savedValue;
         }
+        
+        return {
+          ...task,
+          selectedOption,
+          status,
+          textValue: typeof savedTextValue === 'string' ? savedTextValue : (task.textValue || '')
+        };
       }
       return task;
     });
