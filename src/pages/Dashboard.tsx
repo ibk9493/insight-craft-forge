@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Header from '@/components/layout/Header';
 import UrlInput from '@/components/dashboard/UrlInput';
 import TaskCard, { SubTask, SubTaskStatus } from '@/components/dashboard/TaskCard';
@@ -19,8 +19,21 @@ import DiscussionDetailsModal from '@/components/dashboard/DiscussionDetailsModa
 import { useAppDispatch } from '@/hooks';
 import { openModal } from '@/store/discussionModalSlice';
 import { toast } from 'sonner';
+import { MOCK_USERS_DATA } from '@/contexts/UserContext';
+
+// Define a type for the feedback data
+interface AnnotationFeedbackData {
+  rating?: number;
+  comment?: string;
+}
+
+interface AnnotationFeedbackState {
+  [annotationId: string]: AnnotationFeedbackData;
+}
 
 const Dashboard = () => {
+  const [annotationFeedback, setAnnotationFeedback] = useState<AnnotationFeedbackState>({});
+
   // Use the dashboard state hook
   const {
     url,
@@ -106,6 +119,12 @@ const Dashboard = () => {
     updateStepCompletionStatus,
     overrideAnnotation: undefined
   });
+
+  // Helper function to get user email by ID
+  const getUserEmailById = (userId: string): string => {
+    const user = MOCK_USERS_DATA.find(u => u.id === userId);
+    return user ? user.username : 'Unknown User';
+  };
 
   // Initialize data when task or discussion changes
   useEffect(() => {
@@ -270,6 +289,26 @@ const Dashboard = () => {
     toast.success("Consensus form populated with selected annotation.");
   };
 
+  const handleAnnotationRatingChange = (annotationId: string, rating: number) => {
+    setAnnotationFeedback(prev => ({
+      ...prev,
+      [annotationId]: {
+        ...prev[annotationId],
+        rating
+      }
+    }));
+  };
+
+  const handleAnnotationCommentChange = (annotationId: string, comment: string) => {
+    setAnnotationFeedback(prev => ({
+      ...prev,
+      [annotationId]: {
+        ...prev[annotationId],
+        comment
+      }
+    }));
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <Header />
@@ -383,6 +422,10 @@ const Dashboard = () => {
                   currentStep={currentStep} 
                   getAnnotationsForTask={getAnnotationsForTask}
                   onUseForConsensus={handleUseAnnotationForConsensus}
+                  getUserEmailById={getUserEmailById}
+                  annotationFeedback={annotationFeedback}
+                  onRatingChange={handleAnnotationRatingChange}
+                  onCommentChange={handleAnnotationCommentChange}
                 />
               </>
             )}
@@ -417,6 +460,10 @@ const Dashboard = () => {
                   currentStep={currentStep} 
                   getAnnotationsForTask={getAnnotationsForTask}
                   onUseForConsensus={handleUseAnnotationForConsensus}
+                  getUserEmailById={getUserEmailById}
+                  annotationFeedback={annotationFeedback}
+                  onRatingChange={handleAnnotationRatingChange}
+                  onCommentChange={handleAnnotationCommentChange}
                 />
               </>
             )}
@@ -451,6 +498,10 @@ const Dashboard = () => {
                   currentStep={currentStep} 
                   getAnnotationsForTask={getAnnotationsForTask}
                   onUseForConsensus={handleUseAnnotationForConsensus}
+                  getUserEmailById={getUserEmailById}
+                  annotationFeedback={annotationFeedback}
+                  onRatingChange={handleAnnotationRatingChange}
+                  onCommentChange={handleAnnotationCommentChange}
                 />
               </>
             )}

@@ -255,9 +255,9 @@ export function useAnnotationData() {
       setLoading(true);
       
       // Call API to save annotation
-      const newAnnotation = await api.annotations.save(annotation);
+      const newSavedAnnotation = await api.annotations.save(annotation);
       
-      if (!newAnnotation) {
+      if (!newSavedAnnotation) {
         throw new Error('Failed to save annotation');
       }
       
@@ -269,12 +269,24 @@ export function useAnnotationData() {
               a.task_id === annotation.task_id
         );
         
+        // Construct the annotation for local state.
+        // Prioritize the data that was sent for saving, but merge with metadata (like id, timestamp)
+        // that the API provides in its response.
+        const finalAnnotationForState: Annotation = {
+            ...newSavedAnnotation, // Start with everything from API response (id, timestamp, potentially partial/different data)
+            // Ensure the core identifiers and the critical 'data' payload are from the user's input:
+            discussion_id: annotation.discussion_id,
+            user_id: annotation.user_id,
+            task_id: annotation.task_id,
+            data: annotation.data, // This ensures the data payload sent by the client is used in the local state.
+        };
+        
         if (existingIndex !== -1) {
           const updated = [...prev];
-          updated[existingIndex] = newAnnotation;
+          updated[existingIndex] = finalAnnotationForState;
           return updated;
         } else {
-          return [...prev, newAnnotation];
+          return [...prev, finalAnnotationForState];
         }
       });
       

@@ -2,14 +2,28 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Annotation } from '@/services/api';
 import { Button } from '@/components/ui/button';
-import { SubTask } from '@/components/dashboard/TaskCard';
-import { Edit, Check } from 'lucide-react';
+import { Edit, Check, Star } from 'lucide-react';
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
+interface AnnotationFeedbackData {
+  rating?: number;
+  comment?: string;
+}
+
+interface AnnotationFeedbackState {
+  [annotationId: string]: AnnotationFeedbackData;
+}
 
 interface AnnotatorViewProps {
   discussionId: string;
   currentStep: number;
   getAnnotationsForTask: (discussionId: string, taskId: number) => Annotation[];
   onUseForConsensus?: (annotation: Annotation) => void;
+  getUserEmailById?: (userId: string) => string;
+  annotationFeedback?: AnnotationFeedbackState;
+  onRatingChange?: (annotationId: string, rating: number) => void;
+  onCommentChange?: (annotationId: string, comment: string) => void;
 }
 
 const formatKey = (key: string): string => {
@@ -39,7 +53,11 @@ const AnnotatorView: React.FC<AnnotatorViewProps> = ({
   discussionId,
   currentStep,
   getAnnotationsForTask,
-  onUseForConsensus
+  onUseForConsensus,
+  getUserEmailById,
+  annotationFeedback,
+  onRatingChange,
+  onCommentChange
 }) => {
   if (!discussionId) return null;
   
@@ -64,18 +82,21 @@ const AnnotatorView: React.FC<AnnotatorViewProps> = ({
       
       <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
         {annotations.map((annotation, index) => {
-          // Log the specific annotation being processed
-          console.log(`[AnnotatorView] Rendering annotation index ${index}:`, JSON.stringify(annotation, null, 2));
-          
+          const currentFeedback = annotationFeedback?.[annotation.id] || {};
+          const rating = currentFeedback.rating || 0;
+          const comment = currentFeedback.comment || '';
+
           return (
-            <Card key={annotation.id || index} className="text-sm">
+            <Card key={annotation.id || index} className="text-sm flex flex-col">
               <CardHeader className="py-3">
                 <CardTitle className="text-base flex justify-between">
-                  <span>Annotator {index + 1}</span>
+                  <span>
+                    {getUserEmailById ? getUserEmailById(annotation.user_id) : `Annotator (ID: ${annotation.user_id})`}
+                  </span>
                   <span className="text-xs text-gray-500">{new Date(annotation.timestamp).toLocaleString()}</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="py-3">
+              <CardContent className="py-3 flex-grow">
                 <div className="space-y-2">
                   {Object.entries(annotation.data || {})
                     .filter(([key]) => !key.startsWith('_')) // Filter out metadata fields
@@ -101,8 +122,39 @@ const AnnotatorView: React.FC<AnnotatorViewProps> = ({
                       );
                     })}
                 </div>
+                
+                {/* Star Rating and Comment Section */}
+                <div className="mt-4 pt-3 border-t">
+                  <div className="mb-2">
+                    <Label htmlFor={`rating-${annotation.id}`} className="text-xs font-medium text-gray-600">Rate this annotation:</Label>
+                    <div className="flex items-center mt-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Button 
+                          key={star} 
+                          variant="ghost" 
+                          size="icon" 
+                          className={`h-6 w-6 p-0 ${rating >= star ? 'text-yellow-400' : 'text-gray-300'}`}
+                          onClick={() => onRatingChange?.(String(annotation.id), star)}
+                        >
+                          <Star className="h-4 w-4 fill-current" />
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor={`comment-${annotation.id}`} className="text-xs font-medium text-gray-600">Comment:</Label>
+                    <Input 
+                      id={`comment-${annotation.id}`}
+                      type="text" 
+                      placeholder="Add a comment..."
+                      value={comment}
+                      onChange={(e) => onCommentChange?.(String(annotation.id), e.target.value)}
+                      className="mt-1 text-xs h-8"
+                    />
+                  </div>
+                </div>
               </CardContent>
-              <CardFooter className="pt-0 pb-3">
+              <CardFooter className="pt-0 pb-3 mt-auto">
                 <div className="flex justify-end w-full">
                   <Button 
                     variant="ghost" 
