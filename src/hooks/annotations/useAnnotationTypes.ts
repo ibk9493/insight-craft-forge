@@ -1,5 +1,4 @@
 
-// Only adding the missing function for isPodLead if it doesn't exist
 import { SubTask } from '@/components/dashboard/TaskCard';
 import { User } from '@/contexts/UserContext';
 import { Annotation } from '@/services/api';

@@ -1,3 +1,4 @@
+
 import React, { useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import UrlInput from '@/components/dashboard/UrlInput';
@@ -152,6 +153,88 @@ const Dashboard = () => {
     }
   }, [discussionId, currentStep, viewMode, user, isPodLead]);
 
+  // Process Task 3 special fields before saving
+  const preProcessTask3Fields = () => {
+    let updatedTask3SubTasks = [...task3SubTasks];
+    
+    // Process multiple short answers list field
+    const shortAnswerTask = updatedTask3SubTasks.find(task => task.id === 'short_answer_list');
+    if (shortAnswerTask && shortAnswerTask.textValue) {
+      // Split by new lines to get array of short answers
+      const shortAnswers = shortAnswerTask.textValue
+        .split('\n')
+        .map(item => item.trim())
+        .filter(item => item.length > 0);
+      
+      // Update the task with array format for saving
+      updatedTask3SubTasks = updatedTask3SubTasks.map(task => {
+        if (task.id === 'short_answer_list') {
+          return {
+            ...task,
+            arrayValue: shortAnswers
+          };
+        }
+        return task;
+      });
+    }
+    
+    // Process supporting docs field
+    const supportingDocsTask = updatedTask3SubTasks.find(task => task.id === 'supporting_docs');
+    if (supportingDocsTask && supportingDocsTask.textValue) {
+      try {
+        // Try to parse as JSON first
+        let parsedDocs;
+        try {
+          parsedDocs = JSON.parse(supportingDocsTask.textValue);
+        } catch (e) {
+          // If not valid JSON, try to parse line by line format
+          const lines = supportingDocsTask.textValue.split('\n');
+          parsedDocs = [];
+          
+          let currentDoc = {};
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (trimmedLine.startsWith('link:') || trimmedLine.startsWith('Link:')) {
+              if (Object.keys(currentDoc).length > 0) {
+                parsedDocs.push(currentDoc);
+                currentDoc = {};
+              }
+              currentDoc.link = trimmedLine.substring(5).trim();
+            } else if (trimmedLine.startsWith('paragraph:') || trimmedLine.startsWith('Paragraph:')) {
+              currentDoc.paragraph = trimmedLine.substring(10).trim();
+            } else if (Object.keys(currentDoc).length > 0) {
+              // Add to the current paragraph
+              if (currentDoc.paragraph) {
+                currentDoc.paragraph += ' ' + trimmedLine;
+              } else {
+                currentDoc.paragraph = trimmedLine;
+              }
+            }
+          }
+          
+          if (Object.keys(currentDoc).length > 0) {
+            parsedDocs.push(currentDoc);
+          }
+        }
+        
+        // Update the task with array format for saving
+        updatedTask3SubTasks = updatedTask3SubTasks.map(task => {
+          if (task.id === 'supporting_docs') {
+            return {
+              ...task,
+              arrayValue: parsedDocs
+            };
+          }
+          return task;
+        });
+      } catch (e) {
+        console.error('Error parsing supporting docs:', e);
+      }
+    }
+    
+    return updatedTask3SubTasks;
+  };
+
   // Get summary data for all tasks
   const getSummaryData = () => {
     return {
@@ -163,6 +246,12 @@ const Dashboard = () => {
 
   // Handle the save button click
   const onSaveClick = async () => {
+    // Pre-process Task 3 fields if needed
+    if (currentStep === TaskId.REWRITE) {
+      const processedSubTasks = preProcessTask3Fields();
+      setTask3SubTasks(processedSubTasks);
+    }
+    
     await handleSaveAnnotation(
       discussionId, 
       currentStep, 

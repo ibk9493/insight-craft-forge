@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Card, 
   CardContent, 
@@ -34,6 +34,12 @@ interface TaskManagerProps {
 
 const TaskManager: React.FC<TaskManagerProps> = ({ discussions, onTaskUpdated }) => {
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
+  const [discussionsState, setDiscussionsState] = useState<Discussion[]>([]);
+  
+  // Initialize local state with props
+  useEffect(() => {
+    setDiscussionsState(discussions);
+  }, [discussions]);
   
   // Helper function to get status icon
   const getStatusIcon = (status: TaskStatus) => {
@@ -76,6 +82,15 @@ const TaskManager: React.FC<TaskManagerProps> = ({ discussions, onTaskUpdated })
       
       if (result.success && result.discussion) {
         toast.success(result.message || 'Task status updated successfully');
+        
+        // Update local state immediately
+        setDiscussionsState(prevDiscussions => 
+          prevDiscussions.map(disc => 
+            disc.id === discussionId ? result.discussion : disc
+          )
+        );
+        
+        // Also notify parent component
         onTaskUpdated(result.discussion);
       } else {
         toast.error(result.message || 'Failed to update task status');
@@ -107,14 +122,14 @@ const TaskManager: React.FC<TaskManagerProps> = ({ discussions, onTaskUpdated })
               </TableRow>
             </TableHeader>
             <TableBody>
-              {discussions.length === 0 ? (
+              {discussionsState.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-8 text-gray-500">
                     No discussions available
                   </TableCell>
                 </TableRow>
               ) : (
-                discussions.map((discussion) => (
+                discussionsState.map((discussion) => (
                   <TableRow key={discussion.id}>
                     <TableCell className="font-medium max-w-[200px] truncate">
                       {discussion.title}
