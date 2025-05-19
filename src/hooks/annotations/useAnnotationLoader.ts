@@ -1,9 +1,7 @@
-
 import { useState } from 'react';
-import { SubTask } from '@/components/dashboard/TaskCard';
+import { SubTask, SubTaskStatus } from '@/components/dashboard/TaskCard';
 import { Annotation } from '@/services/api';
 import { toast } from 'sonner';
-import { User } from '@/contexts/UserContext';
 
 interface AnnotationLoaderProps {
   task1SubTasks: SubTask[];
@@ -212,7 +210,7 @@ export function useAnnotationLoader({
           ...task,
           selectedOption: mostCommonValue,
           textValue,
-          status: 'completed'
+          status: 'completed' as SubTaskStatus
         };
       }
       

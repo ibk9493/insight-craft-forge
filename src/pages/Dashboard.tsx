@@ -111,7 +111,7 @@ const Dashboard = () => {
       console.log(`Loading data for discussion: ${discussionId}, task: ${currentStep}, mode: ${viewMode}`);
       
       if (viewMode === 'detail') {
-        // Load user's existing annotation
+        // Load user's existing annotation only for the current task
         const updatedSubTasks = loadUserAnnotation(discussionId, currentStep);
         
         if (updatedSubTasks) {
@@ -131,7 +131,7 @@ const Dashboard = () => {
           console.log("No saved annotation found or error loading");
         }
       } else if (viewMode === 'consensus' && isPodLead) {
-        // Prepare consensus view
+        // Prepare consensus view only for the current task
         const consensusTasks = prepareConsensusView(discussionId, currentStep);
         
         if (consensusTasks && consensusTasks.length > 0) {

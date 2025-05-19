@@ -100,7 +100,11 @@ export function useDashboardState() {
     setCurrentStep(taskId);
     
     // Update URL with task parameters without full page reload
-    navigate(`/dashboard?discussionId=${discussionId}&task=${taskId}`, { replace: true });
+    if (discussionId) {
+      navigate(`/dashboard?discussionId=${discussionId}&task=${taskId}`, { replace: true });
+    } else {
+      navigate(`/dashboard?task=${taskId}`, { replace: true });
+    }
   };
 
   const handleBackToGrid = useCallback(() => {
