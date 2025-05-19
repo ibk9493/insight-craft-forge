@@ -1,4 +1,3 @@
-
 import { toast } from '@/components/ui/sonner';
 import { ApiError } from './types';
 import { Discussion, Annotation, TaskStatus, GitHubDiscussion, UploadResult, 
@@ -106,28 +105,30 @@ export const api = {
     getUserAnnotation: (discussionId: string, userId: string, taskId: number) => 
       safeApiRequest<Annotation>(`/api/annotations?discussionId=${discussionId}&userId=${userId}&taskId=${taskId}`, 'GET', undefined, undefined, {} as Annotation),
     save: (annotation: Omit<Annotation, 'timestamp'>) => {
-      // Convert camelCase to snake_case for the API
+      // The incoming 'annotation' object is already expected to have snake_case keys
+      // due to previous fixes and the Annotation type.
       const apiAnnotation = {
-        discussion_id: annotation.discussionId,
-        user_id: annotation.userId,
-        task_id: annotation.taskId,
+        discussion_id: annotation.discussion_id, // Use snake_case from input
+        user_id: annotation.user_id,           // Use snake_case from input
+        task_id: annotation.task_id,           // Use snake_case from input
         data: annotation.data
       };
       
       return safeApiRequest<Annotation>('/api/annotations', 'POST', apiAnnotation, undefined, {} as Annotation);
     },
-    update: (annotation: Annotation) => {
-      // Convert camelCase to snake_case for the API
+    update: (annotation: Annotation) => { // Annotation type now has snake_case
+      // The incoming 'annotation' object is already expected to have snake_case keys.
       const apiAnnotation = {
-        discussion_id: annotation.discussionId,
-        user_id: annotation.userId,
-        task_id: annotation.taskId,
+        discussion_id: annotation.discussion_id, // Use snake_case from input
+        user_id: annotation.user_id,           // Use snake_case from input
+        task_id: annotation.task_id,           // Use snake_case from input
         data: annotation.data
       };
       
       return safeApiRequest<Annotation>(
-        `/api/annotations/${annotation.discussionId}/${annotation.userId}/${annotation.taskId}`, 
-        'PUT', 
+        // Ensure these URL params are also correct if they differ from body
+        `/api/annotations/${annotation.discussion_id}/${annotation.user_id}/${annotation.task_id}`,
+        'PUT',
         apiAnnotation, 
         undefined, 
         {} as Annotation
@@ -157,12 +158,12 @@ export const api = {
   consensus: {
     get: (discussionId: string, taskId: number) => 
       safeApiRequest<Annotation>(`/api/consensus?discussionId=${discussionId}&taskId=${taskId}`, 'GET', undefined, undefined, {} as Annotation),
-    save: (consensus: Omit<Annotation, 'timestamp'>) => {
-      // Convert camelCase to snake_case for the API
+    save: (consensus: Omit<Annotation, 'timestamp'>) => { // Annotation type now has snake_case
+      // The incoming 'consensus' object (which is an Annotation) is already expected to have snake_case keys.
       const apiConsensus = {
-        discussion_id: consensus.discussionId,
-        user_id: consensus.userId,
-        task_id: consensus.taskId,
+        discussion_id: consensus.discussion_id, // Use snake_case from input
+        user_id: consensus.user_id,           // Use snake_case from input
+        task_id: consensus.task_id,           // Use snake_case from input
         data: consensus.data
       };
       
