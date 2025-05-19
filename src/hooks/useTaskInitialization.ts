@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { SubTask } from '@/components/dashboard/TaskCard';
+import { SubTask, SubTaskStatus } from '@/components/dashboard/TaskCard';
 import { User } from '@/contexts/UserContext';
 import { api } from '@/services/api/endpoints';
 import { TaskId } from './annotations/useAnnotationTypes';
@@ -76,28 +76,34 @@ export function useTaskInitialization({
             // This is important when switching between different discussions
             switch (currentStep) {
               case TaskId.QUESTION_QUALITY:
-                setTask1SubTasks(prev => prev.map(task => ({
-                  ...task,
-                  selectedOption: undefined, 
-                  textValue: '',
-                  status: task.id === 'consensus' ? 'pending' : 'pending' 
-                })));
+                setTask1SubTasks((prev: SubTask[]) => {
+                  return prev.map(task => ({
+                    ...task,
+                    selectedOption: undefined, 
+                    textValue: '',
+                    status: task.id === 'consensus' ? 'pending' : 'pending' 
+                  } as SubTask));
+                });
                 break;
               case TaskId.ANSWER_QUALITY:
-                setTask2SubTasks(prev => prev.map(task => ({
-                  ...task,
-                  selectedOption: undefined,
-                  textValue: '',
-                  status: task.id === 'consensus' ? 'pending' : 'pending'
-                })));
+                setTask2SubTasks((prev: SubTask[]) => {
+                  return prev.map(task => ({
+                    ...task,
+                    selectedOption: undefined,
+                    textValue: '',
+                    status: task.id === 'consensus' ? 'pending' : 'pending'
+                  } as SubTask));
+                });
                 break;
               case TaskId.REWRITE:
-                setTask3SubTasks(prev => prev.map(task => ({
-                  ...task,
-                  selectedOption: undefined,
-                  textValue: '',
-                  status: task.id === 'consensus' ? 'pending' : 'pending'
-                })));
+                setTask3SubTasks((prev: SubTask[]) => {
+                  return prev.map(task => ({
+                    ...task,
+                    selectedOption: undefined,
+                    textValue: '',
+                    status: task.id === 'consensus' ? 'pending' : 'pending'
+                  } as SubTask));
+                });
                 break;
             }
           }
@@ -124,7 +130,7 @@ export function useTaskInitialization({
         // Optionally, fetch updated status for the current discussion only
         try {
           if (discussionId) {
-            const updatedDiscussion = await api.discussions.getDiscussionById(discussionId);
+            const updatedDiscussion = await api.discussions.getById(discussionId);
             if (updatedDiscussion) {
               console.log("Fetched updated task status for current discussion:", updatedDiscussion);
             }
