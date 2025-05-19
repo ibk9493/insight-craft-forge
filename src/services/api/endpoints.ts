@@ -84,7 +84,102 @@ const extractRepositoryFromUrl = (url: string): string => {
     return 'unknown/repository';
   }
 };
+// Add this to your api.ts file to improve reliability
 
+// Configure request timeout
+const API_TIMEOUT = 10000; // 10 seconds
+
+// Create a timeout promise
+const timeoutPromise = (ms: number) => new Promise((_, reject) => 
+  setTimeout(() => reject(new Error(`Request timed out after ${ms}ms`)), ms)
+);
+
+// Enhanced API request with timeout and better error handling
+export const enhancedApiRequest = async <T>(
+  url: string, 
+  method: string, 
+  body?: any, 
+  headers?: any, 
+  fallbackValue?: T
+): Promise<T> => {
+  try {
+    // Configure the fetch options
+    const options: RequestInit = {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers,
+      },
+      // Don't set Content-Type for FormData
+      ...(body instanceof FormData ? { body } : body ? { body: JSON.stringify(body) } : {}),
+    };
+
+    // If it's FormData, remove Content-Type header to let browser set it with boundary
+    if (body instanceof FormData) {
+      delete options.headers['Content-Type'];
+    }
+
+    // Add authorization token if available
+    const authToken = localStorage.getItem('auth_token');
+    if (authToken) {
+      options.headers['Authorization'] = `Bearer ${authToken}`;
+    }
+
+    // Race the fetch against a timeout
+    const response = await Promise.race([
+      fetch(url, options),
+      timeoutPromise(API_TIMEOUT)
+    ]) as Response;
+
+    // Check if response is OK
+    if (!response.ok) {
+      // Try to extract error message from response
+      let errorMessage;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.message || `Error: ${response.status} ${response.statusText}`;
+      } catch (e) {
+        errorMessage = `Error: ${response.status} ${response.statusText}`;
+      }
+      throw new Error(errorMessage);
+    }
+
+    // Check if we have a content-type header and it's JSON
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      const responseText = await response.text();
+      
+      // Handle empty responses
+      if (!responseText.trim()) {
+        console.warn('Empty JSON response received');
+        return fallbackValue as T;
+      }
+      
+      // Parse the JSON
+      try {
+        return JSON.parse(responseText) as T;
+      } catch (e) {
+        console.error('Failed to parse JSON:', e, 'Response:', responseText);
+        throw new Error('Invalid JSON response from server');
+      }
+    } else {
+      // Handle non-JSON responses based on what your API might return
+      const text = await response.text();
+      console.warn('Non-JSON response received:', text);
+      return fallbackValue as T;
+    }
+  } catch (error) {
+    console.error('API request failed:', error);
+    
+    // Check if we're offline
+    if (!navigator.onLine) {
+      console.log('Browser is offline, returning fallback value');
+      return fallbackValue as T;
+    }
+    
+    throw error;
+  }
+};
 export const api = {
   // Discussion endpoints
   discussions: {
@@ -93,40 +188,35 @@ export const api = {
     getByStatus: (status: TaskStatus) => 
       safeApiRequest<Discussion[]>(`/api/discussions?status=${status}`, 'GET', undefined, undefined, []),
     getByBatch: (batchId: number) => 
-      safeApiRequest<Discussion[]>(`/api/discussions?batchId=${batchId}`, 'GET', undefined, undefined, []),
+      safeApiRequest<Discussion[]>(`/api/batches/${batchId}/discussions`, 'GET', undefined, undefined, []),
   },
 
   // Annotation endpoints
   annotations: {
     getByDiscussionId: (discussionId: string) => 
-      safeApiRequest<Annotation[]>(`/api/annotations?discussionId=${discussionId}`, 'GET', undefined, undefined, []),
+      safeApiRequest<Annotation[]>(`/api/annotations?discussion_id=${discussionId}`, 'GET', undefined, undefined, []),
     getByTaskAndDiscussion: (discussionId: string, taskId: number) => 
-      safeApiRequest<Annotation[]>(`/api/annotations?discussionId=${discussionId}&taskId=${taskId}`, 'GET', undefined, undefined, []),
+      safeApiRequest<Annotation[]>(`/api/annotations?discussion_id=${discussionId}&task_id=${taskId}`, 'GET', undefined, undefined, []),
     getUserAnnotation: (discussionId: string, userId: string, taskId: number) => 
-      safeApiRequest<Annotation>(`/api/annotations?discussionId=${discussionId}&userId=${userId}&taskId=${taskId}`, 'GET', undefined, undefined, {} as Annotation),
+      safeApiRequest<Annotation>(`/api/annotations?discussion_id=${discussionId}&user_id=${userId}&task_id=${taskId}`, 'GET', undefined, undefined, {} as Annotation),
     save: (annotation: Omit<Annotation, 'timestamp'>) => {
       // The incoming 'annotation' object is already expected to have snake_case keys
-      // due to previous fixes and the Annotation type.
       const apiAnnotation = {
-        discussion_id: annotation.discussion_id, // Use snake_case from input
-        user_id: annotation.user_id,           // Use snake_case from input
-        task_id: annotation.task_id,           // Use snake_case from input
+        discussion_id: annotation.discussion_id,
+        user_id: annotation.user_id,
+        task_id: annotation.task_id,
         data: annotation.data
       };
       
       return safeApiRequest<Annotation>('/api/annotations', 'POST', apiAnnotation, undefined, {} as Annotation);
     },
-    update: (annotation: Annotation) => { // Annotation type now has snake_case
+    update: (annotation: Annotation) => {
       // The incoming 'annotation' object is already expected to have snake_case keys.
       const apiAnnotation = {
-        discussion_id: annotation.discussion_id, // Use snake_case from input
-        user_id: annotation.user_id,           // Use snake_case from input
-        task_id: annotation.task_id,           // Use snake_case from input
-        data: annotation.data
+        data: annotation.data  // Only need to send the data for updates
       };
       
       return safeApiRequest<Annotation>(
-        // Ensure these URL params are also correct if they differ from body
         `/api/annotations/${annotation.discussion_id}/${annotation.user_id}/${annotation.task_id}`,
         'PUT',
         apiAnnotation, 
@@ -137,16 +227,15 @@ export const api = {
     upload: (file: File, discussionId: string) => {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('discussionId', discussionId);
+      formData.append('discussion_id', discussionId);
       console.log(`[File Upload] Uploading file for discussion: ${discussionId}`, file.name, file.type, file.size);
       return safeApiRequest<{fileUrl: string}>('/api/files/upload', 'POST', formData, {
         'Content-Type': undefined as any
       }, { fileUrl: '' });
     },
     // Method for pod leads to override annotations
-    podLeadOverride: (podLeadId: string, annotatorId: string, discussionId: string, taskId: number, data: Record<string, string | boolean>) => 
-      safeApiRequest<Annotation>('/api/pod-lead/annotations/override', 'POST', {
-        pod_lead_id: podLeadId,
+    podLeadOverride: (annotatorId: string, discussionId: string, taskId: number, data: Record<string, any>) => 
+      safeApiRequest<Annotation>('/api/pod-lead/annotations/override', 'PUT', {
         annotator_id: annotatorId,
         discussion_id: discussionId,
         task_id: taskId,
@@ -157,59 +246,111 @@ export const api = {
   // Consensus endpoints
   consensus: {
     get: (discussionId: string, taskId: number) => 
-      safeApiRequest<Annotation>(`/api/consensus?discussionId=${discussionId}&taskId=${taskId}`, 'GET', undefined, undefined, {} as Annotation),
-    save: (consensus: Omit<Annotation, 'timestamp'>) => { // Annotation type now has snake_case
-      // The incoming 'consensus' object (which is an Annotation) is already expected to have snake_case keys.
+      safeApiRequest<Annotation>(`/api/consensus/${discussionId}/${taskId}`, 'GET', undefined, undefined, {} as Annotation),
+    save: (consensus: Omit<Annotation, 'timestamp'>) => {
+      // The incoming 'consensus' object is already expected to have snake_case keys.
       const apiConsensus = {
-        discussion_id: consensus.discussion_id, // Use snake_case from input
-        user_id: consensus.user_id,           // Use snake_case from input
-        task_id: consensus.task_id,           // Use snake_case from input
+        discussion_id: consensus.discussion_id,
+        user_id: consensus.user_id,
+        task_id: consensus.task_id,
         data: consensus.data
       };
       
       return safeApiRequest<Annotation>('/api/consensus', 'POST', apiConsensus, undefined, {} as Annotation);
     },
     calculate: (discussionId: string, taskId: number) => 
-      safeApiRequest<{result: string, agreement: boolean}>(`/api/consensus/calculate?discussionId=${discussionId}&taskId=${taskId}`, 'GET', undefined, undefined, { result: '', agreement: false }),
-    override: (discussionId: string, taskId: number, data: Record<string, string | boolean>) =>
-      safeApiRequest<Annotation>('/api/consensus/override', 'POST', { discussionId, taskId, data }, undefined, {} as Annotation),
+      safeApiRequest<{result: string, agreement: boolean}>(`/api/consensus/${discussionId}/${taskId}/calculate`, 'GET', undefined, undefined, { result: '', agreement: false }),
+    override: (discussionId: string, taskId: number, data: Record<string, any>) =>
+      safeApiRequest<Annotation>('/api/consensus/override', 'PUT', { 
+        discussion_id: discussionId, 
+        task_id: taskId, 
+        data 
+      }, undefined, {} as Annotation),
   },
   
   // Code download endpoint
   code: {
     getDownloadUrl: (discussionId: string, repo: string) => 
-      safeApiRequest<{downloadUrl: string}>(`/api/code/download?discussionId=${discussionId}&repo=${repo}`, 'GET', undefined, undefined, { downloadUrl: '' })
+      safeApiRequest<{downloadUrl: string}>(`/api/code/download?discussion_id=${discussionId}&repo=${repo}`, 'GET', undefined, undefined, { downloadUrl: '' })
   },
   
   // Authentication endpoints
   auth: {
-    verifyGoogleToken: (token: string) => {
-      // In a real app, this would send the token to your backend
-      console.log('[Auth] Verifying Google token:', token.substring(0, 20) + '...');
-      
-      return safeApiRequest<{success: boolean, user: any}>('/api/auth/google', 'POST', { token }, undefined, { success: false, user: null });
+    login: (email: string, password: string) => {
+      console.log('[Auth] Logging in user:', email);
+      return safeApiRequest<{success: boolean, token: string, user: any}>('/api/auth/login', 'POST', { email, password }, undefined, { 
+        success: false, 
+        token: '', 
+        user: null, 
+
+      });
+    },
+    
+    verifyGoogleToken: (credential: string) => {
+      console.log('[Auth] Verifying Google token:', credential.substring(0, 20) + '...');
+      return safeApiRequest<{success: boolean, user: any, token: string}>('/api/auth/google/login', 'POST', { credential }, undefined, { 
+        success: false, 
+        user: null, 
+        token: '',
+
+      });
     },
     
     // Sign up a new user
     signupUser: (email: string, password: string) => {
       console.log('[Auth] Signing up user:', email);
-      return safeApiRequest<{success: boolean, userId: string}>('/api/auth/signup', 'POST', { email, password }, undefined, { success: false, userId: '' });
+      return safeApiRequest<{success: boolean, user: any, token: string}>('/api/auth/signup', 'POST', { email, password }, undefined, { 
+        success: false, 
+        user: null,
+        token: '',
+
+      });
+    },
+    
+    getMe: () => {
+      console.log('[Auth] Getting current user profile');
+      return safeApiRequest<{authenticated: boolean, user: any}>('/api/auth/me', 'GET', undefined, undefined, { 
+        authenticated: false, 
+        user: null 
+      });
     },
     
     getAuthorizedUsers: () => {
       console.log('[Auth] Getting authorized users');
-      return safeApiRequest<{email: string, role: UserRole}[]>('/api/auth/authorized-users', 'GET', undefined, undefined, []);
+      return safeApiRequest<{id: number, email: string, role: UserRole}[]>('/api/auth/authorized-users', 'GET', undefined, undefined, []);
     },
     
     addAuthorizedUser: (email: string, role: UserRole) => {
       console.log('[Auth] Adding authorized user:', email, role);
-      return safeApiRequest<{success: boolean}>('/api/auth/authorized-users', 'POST', { email, role }, undefined, { success: false });
+      return safeApiRequest<{id: number, email: string, role: UserRole}>('/api/auth/authorized-users', 'POST', { email, role }, undefined, { 
+        id: 0, 
+        email: '', 
+        role: 'annotator' as UserRole 
+      });
     },
     
     removeAuthorizedUser: (email: string) => {
       console.log('[Auth] Removing authorized user:', email);
-      return safeApiRequest<{success: boolean}>(`/api/auth/authorized-users/${encodeURIComponent(email)}`, 'DELETE', undefined, undefined, { success: false });
-    }
+      return safeApiRequest<{message: string}>(`/api/auth/authorized-users/${encodeURIComponent(email)}`, 'DELETE', undefined, undefined, { 
+        message: 'User removed' 
+      });
+    },
+    
+    changePassword: (currentPassword: string, newPassword: string) => {
+      console.log('[Auth] Changing password');
+      return safeApiRequest<{success: boolean, message: string}>('/api/auth/change-password', 'POST', { current_password: currentPassword, new_password: newPassword }, undefined, { 
+        success: false, 
+        message: 'Password change failed' 
+      });
+    },
+    
+    resetPassword: (userEmail: string, newPassword: string) => {
+      console.log('[Auth] Resetting password for:', userEmail);
+      return safeApiRequest<{success: boolean, message: string}>(`/api/auth/reset-password/${encodeURIComponent(userEmail)}`, 'POST', { new_password: newPassword }, undefined, { 
+        success: false, 
+        message: 'Password reset failed' 
+      });
+    },
   },
   
   // Admin endpoints
@@ -240,7 +381,6 @@ export const api = {
     // Update task status
     updateTaskStatus: (discussionId: string, taskId: number, status: TaskStatus) => {
       console.log(`[Admin] Updating task status: ${discussionId}, Task ${taskId} to ${status}`);
-      // Use proper field names to match backend expectations
       return safeApiRequest<TaskManagementResult>('/api/admin/tasks/status', 'PUT', { 
         discussion_id: discussionId,
         task_id: taskId, 
@@ -254,8 +394,8 @@ export const api = {
     bulkUpdateTaskStatus: (discussionIds: string[], taskId: number, status: TaskStatus) => {
       console.log(`[Admin] Bulk updating task status for ${discussionIds.length} discussions, Task ${taskId} to ${status}`);
       return safeApiRequest<BulkActionResult>('/api/admin/tasks/bulk-status', 'PUT', {
-        discussionIds,
-        taskId,
+        discussion_ids: discussionIds,
+        task_id: taskId,
         status
       }, undefined, {
         success: false,
@@ -265,9 +405,14 @@ export const api = {
       });
     },
     
-    overrideAnnotation: (annotation: Annotation) => {
-      console.log('[Admin] Overriding annotation:', annotation.discussionId, annotation.taskId);
-      return safeApiRequest<Annotation>('/api/admin/annotations/override', 'PUT', annotation, undefined, {} as Annotation);
+    overrideAnnotation: (discussionId: string, userId: string, taskId: number, data: Record<string, any>) => {
+      console.log('[Admin] Overriding annotation:', discussionId, taskId);
+      return safeApiRequest<Annotation>('/api/admin/annotations/override', 'PUT', {
+        discussion_id: discussionId,
+        user_id: userId,
+        task_id: taskId,
+        data
+      }, undefined, {} as Annotation);
     },
     
     getQualityMetrics: () => {

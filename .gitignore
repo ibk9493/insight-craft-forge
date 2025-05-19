@@ -31,3 +31,7 @@ package-lock.json
 swe_qa.db
 *.db
 package-lock.json
+api-server-fastapi/env
+api-server-fastapi/lib
+api-server-fastapi/Scripts
+swe_qa.db*

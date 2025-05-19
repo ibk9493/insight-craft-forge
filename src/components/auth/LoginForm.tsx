@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,9 +24,25 @@ const LoginForm: React.FC = () => {
     e.preventDefault();
     setError('');
     
+    // Basic validation
+    if (!email.trim()) {
+      setError('Please enter your email');
+      return;
+    }
+    
+    if (!password) {
+      setError('Please enter your password');
+      return;
+    }
+    
     try {
       setIsLoading(true);
-      const success = login(email, password);
+      console.log('Attempting login with email:', email);
+      
+      // Call the login function with email and password
+      const success = await login(email, password);
+      
+      console.log('Login result:', success);
       
       if (success) {
         navigate('/dashboard');
@@ -44,14 +59,23 @@ const LoginForm: React.FC = () => {
 
   const handleGoogleSuccess = async (credentialResponse: any) => {
     try {
+      setIsLoading(true);
+      console.log('Google login attempt with credential:', credentialResponse.credential.substring(0, 10) + '...');
+      
+      // Pass the Google credential to the googleLogin function
       const success = await googleLogin(credentialResponse.credential);
       
       if (success) {
         navigate('/dashboard');
+      } else {
+        setError('Google login failed. Please try again or use email login.');
       }
     } catch (error) {
       console.error('Google login error:', error);
+      setError('Failed to login with Google');
       toast.error('Failed to login with Google');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -130,6 +154,7 @@ const LoginForm: React.FC = () => {
             <GoogleLogin 
               onSuccess={handleGoogleSuccess}
               onError={() => {
+                setError('Google login failed');
                 toast.error('Google login failed');
               }}
             />

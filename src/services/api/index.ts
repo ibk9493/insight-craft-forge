@@ -22,3 +22,6 @@ export {
   API_KEY,
   USE_MOCK_DATA
 } from './helpers';
+
+
+export type UserRole = 'admin' | 'pod_lead' | 'annotator';
