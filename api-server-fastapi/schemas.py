@@ -226,3 +226,32 @@ class BatchManagementResult(BaseModel):
     success: bool
     message: str
     batch_id: Optional[int] = None
+class UserRegistration(BaseModel):
+    email: str
+    password: str
+    role: str
+
+# Schema for password change
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+# Schema for password reset by admin
+class PasswordReset(BaseModel):
+    new_password: str
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str
+    user: Dict[str, Any]
+    
+# Schema for Google Token
+class GoogleToken(BaseModel):
+    credential: str
+
+# Schema for login success response
+class LoginResponse(BaseModel):
+    success: bool
+    message: str
+    user: Optional[Dict[str, Any]] = None
+    token: Optional[str] = None
