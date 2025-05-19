@@ -1,13 +1,39 @@
 
 import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Annotation } from '@/services/api';
+import { Button } from '@/components/ui/button';
+import { SubTask } from '@/components/dashboard/TaskCard';
+import { Edit, Check } from 'lucide-react';
 
 interface AnnotatorViewProps {
   discussionId: string;
   currentStep: number;
   getAnnotationsForTask: (discussionId: string, taskId: number) => Annotation[];
 }
+
+const formatKey = (key: string): string => {
+  // Remove _text suffix for display
+  const baseKey = key.replace('_text', '');
+  
+  // Convert snake_case or camelCase to Title Case with spaces
+  return baseKey
+    .replace(/_/g, ' ')
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, str => str.toUpperCase());
+};
+
+const formatValue = (value: any): string => {
+  if (value === undefined || value === null) {
+    return 'Not provided';
+  }
+  
+  if (typeof value === 'boolean') {
+    return value ? 'Yes' : 'No';
+  }
+  
+  return String(value);
+};
 
 const AnnotatorView: React.FC<AnnotatorViewProps> = ({
   discussionId,
@@ -30,23 +56,55 @@ const AnnotatorView: React.FC<AnnotatorViewProps> = ({
   
   return (
     <div className="mt-6 space-y-4">
-      <h3 className="text-lg font-medium">Annotator Submissions</h3>
+      <h3 className="text-lg font-medium">Annotator Submissions ({annotations.length})</h3>
+      <p className="text-sm text-gray-500">
+        As a pod lead, you can review individual annotator responses and use them to create the consensus.
+      </p>
+      
       <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
         {annotations.map((annotation, index) => (
           <Card key={index} className="text-sm">
             <CardHeader className="py-3">
-              <CardTitle className="text-base">Annotator {index + 1}</CardTitle>
+              <CardTitle className="text-base flex justify-between">
+                <span>Annotator {index + 1}</span>
+                <span className="text-xs text-gray-500">{new Date(annotation.timestamp).toLocaleString()}</span>
+              </CardTitle>
             </CardHeader>
             <CardContent className="py-3">
               <div className="space-y-2">
-                {Object.entries(annotation.data || {}).map(([key, value]) => (
-                  <div key={key} className="flex justify-between">
-                    <span className="font-medium">{key}:</span>
-                    <span className="text-gray-600">{value?.toString() || ""}</span>
-                  </div>
-                ))}
+                {Object.entries(annotation.data || {})
+                  .filter(([key]) => !key.startsWith('_')) // Filter out metadata fields
+                  .map(([key, value]) => {
+                    // Skip displaying text fields directly - they're shown with their parent
+                    if (key.endsWith('_text')) return null;
+                    
+                    const textKey = `${key}_text`;
+                    const hasTextValue = annotation.data[textKey] !== undefined;
+                    
+                    return (
+                      <div key={key} className="mb-3">
+                        <div className="font-medium text-xs uppercase text-gray-500">{formatKey(key)}</div>
+                        <div className="text-gray-800">{formatValue(value)}</div>
+                        
+                        {/* Display text value if available */}
+                        {hasTextValue && (
+                          <div className="mt-1 bg-gray-50 p-2 rounded text-xs">
+                            {formatValue(annotation.data[textKey])}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
               </div>
             </CardContent>
+            <CardFooter className="pt-0 pb-3">
+              <div className="flex justify-end w-full">
+                <Button variant="ghost" size="sm" className="text-xs">
+                  <Check className="h-3 w-3 mr-1" />
+                  Use for consensus
+                </Button>
+              </div>
+            </CardFooter>
           </Card>
         ))}
       </div>

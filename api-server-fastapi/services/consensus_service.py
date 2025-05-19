@@ -38,8 +38,13 @@ def create_or_update_consensus(db: Session, consensus_data: schemas.AnnotationCr
         # Update existing consensus
         existing.data = consensus_data.data
         existing.timestamp = datetime.utcnow()
+        # Add metadata about the update
+        existing.data["_last_updated"] = datetime.utcnow().isoformat()
     else:
         # Create new consensus
+        # Add metadata to the consensus
+        consensus_data.data["_created"] = datetime.utcnow().isoformat()
+        
         existing = models.ConsensusAnnotation(
             discussion_id=consensus_data.discussion_id,
             task_id=consensus_data.task_id,
@@ -67,11 +72,63 @@ def calculate_consensus(db: Session, discussion_id: str, task_id: int) -> Dict[s
         )
     ).all()
     
-    # Simple implementation: just check if there are enough annotations
-    if len(annotations) >= 3:
-        return {"result": "Agreement", "agreement": True}
+    # Get task configuration
+    required_annotators = 3 if task_id < 3 else 5  # Task 3 requires 5 annotators
+    
+    # If we have enough annotations, perform actual consensus calculation
+    if len(annotations) >= required_annotators:
+        # Simple majority voting for each field
+        field_counts = {}
+        
+        # Count votes for each field value
+        for annotation in annotations:
+            for key, value in annotation.data.items():
+                # Skip text fields and metadata fields
+                if key.endswith('_text') or key.startswith('_'):
+                    continue
+                
+                if key not in field_counts:
+                    field_counts[key] = {}
+                
+                # Convert to string to make counting easier
+                str_value = str(value)
+                if str_value not in field_counts[key]:
+                    field_counts[key][str_value] = 0
+                    
+                field_counts[key][str_value] += 1
+        
+        # Find majority for each field
+        result = {}
+        agreement = True
+        
+        for field, votes in field_counts.items():
+            # Find value with most votes
+            max_votes = 0
+            max_value = None
+            
+            for value, count in votes.items():
+                if count > max_votes:
+                    max_votes = count
+                    max_value = value
+            
+            # Check if we have a clear majority
+            if max_votes > len(annotations) / 2:
+                result[field] = "Agreement"
+            else:
+                result[field] = "No Agreement"
+                agreement = False
+        
+        # Check for overall agreement
+        overall = "Agreement" if agreement else "No Agreement"
+        
+        return {"result": overall, "agreement": agreement, "fields": result, "annotator_count": len(annotations)}
     else:
-        return {"result": "Not enough annotations", "agreement": False}
+        return {
+            "result": f"Not enough annotations ({len(annotations)}/{required_annotators})", 
+            "agreement": False,
+            "annotator_count": len(annotations),
+            "required": required_annotators
+        }
 
 def override_consensus(db: Session, override_data: schemas.ConsensusOverride) -> schemas.Annotation:
     # Check if consensus already exists
@@ -83,6 +140,10 @@ def override_consensus(db: Session, override_data: schemas.ConsensusOverride) ->
     ).first()
     
     timestamp = datetime.utcnow()
+    
+    # Add metadata about the override
+    override_data.data["_overridden"] = True
+    override_data.data["_override_timestamp"] = timestamp.isoformat()
     
     if existing:
         # Update existing consensus

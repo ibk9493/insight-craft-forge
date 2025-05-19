@@ -1,4 +1,3 @@
-
 import React, { useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import UrlInput from '@/components/dashboard/UrlInput';
@@ -103,16 +102,20 @@ const Dashboard = () => {
     getAnnotationsForTask,
     getConsensusAnnotation,
     updateStepCompletionStatus,
-    overrideAnnotation: undefined // If there's no implementation yet
+    overrideAnnotation: undefined
   });
 
-  // Initialize data when task changes
+  // Initialize data when task or discussion changes
   useEffect(() => {
     if (discussionId && user && currentStep > 0 && currentStep <= 3) {
+      console.log(`Loading data for discussion: ${discussionId}, task: ${currentStep}, mode: ${viewMode}`);
+      
       if (viewMode === 'detail') {
-        // Load user's existing annotation
+        // Load user's existing annotation only for the current task
         const updatedSubTasks = loadUserAnnotation(discussionId, currentStep);
+        
         if (updatedSubTasks) {
+          console.log("Loaded user annotation successfully:", updatedSubTasks);
           switch (currentStep) {
             case TaskId.QUESTION_QUALITY:
               setTask1SubTasks(updatedSubTasks);
@@ -124,11 +127,15 @@ const Dashboard = () => {
               setTask3SubTasks(updatedSubTasks);
               break;
           }
+        } else {
+          console.log("No saved annotation found or error loading");
         }
       } else if (viewMode === 'consensus' && isPodLead) {
-        // Prepare consensus view
+        // Prepare consensus view only for the current task
         const consensusTasks = prepareConsensusView(discussionId, currentStep);
+        
         if (consensusTasks && consensusTasks.length > 0) {
+          console.log("Loaded consensus view successfully");
           switch (currentStep) {
             case TaskId.QUESTION_QUALITY:
               setConsensusTask1(consensusTasks);
@@ -191,6 +198,7 @@ const Dashboard = () => {
           <UrlInput onSubmit={handleUrlSubmit} />
         )}
         
+        {/* Grid view */}
         {(url || discussionId) && viewMode === 'grid' && (
           <>
             <div className="mb-6">
@@ -222,6 +230,7 @@ const Dashboard = () => {
           </>
         )}
         
+        {/* Detail or consensus view */}
         {(url || discussionId) && (viewMode === 'detail' || viewMode === 'consensus') && (
           <>
             <ProgressStepper steps={steps} currentStep={currentStep} />
@@ -252,7 +261,7 @@ const Dashboard = () => {
               )}
             </div>
             
-            {/* Task cards for different steps - UPDATED to include textValue parameter */}
+            {/* Task cards for different steps */}
             {currentStep === TaskId.QUESTION_QUALITY && viewMode === 'detail' && (
               <TaskCard
                 title="Task 1: Question Quality Assessment"
