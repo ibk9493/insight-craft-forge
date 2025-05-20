@@ -3,6 +3,8 @@ import { SubTask } from '@/components/dashboard/TaskCard';
 import { User } from '@/contexts/UserContext';
 import { Annotation } from '@/services/api';
 
+export type { Annotation };
+
 export interface AnnotationHandlersProps {
   task1SubTasks: SubTask[];
   task2SubTasks: SubTask[];

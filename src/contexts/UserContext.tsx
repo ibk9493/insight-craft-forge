@@ -11,7 +11,34 @@ export interface User {
   role: UserRole;
   provider?: 'local' | 'google';
   token?: string;
+  email?: string;
+  password?: string;
 }
+
+// Mock users data for development purposes
+export const MOCK_USERS_DATA: User[] = [
+  {
+    id: 'user1',
+    username: 'Admin User',
+    role: 'admin',
+    email: 'admin@example.com',
+    password: 'admin123'
+  },
+  {
+    id: 'user2',
+    username: 'Pod Lead',
+    role: 'pod_lead',
+    email: 'podlead@example.com',
+    password: 'podlead123'
+  },
+  {
+    id: 'user3',
+    username: 'Annotator',
+    role: 'annotator',
+    email: 'annotator@example.com',
+    password: 'annotator123'
+  }
+];
 
 // Define the AuthorizedUser interface
 export interface AuthorizedUser {
@@ -127,7 +154,40 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       console.log('[Auth] Attempting login for:', email);
       
-      // Use the API helper for login
+      // Check if we're using mock users first (development mode)
+      const mockUser = MOCK_USERS_DATA.find(u => 
+        u.email === email && u.password === password
+      );
+      
+      if (mockUser) {
+        console.log('[Auth] Using mock user for login:', mockUser.username);
+        // Create user object from mock data
+        const loggedInUser: User = {
+          id: mockUser.id,
+          username: mockUser.username,
+          role: mockUser.role,
+          email: mockUser.email,
+          provider: 'local',
+          token: 'mock-token-12345' // Mock token
+        };
+        
+        // Save user to state and localStorage
+        setUser(loggedInUser);
+        localStorage.setItem(AUTH_CONFIG.STORAGE_KEYS.USER, JSON.stringify(loggedInUser));
+        
+        // Show toast based on user role
+        if (loggedInUser.role === 'admin') {
+          toast.success('Logged in as Administrator');
+        } else if (loggedInUser.role === 'pod_lead') {
+          toast.success('Logged in as Pod Lead');
+        } else {
+          toast.success('Logged in as Annotator');
+        }
+        
+        return true;
+      }
+      
+      // If no mock user found, continue with API login
       const response = await api.auth.login(email, password);
       
       if (response.success) {
