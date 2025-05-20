@@ -82,12 +82,12 @@ const AnnotatorView: React.FC<AnnotatorViewProps> = ({
       
       <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
         {annotations.map((annotation, index) => {
-          const currentFeedback = annotationFeedback?.[annotation.id] || {};
+          const currentFeedback = annotationFeedback?.[annotation.task_id] || {};
           const rating = currentFeedback.rating || 0;
           const comment = currentFeedback.comment || '';
 
           return (
-            <Card key={annotation.id || index} className="text-sm flex flex-col">
+            <Card key={annotation.task_id || index} className="text-sm flex flex-col">
               <CardHeader className="py-3">
                 <CardTitle className="text-base flex justify-between">
                   <span>
@@ -126,7 +126,7 @@ const AnnotatorView: React.FC<AnnotatorViewProps> = ({
                 {/* Star Rating and Comment Section */}
                 <div className="mt-4 pt-3 border-t">
                   <div className="mb-2">
-                    <Label htmlFor={`rating-${annotation.id}`} className="text-xs font-medium text-gray-600">Rate this annotation:</Label>
+                    <Label htmlFor={`rating-${annotation.task_id}`} className="text-xs font-medium text-gray-600">Rate this annotation:</Label>
                     <div className="flex items-center mt-1">
                       {[1, 2, 3, 4, 5].map((star) => (
                         <Button 
@@ -134,7 +134,7 @@ const AnnotatorView: React.FC<AnnotatorViewProps> = ({
                           variant="ghost" 
                           size="icon" 
                           className={`h-6 w-6 p-0 ${rating >= star ? 'text-yellow-400' : 'text-gray-300'}`}
-                          onClick={() => onRatingChange?.(String(annotation.id), star)}
+                          onClick={() => onRatingChange?.(String(annotation.task_id), star)}
                         >
                           <Star className="h-4 w-4 fill-current" />
                         </Button>
@@ -142,13 +142,13 @@ const AnnotatorView: React.FC<AnnotatorViewProps> = ({
                     </div>
                   </div>
                   <div>
-                    <Label htmlFor={`comment-${annotation.id}`} className="text-xs font-medium text-gray-600">Comment:</Label>
+                    <Label htmlFor={`comment-${annotation.task_id}`} className="text-xs font-medium text-gray-600">Comment:</Label>
                     <Input 
-                      id={`comment-${annotation.id}`}
+                      id={`comment-${annotation.task_id}`}
                       type="text" 
                       placeholder="Add a comment..."
                       value={comment}
-                      onChange={(e) => onCommentChange?.(String(annotation.id), e.target.value)}
+                      onChange={(e) => onCommentChange?.(String(annotation.task_id), e.target.value)}
                       className="mt-1 text-xs h-8"
                     />
                   </div>

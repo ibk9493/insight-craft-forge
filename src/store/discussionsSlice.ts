@@ -53,7 +53,6 @@ export const fetchDiscussionById = createAsyncThunk(
     
     // If not found or cache is stale, fetch from API
     const fetchedDiscussion = await api.discussions.getById(discussionId);
-    const fetchedDiscussion = await api.discussions.getById(discussionId);
     
     // If the discussions list isn't populated yet, also fetch all discussions
     if (discussions.discussions.length === 0) {
