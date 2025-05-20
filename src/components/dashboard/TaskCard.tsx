@@ -18,9 +18,9 @@ export interface SubTask {
   id: string;
   title: string;
   status: SubTaskStatus;
-  options?: string[];
+  options: string[];
+  description: string;
   selectedOption?: string;
-  description?: string;
   textInput?: boolean;
   textValue?: string;
   textValues?: string[]; // For simple multiline fields

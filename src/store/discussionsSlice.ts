@@ -1,3 +1,4 @@
+
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { Discussion } from '@/services/api/types';
 import { api, fetchDiscussions as fetchDiscussionsApi } from '@/services/api/endpoints';
@@ -51,6 +52,7 @@ export const fetchDiscussionById = createAsyncThunk(
     }
     
     // If not found or cache is stale, fetch from API
+    const fetchedDiscussion = await api.discussions.getById(discussionId);
     const fetchedDiscussion = await api.discussions.getById(discussionId);
     
     // If the discussions list isn't populated yet, also fetch all discussions
