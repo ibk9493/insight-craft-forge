@@ -1,7 +1,8 @@
 
 import { toast } from '@/components/ui/sonner';
 import { ApiError } from './types';
-import { API_CONFIG } from '@/config';
+import { API_CONFIG, AUTH_CONFIG } from '@/config';
+
 
 /**
  * API base configuration values
@@ -9,6 +10,7 @@ import { API_CONFIG } from '@/config';
 export const API_URL = API_CONFIG.BASE_URL;
 export const API_KEY = API_CONFIG.HEADERS['X-API-Key'];
 export const USE_MOCK_DATA = false; // Set this to false to disable mock data
+
 
 /**
  * Properly formats the API URL to ensure it doesn't have duplicate slashes
@@ -51,6 +53,22 @@ export const safeToString = (value: unknown): string => {
 };
 
 /**
+ * Gets the authentication token from localStorage
+ */
+export const getAuthToken = (): string | null => {
+  try {
+    const userJson = localStorage.getItem(AUTH_CONFIG.STORAGE_KEYS.USER);
+    if (!userJson) return null;
+    
+    const user = JSON.parse(userJson);
+    return user.token || null;
+  } catch (error) {
+    console.error('Error retrieving auth token:', error);
+    return null;
+  }
+};
+
+/**
  * Handles API responses and performs error checking
  * @param response - The fetch API response
  * @returns The parsed JSON response
@@ -60,6 +78,18 @@ export const handleResponse = async <T>(response: Response): Promise<T> => {
   // Check if response is OK
   if (!response.ok) {
     console.error(`[API Error] Response not OK: ${response.status} ${response.statusText}`);
+    
+    // Handle authentication errors specifically
+    if (response.status === 401) {
+      // Clear user data and redirect to login
+      localStorage.removeItem(AUTH_CONFIG.STORAGE_KEYS.USER);
+      
+      // Don't redirect if we're already at the login page
+      if (!window.location.pathname.includes('/login')) {
+        toast.error('Your session has expired. Please login again.');
+        window.location.href = '/login';
+      }
+    }
     
     let errorData;
     try {
@@ -145,13 +175,22 @@ export const apiRequest = async <T>(
   body?: unknown,
   headers?: Record<string, string>
 ): Promise<T> => {
-  console.info(`[API Request] ${method} ${endpoint} - Mock data disabled`);
+  console.info(`[API Request] ${method} ${endpoint}`);
   
   try {
-    const requestHeaders = {
+    const requestHeaders: Record<string, string> = {
       ...API_CONFIG.HEADERS,
       ...(headers || {})
     };
+
+    // Add Authorization header with JWT token if available
+    const token = getAuthToken();
+    if (token) {
+      requestHeaders['Authorization'] = `Bearer ${token}`;
+      console.debug('[API Request] Including JWT token in request');
+    } else {
+      console.debug('[API Request] No JWT token available');
+    }
 
     const config: RequestInit = {
       method,
@@ -192,7 +231,6 @@ export const apiRequest = async <T>(
       toast.error('An error occurred while connecting to the server');
     }
     
-    // Don't fall back to mock data anymore
     throw error;
   }
 };
@@ -224,8 +262,21 @@ export const safeApiRequest = async <T>(
   }
 };
 
-// Helper function to get mock data based on endpoint - not used anymore
-export function getMockData<T>(endpoint: string): T {
-  console.error('[API Error] Mock data is disabled. This function should not be called.');
-  throw new Error('Mock data is disabled');
-}
+// Helper function to check if a user is authenticated
+export const isAuthenticated = (): boolean => {
+  return getAuthToken() !== null;
+};
+
+// Helper function to check if current user has a specific role
+export const hasRole = (role: string): boolean => {
+  try {
+    const userJson = localStorage.getItem(AUTH_CONFIG.STORAGE_KEYS.USER);
+    if (!userJson) return false;
+    
+    const user = JSON.parse(userJson);
+    return user.role === role;
+  } catch (error) {
+    console.error('Error checking user role:', error);
+    return false;
+  }
+};

@@ -22,3 +22,16 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+**__pycache__**
+
+# Lockfiles
+package-lock.json
+
+# Databases
+swe_qa.db
+*.db
+package-lock.json
+api-server-fastapi/env
+api-server-fastapi/lib
+api-server-fastapi/Scripts
+swe_qa.db*

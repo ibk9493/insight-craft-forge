@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { SubTask } from '@/components/dashboard/TaskCard';
 import { Annotation } from '@/services/api';
@@ -29,19 +28,33 @@ export function useAnnotationSaver({
   // Convert tasks to data format
   const convertTasksToData = (tasks: SubTask[], data: Record<string, any>) => {
     tasks.forEach(task => {
+      // Always save the status if a selection was made (original condition)
       if (task.selectedOption) {
-        // Convert string options to actual boolean for boolean fields if needed
         if (task.selectedOption === 'True' || task.selectedOption === 'False' ||
             task.selectedOption === 'Yes' || task.selectedOption === 'No') {
           data[task.id] = (task.selectedOption === 'True' || task.selectedOption === 'Yes');
         } else {
-          data[task.id] = task.selectedOption;
+          data[task.id] = task.selectedOption; // e.g., data['rewrite'] = 'Completed'
         }
-        
-        // Add text value if present
-        if (task.textValue) {
-          data[`${task.id}_text`] = task.textValue;
-        }
+      }
+
+      // Add text value if present (for single text inputs like rewrite_text)
+      if (task.textInput && task.textValue !== undefined) { // Added textInput check for clarity, and check for undefined
+        data[`${task.id}_text`] = task.textValue; // e.g., data['rewrite_text'] = "Some text"
+      }
+
+      // Add textValues if present (for multiline text inputs like short_answer_list)
+      if (task.multiline && task.textValues && Array.isArray(task.textValues)) {
+        // Example: task.id = "short_answer_list"
+        // data["short_answer_list_items"] = ["item1", "item2"]
+        data[`${task.id}_items`] = task.textValues;
+      }
+
+      // Add supportingDocs if present
+      if (task.structuredInput && task.supportingDocs && Array.isArray(task.supportingDocs)) {
+        // Example: task.id = "supporting_docs"
+        // data["supporting_docs_data"] = [{link: "...", paragraph: "..."}]
+        data[`${task.id}_data`] = task.supportingDocs;
       }
     });
   };
@@ -88,6 +101,7 @@ export function useAnnotationSaver({
             break;
           default:
             toast.error('Invalid task ID');
+            setLoading(false); // Added to ensure loading is false on early return
             return;
         }
         
@@ -96,9 +110,9 @@ export function useAnnotationSaver({
         
         // Save annotation - force this to NOT use mock data
         const success = await saveAnnotation({
-          userId: user.id,
-          discussionId,
-          taskId,
+          user_id: user.id,
+          discussion_id: discussionId,
+          task_id: taskId,
           data: taskData
         });
         
@@ -126,6 +140,7 @@ export function useAnnotationSaver({
             break;
           default:
             toast.error('Invalid task ID');
+            setLoading(false); // Added to ensure loading is false on early return
             return;
         }
         
@@ -134,9 +149,9 @@ export function useAnnotationSaver({
         
         // Save consensus annotation
         const success = await saveConsensusAnnotation({
-          userId: user.id,
-          discussionId,
-          taskId,
+          user_id: user.id,
+          discussion_id: discussionId,
+          task_id: taskId,
           data: taskData
         });
         

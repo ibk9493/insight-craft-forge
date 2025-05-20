@@ -1,4 +1,3 @@
-
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 import models
@@ -26,41 +25,52 @@ def get_consensus(db: Session, discussion_id: str, task_id: int) -> Optional[sch
     )
 
 def create_or_update_consensus(db: Session, consensus_data: schemas.AnnotationCreate) -> schemas.Annotation:
-    # Check if consensus already exists
-    existing = db.query(models.ConsensusAnnotation).filter(
+    db_entry = db.query(models.ConsensusAnnotation).filter(
         and_(
             models.ConsensusAnnotation.discussion_id == consensus_data.discussion_id,
             models.ConsensusAnnotation.task_id == consensus_data.task_id
         )
     ).first()
     
-    if existing:
+    current_time = datetime.utcnow()
+    iso_current_time = current_time.isoformat()
+
+    if db_entry:
         # Update existing consensus
-        existing.data = consensus_data.data
-        existing.timestamp = datetime.utcnow()
-        # Add metadata about the update
-        existing.data["_last_updated"] = datetime.utcnow().isoformat()
+        updated_data = consensus_data.data.copy() # Work with a copy
+        updated_data["_last_updated"] = iso_current_time
+        
+        db_entry.data = updated_data # Assign the new dictionary
+        db_entry.timestamp = current_time
     else:
         # Create new consensus
-        # Add metadata to the consensus
-        consensus_data.data["_created"] = datetime.utcnow().isoformat()
+        new_data = consensus_data.data.copy() if consensus_data.data is not None else {}
+        new_data["_created"] = iso_current_time
         
-        existing = models.ConsensusAnnotation(
+        db_entry = models.ConsensusAnnotation(
             discussion_id=consensus_data.discussion_id,
             task_id=consensus_data.task_id,
-            data=consensus_data.data
+            data=new_data,
+            timestamp=current_time # Explicitly set timestamp
         )
-        db.add(existing)
+        db.add(db_entry)
     
-    db.commit()
-    db.refresh(existing)
-    
+    try:
+        db.commit()
+        db.refresh(db_entry)
+    except Exception as e:
+        db.rollback()
+        # Ideally, log the exception e here for server-side debugging
+        print(f"Error during consensus commit/refresh: {str(e)}") # Basic print for now
+        raise 
+
     return schemas.Annotation(
-        discussion_id=existing.discussion_id,
+        id=db_entry.id,
+        discussion_id=db_entry.discussion_id,
         user_id="consensus",  # Consensus records use "consensus" as user_id
-        task_id=existing.task_id,
-        data=existing.data,
-        timestamp=existing.timestamp
+        task_id=db_entry.task_id,
+        data=db_entry.data,
+        timestamp=db_entry.timestamp # This will be the refreshed timestamp
     )
 
 def calculate_consensus(db: Session, discussion_id: str, task_id: int) -> Dict[str, Any]:

@@ -1,8 +1,7 @@
 
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { Discussion } from '@/services/api/types';
-import { fetchDiscussions as fetchDiscussionsApi } from '@/services/api/endpoints';
-import { api } from '@/services/api/endpoints';
+import { api, fetchDiscussions as fetchDiscussionsApi } from '@/services/api/endpoints';
 
 interface DiscussionsState {
   discussions: Discussion[];

@@ -24,8 +24,10 @@ class AuthorizedUserCreate(AuthorizedUserBase):
 class AuthorizedUser(AuthorizedUserBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = {
+        "from_attributes": True,  # Replaces orm_mode=True
+        "populate_by_name": True  # Helps with field aliases
+    }
 
 # Batch Upload schemas
 class BatchUploadBase(BaseModel):
@@ -41,15 +43,26 @@ class BatchUpload(BatchUploadBase):
     created_at: datetime
     discussion_count: int
 
-    class Config:
-        orm_mode = True
-
+    model_config = {
+        "from_attributes": True,  # Replaces orm_mode=True
+        "populate_by_name": True  # Helps with field aliases
+    }
 # Task state for discussions
 class TaskState(BaseModel):
     status: str
     annotators: int
     user_annotated: Optional[bool] = None
-
+    
+    model_config ={
+        "from_attributes" : True,
+        "schema_extra" :{
+            "example": {
+                "status": "unlocked",
+                "annotators": 2,
+                "user_annotated": True
+            }
+        }
+    }
 # Base class for Discussion
 class DiscussionBase(BaseModel):
     title: str
@@ -74,10 +87,13 @@ class Discussion(DiscussionBase):
     task3_annotators: Optional[int] = None
     batch_id: Optional[int] = None
     tasks: Dict[str, TaskState] = {}
+    annotations: Optional[Dict[str, Any]] = None  # Added this field
 
-    class Config:
-        orm_mode = True
-        
+    model_config = {
+        "from_attributes": True,  # Replaces orm_mode=True
+        "populate_by_name": True  # Helps with field aliases
+    }
+          
     @classmethod
     def from_orm(cls, obj):
         # Get normal attributes
@@ -125,9 +141,10 @@ class Annotation(AnnotationBase):
     id: int
     timestamp: datetime
 
-    class Config:
-        orm_mode = True
-
+    model_config = {
+        "from_attributes": True,  # Replaces orm_mode=True
+        "populate_by_name": True  # Helps with field aliases
+    }
 # Schema for annotation override by pod lead
 class PodLeadAnnotationOverride(BaseModel):
     pod_lead_id: str
@@ -209,3 +226,32 @@ class BatchManagementResult(BaseModel):
     success: bool
     message: str
     batch_id: Optional[int] = None
+class UserRegistration(BaseModel):
+    email: str
+    password: str
+    role: str
+
+# Schema for password change
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+# Schema for password reset by admin
+class PasswordReset(BaseModel):
+    new_password: str
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str
+    user: Dict[str, Any]
+    
+# Schema for Google Token
+class GoogleToken(BaseModel):
+    credential: str
+
+# Schema for login success response
+class LoginResponse(BaseModel):
+    success: bool
+    message: str
+    user: Optional[Dict[str, Any]] = None
+    token: Optional[str] = None

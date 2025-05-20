@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { 
   Dialog, 
@@ -10,13 +9,15 @@ import {
   DialogTrigger
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Github, ExternalLink } from 'lucide-react';
+import { Github, ExternalLink, Code, Calendar, Box, Hash, FileCode, GitBranch } from 'lucide-react';
 import { Discussion } from '@/services/api/types';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { useAppDispatch, useAppSelector } from '@/hooks';
 import { closeModal } from '@/store/discussionModalSlice';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs-wrapper';
 
 interface DiscussionDetailsModalProps {
   isOpen?: boolean;
@@ -65,79 +66,236 @@ const DiscussionDetailsModal: React.FC<DiscussionDetailsModalProps> = ({
     return null;
   }
 
-  // Format JSON for display
-  const formattedTasks = JSON.stringify(discussion.tasks, null, 2);
-  const formattedMeta = JSON.stringify({
-    repository: discussion.repository,
-    repositoryLanguage: discussion.repositoryLanguage || null,
-    releaseTag: discussion.releaseTag || null,
-    releaseUrl: discussion.releaseUrl || null,
-    releaseDate: discussion.releaseDate || null,
-    createdAt: discussion.createdAt
-  }, null, 2);
+  // Get task status counts
+  const getTaskStatusCounts = () => {
+    const statuses = {
+      completed: 0,
+      unlocked: 0,
+      locked: 0
+    };
+    
+    if (discussion.tasks) {
+      Object.values(discussion.tasks).forEach(task => {
+        if (task.status === 'completed') statuses.completed++;
+        else if (task.status === 'unlocked') statuses.unlocked++;
+        else if (task.status === 'locked') statuses.locked++;
+      });
+    }
+    
+    return statuses;
+  };
+  
+  const taskStatusCounts = getTaskStatusCounts();
+
+  // Format dates
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
 
   // Render the dialog
   const dialogContent = (
-    <DialogContent className="max-w-3xl">
+    <DialogContent className="max-w-4xl max-h-[90vh]">
       <DialogHeader>
-        <DialogTitle className="text-xl font-bold">Original GitHub Discussion</DialogTitle>
+        <DialogTitle className="flex items-center space-x-2 text-xl">
+          <Github className="h-5 w-5 text-primary" />
+          <span>GitHub Discussion</span>
+        </DialogTitle>
       </DialogHeader>
       
-      <div className="space-y-6 py-4">
-        {/* GitHub Link */}
-        <div className="flex items-center space-x-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => window.open(discussion.url, '_blank')}
-            className="flex items-center space-x-2"
-          >
-            <Github className="h-4 w-4" />
-            <span>Open in GitHub</span>
-            <ExternalLink className="h-3 w-3" />
-          </Button>
-        </div>
-
-        {/* Title */}
-        <div>
-          <h3 className="text-sm font-medium mb-2">Title</h3>
-          <div className="bg-muted p-3 rounded-md">
-            <p>{discussion.title}</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Repository Metadata */}
-          <div>
-            <h3 className="text-sm font-medium mb-2">Repository Metadata</h3>
-            <ScrollArea className="h-[200px] w-full">
-              <div className="bg-muted p-3 rounded-md">
-                <pre className="text-xs whitespace-pre-wrap break-all">{formattedMeta}</pre>
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList className="grid grid-cols-3 mb-4">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="metadata">Metadata</TabsTrigger>
+          <TabsTrigger value="raw">Raw Data</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="overview" className="mt-0">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg font-bold line-clamp-2">{discussion.title}</CardTitle>
+              <CardDescription className="flex items-center mt-1 space-x-2">
+                <GitBranch className="h-4 w-4 text-muted-foreground" />
+                <span>{discussion.repository}</span>
+              </CardDescription>
+            </CardHeader>
+            
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => window.open(discussion.url, '_blank')}
+                  className="flex items-center space-x-2"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  <span>Open in GitHub</span>
+                </Button>
+                
+                {discussion.repositoryLanguage && (
+                  <Badge variant="outline" className="flex items-center space-x-1.5">
+                    <FileCode className="h-3 w-3" />
+                    <span>{discussion.repositoryLanguage}</span>
+                  </Badge>
+                )}
+                
+                {discussion.releaseTag && (
+                  <Badge variant="outline" className="flex items-center space-x-1.5">
+                    <Hash className="h-3 w-3" />
+                    <span>{discussion.releaseTag}</span>
+                  </Badge>
+                )}
               </div>
-            </ScrollArea>
-          </div>
-
-          {/* Task Status */}
-          <div>
-            <h3 className="text-sm font-medium mb-2">Task Status</h3>
-            <ScrollArea className="h-[200px] w-full">
-              <div className="bg-muted p-3 rounded-md">
-                <pre className="text-xs whitespace-pre-wrap break-all">{formattedTasks}</pre>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium flex items-center space-x-1.5">
+                    <Calendar className="h-4 w-4 text-primary" />
+                    <span>Created</span>
+                  </h3>
+                  <p className="text-sm">{formatDate(discussion.createdAt)}</p>
+                </div>
+                
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium flex items-center space-x-1.5">
+                    <Box className="h-4 w-4 text-primary" />
+                    <span>Task Status</span>
+                  </h3>
+                  <div className="flex gap-2">
+                    {taskStatusCounts.completed > 0 && (
+                      <Badge variant="default" className="bg-green-500 hover:bg-green-600">
+                        {taskStatusCounts.completed} Completed
+                      </Badge>
+                    )}
+                    {taskStatusCounts.unlocked > 0 && (
+                      <Badge variant="default" className="bg-blue-500 hover:bg-blue-600">
+                        {taskStatusCounts.unlocked} Unlocked
+                      </Badge>
+                    )}
+                    {taskStatusCounts.locked > 0 && (
+                      <Badge variant="outline">
+                        {taskStatusCounts.locked} Locked
+                      </Badge>
+                    )}
+                  </div>
+                </div>
               </div>
-            </ScrollArea>
-          </div>
-        </div>
-
-        {/* Raw Data */}
-        <div>
-          <h3 className="text-sm font-medium mb-2">Raw Data</h3>
-          <ScrollArea className="h-[200px] w-full">
-            <div className="bg-muted p-3 rounded-md">
-              <pre className="text-xs whitespace-pre-wrap break-all">{JSON.stringify(discussion, null, 2)}</pre>
-            </div>
-          </ScrollArea>
-        </div>
-      </div>
+              
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium flex items-center space-x-1.5">
+                  <Code className="h-4 w-4 text-primary" />
+                  <span>Task Details</span>
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {discussion.tasks && Object.entries(discussion.tasks).map(([taskKey, task]) => (
+                    <Card key={taskKey} className="bg-muted/50 border">
+                      <CardHeader className="p-3 pb-2">
+                        <CardTitle className="text-sm font-medium">
+                          {taskKey.replace('task', 'Task ')}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-3 pt-0 space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span>Status:</span>
+                          <Badge 
+                            variant={task.status === 'completed' ? 'default' : 'outline'} 
+                            className={cn(
+                              "text-[10px] h-5",
+                              task.status === 'completed' && "bg-green-500",
+                              task.status === 'unlocked' && "border-blue-500 text-blue-500"
+                            )}
+                          >
+                            {task.status.charAt(0).toUpperCase() + task.status.slice(1)}
+                          </Badge>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span>Annotators:</span>
+                          <span className="font-mono">{task.annotators || 0}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="metadata" className="mt-0">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg">Repository Information</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium">Repository</h3>
+                  <div className="bg-muted p-3 rounded-md">
+                    <p className="text-sm">{discussion.repository || 'N/A'}</p>
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium">Language</h3>
+                  <div className="bg-muted p-3 rounded-md">
+                    <p className="text-sm">{discussion.repositoryLanguage || 'N/A'}</p>
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium">Release Tag</h3>
+                  <div className="bg-muted p-3 rounded-md">
+                    <p className="text-sm">{discussion.releaseTag || 'N/A'}</p>
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium">Release Date</h3>
+                  <div className="bg-muted p-3 rounded-md">
+                    <p className="text-sm">{formatDate(discussion.releaseDate)}</p>
+                  </div>
+                </div>
+              </div>
+              
+              {discussion.releaseUrl && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium">Release URL</h3>
+                  <div className="bg-muted p-3 rounded-md">
+                    <a 
+                      href={discussion.releaseUrl} 
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-500 hover:underline flex items-center space-x-1"
+                    >
+                      <span>{discussion.releaseUrl}</span>
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="raw" className="mt-0">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg">Raw JSON Data</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[400px] w-full">
+                <div className="bg-muted p-3 rounded-md">
+                  <pre className="text-xs whitespace-pre-wrap break-all">{JSON.stringify(discussion, null, 2)}</pre>
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
       
       <DialogFooter>
         <DialogClose asChild>

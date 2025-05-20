@@ -85,9 +85,12 @@ class ConsensusAnnotation(Base):
         UniqueConstraint('discussion_id', 'task_id', name='uix_consensus'),
     )
 
+# Add password_hash field to AuthorizedUser model in models.py
+
 class AuthorizedUser(Base):
     __tablename__ = "authorized_users"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     email = Column(String, unique=True, nullable=False, index=True)
     role = Column(String, nullable=False)  # 'annotator', 'pod_lead', or 'admin'
+    password_hash = Column(String, nullable=True)  # Add this line

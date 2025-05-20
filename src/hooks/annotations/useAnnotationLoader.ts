@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { SubTask, SubTaskStatus } from '@/components/dashboard/TaskCard';
 import { Annotation } from '@/services/api';
@@ -77,11 +76,43 @@ export function useAnnotationLoader({
           let status: SubTaskStatus = 'completed';
           let selectedOption = '';
           
-          // Handle boolean values by converting to strings
+          // Handle boolean and string values for selectedOption
           if (typeof savedValue === 'boolean') {
-            selectedOption = savedValue ? 'True' : 'False';
+            // Check if this task is a radio-button like task with defined options
+            if (task.options && task.options.length > 0) {
+              const trueOption = task.options.find(o => o.toLowerCase() === 'true' || o.toLowerCase() === 'yes');
+              const falseOption = task.options.find(o => o.toLowerCase() === 'false' || o.toLowerCase() === 'no');
+
+              if (savedValue === true && trueOption) {
+                selectedOption = trueOption;
+              } else if (savedValue === false && falseOption) {
+                selectedOption = falseOption;
+              } else {
+                // Mismatch: boolean value stored, but no corresponding True/Yes or False/No option found
+                console.warn(`[AnnotationLoader] For task '${task.id}', boolean value ${savedValue} found, but no matching True/Yes/False/No option in [${task.options.join(', ')}]. Radio will likely be unselected.`);
+              }
+            } else {
+              // Boolean savedValue, but task.options is not defined/empty.
+              // Fallback to the generic Yes/No mapping used previously for such cases.
+              selectedOption = savedValue ? 'Yes' : 'No';
+            }
           } else if (typeof savedValue === 'string') {
-            selectedOption = savedValue;
+            // Check if this task is a radio-button like task with defined options
+            if (task.options && task.options.length > 0) {
+              if (task.options.includes(savedValue)) {
+                selectedOption = savedValue; // Handles "N/A" or other string options
+              } else {
+                // String value stored, but it's not one of the defined options
+                console.warn(`[AnnotationLoader] For task '${task.id}', string value "${savedValue}" found, but it's not in the defined options [${task.options.join(', ')}]. Radio will likely be unselected.`);
+              }
+            } else {
+              // String savedValue, but task.options is not defined/empty.
+              // Assume it's for a non-radio field or a radio without predefined options, use the value directly.
+              selectedOption = savedValue;
+            }
+          } else if (savedValue !== undefined) {
+            // savedValue is defined but not boolean or string (e.g., number)
+            console.warn(`[AnnotationLoader] For task '${task.id}', unexpected data type for savedValue: ${typeof savedValue} ('${savedValue}'). 'selectedOption' may not be set correctly.`);
           }
           
           return {
@@ -172,10 +203,43 @@ export function useAnnotationLoader({
         let status: SubTaskStatus = 'completed';
         let selectedOption = '';
         
+        // Handle boolean and string values for selectedOption
         if (typeof savedValue === 'boolean') {
-          selectedOption = savedValue ? 'True' : 'False';
+          // Check if this task is a radio-button like task with defined options
+          if (task.options && task.options.length > 0) {
+            const trueOption = task.options.find(o => o.toLowerCase() === 'true' || o.toLowerCase() === 'yes');
+            const falseOption = task.options.find(o => o.toLowerCase() === 'false' || o.toLowerCase() === 'no');
+
+            if (savedValue === true && trueOption) {
+              selectedOption = trueOption;
+            } else if (savedValue === false && falseOption) {
+              selectedOption = falseOption;
+            } else {
+              // Mismatch: boolean value stored, but no corresponding True/Yes or False/No option found
+              console.warn(`[AnnotationLoader] For task '${task.id}', boolean value ${savedValue} found, but no matching True/Yes/False/No option in [${task.options.join(', ')}]. Radio will likely be unselected.`);
+            }
+          } else {
+            // Boolean savedValue, but task.options is not defined/empty.
+            // Fallback to the generic Yes/No mapping used previously for such cases.
+            selectedOption = savedValue ? 'Yes' : 'No';
+          }
         } else if (typeof savedValue === 'string') {
-          selectedOption = savedValue;
+          // Check if this task is a radio-button like task with defined options
+          if (task.options && task.options.length > 0) {
+            if (task.options.includes(savedValue)) {
+              selectedOption = savedValue; // Handles "N/A" or other string options
+            } else {
+              // String value stored, but it's not one of the defined options
+              console.warn(`[AnnotationLoader] For task '${task.id}', string value "${savedValue}" found, but it's not in the defined options [${task.options.join(', ')}]. Radio will likely be unselected.`);
+            }
+          } else {
+            // String savedValue, but task.options is not defined/empty.
+            // Assume it's for a non-radio field or a radio without predefined options, use the value directly.
+            selectedOption = savedValue;
+          }
+        } else if (savedValue !== undefined) {
+            // savedValue is defined but not boolean or string (e.g., number)
+            console.warn(`[AnnotationLoader] For task '${task.id}', unexpected data type for savedValue: ${typeof savedValue} ('${savedValue}'). 'selectedOption' may not be set correctly.`);
         }
         
         return {

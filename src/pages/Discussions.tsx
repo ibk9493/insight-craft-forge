@@ -22,9 +22,9 @@ import { Discussion, TaskState, BatchUpload } from '@/services/api';
 
 interface EnhancedDiscussion extends Discussion {
   tasks: {
-    task1: TaskState & { userAnnotated?: boolean };
-    task2: TaskState & { userAnnotated?: boolean };
-    task3: TaskState & { userAnnotated?: boolean };
+    task1: TaskState & { userAnnotated: boolean };
+    task2: TaskState & { userAnnotated: boolean };
+    task3: TaskState & { userAnnotated: boolean };
   };
 }
 
@@ -51,7 +51,7 @@ const Discussions = () => {
     }
   }, [dispatch, isAuthenticated]);
   
-  const { discussions, getUserAnnotationStatus, getDiscussionsByStatus, loading, error } = useAnnotationData();
+  const { discussions, getUserAnnotationStatus, getDiscussionsByStatus, loading, error, annotations } = useAnnotationData();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterValues, setFilterValues] = useState<FilterValues>({
     status: 'all',
@@ -70,6 +70,13 @@ const Discussions = () => {
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [availableBatches, setAvailableBatches] = useState<{ id: number, name: string }[]>([]);
   
+  // Log the annotations data for debugging
+  useEffect(() => {
+    if (annotations && annotations.length > 0) {
+      console.log('Available annotations:', annotations.length);
+    }
+  }, [annotations]);
+
   // Extract available filter options from discussions
   useEffect(() => {
     if (discussions.length > 0) {
@@ -179,6 +186,8 @@ const Discussions = () => {
       return;
     }
     
+    console.log('Applying filters to discussions. Total discussions:', discussions.length);
+    
     // Apply filters to discussions
     let filtered = [...discussions];
     
@@ -247,28 +256,39 @@ const Discussions = () => {
       );
     }
     
-    // Update discussions with user annotation status
+    // Update discussions with user annotation status - THIS IS THE CRITICAL FIX
     const updatedDiscussions = filtered.map(discussion => {
+      // Get accurate user annotation status by checking actual annotations
       const userAnnotationStatus = getUserAnnotationStatus(discussion.id, user.id);
+      
+      // Log for debugging
+      if (userAnnotationStatus.task1 || userAnnotationStatus.task2 || userAnnotationStatus.task3) {
+        console.log(`User has annotated discussion ${discussion.id}:`, userAnnotationStatus);
+      }
+      
       return {
         ...discussion,
         tasks: {
           task1: {
             ...discussion.tasks.task1,
-            userAnnotated: userAnnotationStatus.task1,
+            // Force to boolean
+            userAnnotated: userAnnotationStatus.task1 === true
           },
           task2: {
             ...discussion.tasks.task2,
-            userAnnotated: userAnnotationStatus.task2,
+            // Force to boolean
+            userAnnotated: userAnnotationStatus.task2 === true
           },
           task3: {
             ...discussion.tasks.task3,
-            userAnnotated: userAnnotationStatus.task3,
+            // Force to boolean
+            userAnnotated: userAnnotationStatus.task3 === true
           },
         },
       } as EnhancedDiscussion;
     });
     
+    console.log('Filtered discussions:', updatedDiscussions.length);
     setFilteredDiscussions(updatedDiscussions);
   }, [discussions, isAuthenticated, navigate, getUserAnnotationStatus, user, filterValues, searchQuery, getDiscussionsByStatus]);
 
@@ -332,8 +352,12 @@ const Discussions = () => {
   }, [discussions, getUserAnnotationStatus, isPodLead, navigate, user]);
 
   const getTaskStatusClass = (status: 'locked' | 'unlocked' | 'completed', userAnnotated?: boolean) => {
-    if (userAnnotated) return 'bg-purple-100 text-purple-800';
+    // If user has annotated, use purple regardless of task status
+    if (userAnnotated === true) {
+      return 'bg-purple-100 text-purple-800';
+    }
     
+    // Otherwise use status-based colors
     switch (status) {
       case 'completed':
         return 'bg-green-100 text-green-800';
@@ -344,22 +368,33 @@ const Discussions = () => {
     }
   };
 
-  const getTaskButtonState = (discussion: Discussion, taskNumber: number) => {
+  // FIXED version of getTaskButtonState
+  const getTaskButtonState = (discussion: EnhancedDiscussion, taskNumber: number) => {
     const task = taskNumber === 1 ? discussion.tasks.task1 : 
                 taskNumber === 2 ? discussion.tasks.task2 : discussion.tasks.task3;
     
-    const userAnnotated = task.userAnnotated;
+    // Make sure userAnnotated is a proper boolean
+    const userAnnotated = task.userAnnotated === true;
+    
     const requiredAnnotators = taskNumber === 3 ? 5 : 3;
     const maxAnnotatorsReached = task.annotators >= requiredAnnotators && !isPodLead && !userAnnotated;
-    const isEnabled = (task.status === 'unlocked' || task.status === 'completed' || isPodLead) && !maxAnnotatorsReached;
     
+    // Enable button if:
+    // - Task is unlocked or completed, or
+    // - User is a pod lead, or
+    // - User has already annotated this task
+    // But disable if max annotators reached and user hasn't annotated
+    const isEnabled = (task.status === 'unlocked' || task.status === 'completed' || isPodLead || userAnnotated) && !maxAnnotatorsReached;
+    
+    // Determine button text based on various conditions
     let text = '';
     if (maxAnnotatorsReached) {
       text = `Maximum Annotators Reached (${task.annotators}/${requiredAnnotators})`;
+    } else if (userAnnotated) {
+      // If the user has annotated this task
+      text = `View Your Annotation (${task.annotators}/${requiredAnnotators})`;
     } else if (isPodLead && task.status === 'completed') {
       text = `Create Consensus (${task.annotators}/${requiredAnnotators})`;
-    } else if (userAnnotated) {
-      text = `View Your Annotation (${task.annotators}/${requiredAnnotators})`;
     } else if (task.status === 'completed') {
       text = `View Results (${task.annotators}/${requiredAnnotators})`;
     } else if (task.status === 'unlocked') {
@@ -581,7 +616,8 @@ const Discussions = () => {
                           onClick={() => startTask(discussion.id, 1)}
                           disabled={!getTaskButtonState(discussion, 1).isEnabled}
                           className="w-full text-xs h-8"
-                          variant={discussion.tasks.task1.status === 'completed' ? "outline" : "default"}
+                          // Use different variant if user has annotated
+                          variant={discussion.tasks.task1.userAnnotated ? "secondary" : (discussion.tasks.task1.status === 'completed' ? "outline" : "default")}
                         >
                           {getTaskButtonState(discussion, 1).text}
                         </Button>
@@ -609,7 +645,8 @@ const Discussions = () => {
                           onClick={() => startTask(discussion.id, 2)}
                           disabled={!getTaskButtonState(discussion, 2).isEnabled}
                           className="w-full text-xs h-8"
-                          variant={discussion.tasks.task2.status === 'completed' ? "outline" : "default"}
+                          // Use different variant if user has annotated
+                          variant={discussion.tasks.task2.userAnnotated ? "secondary" : (discussion.tasks.task2.status === 'completed' ? "outline" : "default")}
                         >
                           {getTaskButtonState(discussion, 2).text}
                         </Button>
@@ -637,7 +674,8 @@ const Discussions = () => {
                           onClick={() => startTask(discussion.id, 3)}
                           disabled={!getTaskButtonState(discussion, 3).isEnabled}
                           className="w-full text-xs h-8"
-                          variant={discussion.tasks.task3.status === 'completed' ? "outline" : "default"}
+                          // Use different variant if user has annotated
+                          variant={discussion.tasks.task3.userAnnotated ? "secondary" : (discussion.tasks.task3.status === 'completed' ? "outline" : "default")}
                         >
                           {getTaskButtonState(discussion, 3).text}
                         </Button>

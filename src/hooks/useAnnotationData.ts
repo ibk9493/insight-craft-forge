@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { useUser } from '@/contexts/UserContext';
 import { api, Discussion, Annotation, ApiError, TaskStatus } from '@/services/api';
@@ -18,6 +17,7 @@ export function useAnnotationData() {
   const [consensusAnnotations, setConsensusAnnotations] = useState<Annotation[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [annotationsLoaded, setAnnotationsLoaded] = useState<boolean>(false);
 
   // Fetch discussions
   useEffect(() => {
@@ -25,7 +25,15 @@ export function useAnnotationData() {
       try {
         setLoading(true);
         const data = await api.discussions.getAll();
-        setDiscussions(data || []);
+        
+        if (data) {
+          console.log(`Fetched ${data.length} discussions`);
+          setDiscussions(data);
+        } else {
+          console.warn('No discussions data returned from API');
+          setDiscussions([]);
+        }
+        
         setError(null);
       } catch (err) {
         const errorMessage = (err as ApiError).message || 'Failed to fetch discussions';
@@ -41,8 +49,66 @@ export function useAnnotationData() {
     fetchDiscussions();
   }, []);
 
-  // Fetch annotations
+  // Fetch annotations - improved error handling and logging
   useEffect(() => {
+    const fetchAnnotationsForSpecificDiscussion = async () => {
+      const specificDiscussionId = "marimo-team_marimo_3256"; // HARDCODED for testing
+      try {
+        setLoading(true);
+        console.log(`[Debug] Fetching annotations ONLY for discussion: ${specificDiscussionId}`);
+        
+        const fetchedAnnotations = await api.annotations.getByDiscussionId(specificDiscussionId);
+        
+        if (fetchedAnnotations) {
+          console.log(`[Debug] Fetched ${fetchedAnnotations.length} annotations for ${specificDiscussionId}:`, JSON.stringify(fetchedAnnotations, null, 2));
+          
+          const validAnnotations = fetchedAnnotations.filter(a => 
+            a && a.discussion_id && a.user_id && a.task_id !== undefined
+          );
+
+          if (validAnnotations.length !== fetchedAnnotations.length) {
+            console.warn(`[Debug] Filtered out ${fetchedAnnotations.length - validAnnotations.length} invalid annotations from specific fetch.`);
+          }
+          setAnnotations(validAnnotations);
+        } else {
+          console.warn(`[Debug] No annotations returned from API for specific discussion ${specificDiscussionId}`);
+          setAnnotations([]);
+        }
+        setAnnotationsLoaded(true);
+        setError(null);
+      } catch (err) {
+        const errorMessage = (err as ApiError).message || `Failed to fetch annotations for ${specificDiscussionId}`;
+        console.error(`[Debug] Error fetching annotations for ${specificDiscussionId}:`, errorMessage);
+        toast.error(errorMessage);
+        setAnnotations([]); // Set empty on error
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // We run this test fetch if discussions have loaded (or skip that check for direct test)
+    // For this test, let's run it directly if you have at least one discussion or want to force it.
+    // If your `discussions` state might be empty initially, you might need to ensure `api.annotations.getByDiscussionId` can be called.
+    // For now, assuming it's okay to call, or that `discussions` will eventually populate.
+    // Let's tie it to discussions.length > 0 for safety, or remove this condition if testing independently.
+    if (discussions.length > 0) { // Or simply call `fetchAnnotationsForSpecificDiscussion()` if you want to test it without waiting for all discussions to load.
+        fetchAnnotationsForSpecificDiscussion();
+    } else if (discussions.length === 0 && !loading) { // If discussions is empty and we are not loading discussions already
+        // This case might indicate that we want to fetch for a specific ID even if the main discussion list is empty or hasn't loaded
+        // For this debug, let's assume if discussions array is empty, we still try to fetch for the specific ID once after initial discussion load attempt. 
+        // This logic might need refinement based on how your app initializes.
+        // Consider if this should run once unconditionally for the test.
+        console.log("[Debug] Discussions array is empty, attempting test fetch for specific ID anyway after initial load cycle.");
+        // To ensure it runs after the initial discussion fetch attempt (even if it yields empty), 
+        // a more robust way might involve a separate flag or a small timeout, but let's try this first.
+        // fetchAnnotationsForSpecificDiscussion(); // Potentially call here if you want it to run even if discussions array remains empty. 
+                                              // For now, the `if (discussions.length > 0)` handles it after discussions are populated.
+        // If `discussions.length > 0` is too restrictive for testing, you can call fetchAnnotationsForSpecificDiscussion() unconditionally once.
+        // Example: Call it once using a flag that's set after the first run. 
+    }
+
+    // Original fetch logic commented out for this test:
+    /*
     const fetchAnnotations = async () => {
       try {
         if (discussions.length === 0) {
@@ -51,26 +117,43 @@ export function useAnnotationData() {
         }
         
         setLoading(true);
+        console.log('Fetching annotations for discussions...');
         
-        // In a real app, we might want to limit this to only relevant discussions
         const promises = discussions.map(discussion => 
           api.annotations.getByDiscussionId(discussion.id)
         );
         
         const results = await Promise.allSettled(promises);
+        
+        results.forEach((result, index) => {
+          if (result.status === 'rejected') {
+            console.error(`Failed to fetch annotations for discussion ${discussions[index].id}:`, result.reason);
+          }
+        });
+        
         const data = results
           .filter((result): result is PromiseFulfilledResult<Annotation[]> => 
             result.status === 'fulfilled'
           )
           .flatMap(result => result.value || []);
         
-        setAnnotations(data);
+        console.log(`Successfully fetched ${data.length} annotations across ${discussions.length} discussions`);
+        
+        const validAnnotations = data.filter(a => 
+          a && a.discussion_id && a.user_id && a.task_id !== undefined
+        );
+        
+        if (validAnnotations.length !== data.length) {
+          console.warn(`Filtered out ${data.length - validAnnotations.length} invalid annotations`);
+        }
+        
+        setAnnotations(validAnnotations);
+        setAnnotationsLoaded(true);
         setError(null);
       } catch (err) {
         const errorMessage = (err as ApiError).message || 'Failed to fetch annotations';
-        setError(errorMessage);
-        toast.error(errorMessage);
-        // Set empty array on error to prevent UI breaks
+        console.error('Error fetching annotations:', errorMessage);
+        toast.error(`Failed to fetch some annotations. User status might be incomplete.`);
         setAnnotations([]);
       } finally {
         setLoading(false);
@@ -82,69 +165,134 @@ export function useAnnotationData() {
     } else {
       setAnnotations([]);
     }
-  }, [discussions]);
+    */
+  }, [discussions]); // MODIFIED: Removed loading from dependency array to prevent infinite loop
 
-  // Get annotations for a specific discussion and task
-  const getAnnotationsForTask = useCallback((discussionId: string, taskId: number) => {
-    return annotations.filter(
-      annotation => annotation.discussionId === discussionId && annotation.taskId === taskId
-    );
-  }, [annotations]);
-
-  // Check if a user has annotated a specific discussion task
+  // Enhanced getUserAnnotationStatus function with better error handling
   const getUserAnnotationStatus = useCallback((discussionId: string, userId: string): UserAnnotationStatus => {
-    if (!discussionId || !userId) return { task1: false, task2: false, task3: false };
+    if (!discussionId || !userId) {
+      return { task1: false, task2: false, task3: false };
+    }
     
-    return {
-      task1: annotations.some(a => a.discussionId === discussionId && a.userId === userId && a.taskId === 1),
-      task2: annotations.some(a => a.discussionId === discussionId && a.userId === userId && a.taskId === 2),
-      task3: annotations.some(a => a.discussionId === discussionId && a.userId === userId && a.taskId === 3),
-    };
+    try {
+      // Filter annotations for this discussion and user
+      const userAnnotationsForDiscussion = annotations.filter(a => 
+        a.discussion_id === discussionId && a.user_id === userId
+      );
+      
+      // Log for debugging if we found any annotations
+      if (userAnnotationsForDiscussion.length > 0) {
+        console.log(`Found ${userAnnotationsForDiscussion.length} annotations for user ${userId} in discussion ${discussionId}`);
+      }
+      
+      // Create a status object with strict boolean values
+      const status = {
+        task1: userAnnotationsForDiscussion.some(a => a.task_id === 1) === true,
+        task2: userAnnotationsForDiscussion.some(a => a.task_id === 2) === true,
+        task3: userAnnotationsForDiscussion.some(a => a.task_id === 3) === true,
+      };
+      
+      return status;
+    } catch (error) {
+      console.error('Error in getUserAnnotationStatus:', error);
+      // Return all false on error
+      return { task1: false, task2: false, task3: false };
+    }
   }, [annotations]);
 
   // Get user's annotation for a specific discussion and task
   const getUserAnnotation = useCallback((discussionId: string, userId: string, taskId: number) => {
-    if (!discussionId || !userId) return null;
+    if (!discussionId || !userId) {
+      console.log('[useAnnotationData] getUserAnnotation: Aborted due to missing discussionId or userId. Provided:', { discussionId, userId });
+      return null;
+    }
     
-    return annotations.find(
-      a => a.discussionId === discussionId && a.userId === userId && a.taskId === taskId
+    console.log('[useAnnotationData] getUserAnnotation: Attempting to find annotation with:', { discussionId, userId, taskId });
+    console.log('[useAnnotationData] getUserAnnotation: Full annotations array before find (first 5 items):', annotations.slice(0, 5).map(a => ({discussion_id: a.discussion_id, user_id: a.user_id, task_id: a.task_id, dataKeys: Object.keys(a.data)})));
+    console.log('[useAnnotationData] getUserAnnotation: Total annotations in array:', annotations.length);
+
+    const foundAnnotation = annotations.find(
+      a => {
+        const discussionMatch = a.discussion_id === discussionId;
+        const userMatch = String(a.user_id) === String(userId); // Compare as strings for safety
+        const taskMatch = a.task_id === taskId;
+
+        // Log comparison for the specific item if it's the one we're interested in
+        if (discussionId === "marimo-team_marimo_3256" && String(userId) === "7" && taskId === 1) {
+          // console.log('[useAnnotationData] getUserAnnotation - COMPARING ITEM:', a, 'WITH PARAMS:', { discussionId, userId, taskId });
+          // console.log('[useAnnotationData] getUserAnnotation - MATCHES:', { discussionMatch, userMatch, taskMatch });
+        }
+        return discussionMatch && userMatch && taskMatch;
+      }
     );
+
+    if (!foundAnnotation) {
+      console.log('[useAnnotationData] getUserAnnotation: Annotation NOT FOUND. Searched with:', { discussionId, userId, taskId });
+      // For debugging, let's see if an annotation for this discussion & user exists AT ALL (ignoring task_id)
+      const anyAnnotationForUserAndDiscussion = annotations.find(
+        a => a.discussion_id === discussionId && String(a.user_id) === String(userId)
+      );
+      if (anyAnnotationForUserAndDiscussion) {
+        console.log('[useAnnotationData] getUserAnnotation: Found an annotation for this discussion & user, but task_id did not match. Found task_id:', anyAnnotationForUserAndDiscussion.task_id, 'Expected task_id:', taskId);
+      } else {
+        console.log('[useAnnotationData] getUserAnnotation: No annotations found for this discussion & user combination AT ALL.');
+      }
+    } else {
+      console.log('[useAnnotationData] getUserAnnotation: Annotation FOUND:', JSON.stringify(foundAnnotation, null, 2));
+    }
+    
+    return foundAnnotation;
   }, [annotations]);
 
   // Save an annotation with proper type signature to return a Promise
   const saveAnnotation = useCallback(async (annotation: Omit<Annotation, 'timestamp'>): Promise<boolean> => {
     try {
-      if (!annotation.discussionId || !annotation.userId) return false;
+      if (!annotation.discussion_id || !annotation.user_id) { 
+        console.error('[useAnnotationData.saveAnnotation] Missing discussion_id or user_id in annotation object:', annotation);
+        return false;
+      }
       
       setLoading(true);
       
       // Call API to save annotation
-      const newAnnotation = await api.annotations.save(annotation);
+      const newSavedAnnotation = await api.annotations.save(annotation);
       
-      if (!newAnnotation) {
+      if (!newSavedAnnotation) {
         throw new Error('Failed to save annotation');
       }
       
       // Update local state with the new annotation
       setAnnotations(prev => {
         const existingIndex = prev.findIndex(
-          a => a.discussionId === annotation.discussionId && 
-              a.userId === annotation.userId && 
-              a.taskId === annotation.taskId
+          a => a.discussion_id === annotation.discussion_id && 
+              a.user_id === annotation.user_id && 
+              a.task_id === annotation.task_id
         );
+        
+        // Construct the annotation for local state.
+        // Prioritize the data that was sent for saving, but merge with metadata (like id, timestamp)
+        // that the API provides in its response.
+        const finalAnnotationForState: Annotation = {
+            ...newSavedAnnotation, // Start with everything from API response (id, timestamp, potentially partial/different data)
+            // Ensure the core identifiers and the critical 'data' payload are from the user's input:
+            discussion_id: annotation.discussion_id,
+            user_id: annotation.user_id,
+            task_id: annotation.task_id,
+            data: annotation.data, // This ensures the data payload sent by the client is used in the local state.
+        };
         
         if (existingIndex !== -1) {
           const updated = [...prev];
-          updated[existingIndex] = newAnnotation;
+          updated[existingIndex] = finalAnnotationForState;
           return updated;
         } else {
-          return [...prev, newAnnotation];
+          return [...prev, finalAnnotationForState];
         }
       });
       
       // Fetch updated discussion status
       try {
-        const updatedDiscussion = await api.discussions.getById(annotation.discussionId);
+        const updatedDiscussion = await api.discussions.getById(annotation.discussion_id);
         if (updatedDiscussion) {
           setDiscussions(prev => 
             prev.map(d => d.id === updatedDiscussion.id ? updatedDiscussion : d)
@@ -158,12 +306,13 @@ export function useAnnotationData() {
       return true;
     } catch (err) {
       const errorMessage = (err as ApiError).message || 'Failed to save annotation';
+      console.error('[useAnnotationData.saveAnnotation] Error saving annotation:', err);
       toast.error(errorMessage);
       return false;
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [annotations]);
 
   // Calculate consensus for a discussion task
   const calculateConsensus = useCallback(async (discussionId: string, taskId: number) => {
@@ -188,17 +337,19 @@ export function useAnnotationData() {
   // Save consensus annotation with proper type signature
   const saveConsensusAnnotation = useCallback(async (consensusAnnotation: Omit<Annotation, 'timestamp'>): Promise<boolean> => {
     try {
-      if (!consensusAnnotation.discussionId || !user || user.role !== 'pod_lead') {
-        return false;
-      }
-      
-      setLoading(true);
-      
-      // Validate that this is coming from a pod lead
+      // Ensure that the user is a pod lead to save consensus
       if (!user || user.role !== 'pod_lead') {
         toast.error('Only pod leads can save consensus annotations');
         return false;
       }
+      
+      // Check if discussion_id is present
+      if (!consensusAnnotation.discussion_id) {
+        toast.error('Discussion ID is missing in consensus data');
+        return false;
+      }
+      
+      setLoading(true);
       
       // Call API to save consensus annotation
       const newConsensusAnnotation = await api.consensus.save(consensusAnnotation);
@@ -210,7 +361,7 @@ export function useAnnotationData() {
       // Update local state with the new consensus annotation
       setConsensusAnnotations(prev => {
         const existingIndex = prev.findIndex(
-          a => a.discussionId === consensusAnnotation.discussionId && a.taskId === consensusAnnotation.taskId
+          a => a.discussion_id === consensusAnnotation.discussion_id && a.task_id === consensusAnnotation.task_id
         );
         
         if (existingIndex !== -1) {
@@ -231,19 +382,21 @@ export function useAnnotationData() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, consensusAnnotations]);
 
   // Get all annotations for a discussion
   const getDiscussionAnnotations = useCallback((discussionId: string) => {
     if (!discussionId) return [];
-    return annotations.filter(a => a.discussionId === discussionId);
+    
+    const discussionAnnotations = annotations.filter(a => a.discussion_id === discussionId);
+    return discussionAnnotations;
   }, [annotations]);
 
   // Get consensus annotation for a discussion task
   const getConsensusAnnotation = useCallback((discussionId: string, taskId: number) => {
     if (!discussionId) return null;
     return consensusAnnotations.find(
-      a => a.discussionId === discussionId && a.taskId === taskId
+      a => a.discussion_id === discussionId && a.task_id === taskId
     );
   }, [consensusAnnotations]);
 
@@ -274,7 +427,10 @@ export function useAnnotationData() {
     consensusAnnotations,
     loading,
     error,
-    getAnnotationsForTask,
+    annotationsLoaded,
+    getAnnotationsForTask: useCallback((discussionId, taskId) => {
+      return annotations.filter(a => a.discussion_id === discussionId && a.task_id === taskId);
+    }, [annotations]),
     getUserAnnotationStatus,
     getUserAnnotation,
     saveAnnotation,
