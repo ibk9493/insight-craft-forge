@@ -58,31 +58,31 @@ async def startup_event():
     try:
         # Check if the user already exists
         existing_user = db.query(models.AuthorizedUser).filter(
-            models.AuthorizedUser.email == "ibrahim.u@turing.com"
+            models.AuthorizedUser.email == "admin1@turing.com"
         ).first()
         
         if not existing_user:
             # Create a new user with hashed password
             
-            default_password = "Admin123!"  # You should change this to a secure password
+            default_password = "Test1234!"  # You should change this to a secure password
             hashed_password = jwt_auth_service.get_password_hash(default_password)
             
             admin_user = models.AuthorizedUser(
-                email="ibrahim.u@turing.com",
+                email="admin1@turing.com",
                 role="admin",
                 password_hash=hashed_password
             )
             
             db.add(admin_user)
             db.commit()
-            print(f"Created default admin user: ibrahim.u@turing.com")
+            print(f"Created default admin user: admin1@turing.com")
             print(f"Default password: {default_password} - CHANGE THIS IN PRODUCTION!")
         else:
             # If user exists but doesn't have a password hash, update it
             if not existing_user.password_hash:
                
                 
-                default_password = "Admin123!"  # You should change this to a secure password
+                default_password = "Test1234!"  # You should change this to a secure password
                 hashed_password = jwt_auth_service.get_password_hash(default_password)
                 
                 existing_user.password_hash = hashed_password

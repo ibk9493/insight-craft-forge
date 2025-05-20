@@ -12,7 +12,7 @@ def get_authorized_users(db: Session) -> List[schemas.AuthorizedUser]:
     if not users:
         # Add Ibrahim as admin (will be added when first request comes)
         admin_user = models.AuthorizedUser(
-            email="ibrahim.u@turing.com",
+            email="admin1@turing.com",
             role="admin"
         )
         db.add(admin_user)
