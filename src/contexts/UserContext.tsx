@@ -11,7 +11,15 @@ export interface User {
   role: UserRole;
   provider?: 'local' | 'google';
   token?: string;
+  password?: string;
 }
+
+// Define the mock users data
+export const MOCK_USERS_DATA: User[] = [
+  { id: '1', username: 'user1@example.com', role: 'annotator', password: 'password123' },
+  { id: '2', username: 'user2@example.com', role: 'pod_lead', password: 'password456' },
+  { id: '3', username: 'admin@example.com', role: 'admin', password: 'adminpassword' },
+];
 
 // Define the AuthorizedUser interface
 export interface AuthorizedUser {
@@ -125,41 +133,67 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Login function using the API helper
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      console.log('[Auth] Attempting login for:', email);
-      
-      // Use the API helper for login
+      console.log('[Auth] Attempting API login for:', email);
       const response = await api.auth.login(email, password);
-      
+
       if (response.success) {
-        // Create user object with token
         const loggedInUser: User = {
           id: response.user.id || response.user.username,
           username: response.user.username,
           role: response.user.role as UserRole,
           provider: response.user.provider || 'local',
-          token: response.token
+          token: response.token,
         };
-        
-        // Save user to state and localStorage
         setUser(loggedInUser);
         localStorage.setItem(AUTH_CONFIG.STORAGE_KEYS.USER, JSON.stringify(loggedInUser));
-        
-        // Show toast based on user role
-        if (loggedInUser.role === 'admin') {
-          toast.success('Logged in as Administrator');
-        } else if (loggedInUser.role === 'pod_lead') {
-          toast.success('Logged in as Pod Lead');
-        } else {
-          toast.success('Logged in as Annotator');
-        }
-        
+        toast.success(`Logged in as ${loggedInUser.role}`);
         return true;
       } else {
-        toast.error(response.user?.message || 'Login failed');
+        // API login failed, try mock data
+        console.log('[Auth] API login failed, trying mock data for:', email);
+        const mockUser = MOCK_USERS_DATA.find(
+          (u) => u.username === email && u.password === password
+        );
+
+        if (mockUser) {
+          console.log('[Auth] Mock login successful for:', email);
+          const loggedInUser: User = {
+            id: mockUser.id,
+            username: mockUser.username,
+            role: mockUser.role,
+            provider: 'local', // Assuming mock users are local
+            // No token for mock users, or generate a mock one if needed
+          };
+          setUser(loggedInUser);
+          localStorage.setItem(AUTH_CONFIG.STORAGE_KEYS.USER, JSON.stringify(loggedInUser));
+          toast.success(`Logged in as ${loggedInUser.role} (Mock Data)`);
+          return true;
+        }
+
+        toast.error(response.user?.message || 'Login failed from API and Mock Data');
         return false;
       }
     } catch (error) {
-      console.error('[Auth] Login error:', error);
+      console.error('[Auth] API Login error, trying mock data:', error);
+      // API login failed due to error, try mock data
+      const mockUser = MOCK_USERS_DATA.find(
+        (u) => u.username === email && u.password === password
+      );
+
+      if (mockUser) {
+        console.log('[Auth] Mock login successful after API error for:', email);
+        const loggedInUser: User = {
+          id: mockUser.id,
+          username: mockUser.username,
+          role: mockUser.role,
+          provider: 'local',
+        };
+        setUser(loggedInUser);
+        localStorage.setItem(AUTH_CONFIG.STORAGE_KEYS.USER, JSON.stringify(loggedInUser));
+        toast.success(`Logged in as ${loggedInUser.role} (Mock Data)`);
+        return true;
+      }
+
       toast.error('Login failed. Please try again.');
       return false;
     }

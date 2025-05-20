@@ -27,22 +27,38 @@ export function useAnnotationSaver({
 
   // Convert tasks to data format
   const convertTasksToData = (tasks: SubTask[], data: Record<string, any>) => {
+    console.log("[AnnotationSaver] convertTasksToData: Starting conversion. Incoming tasks:", JSON.parse(JSON.stringify(tasks)), "Initial data:", JSON.parse(JSON.stringify(data)));
     tasks.forEach(task => {
+      // Always save the status if a selection was made (original condition)
       if (task.selectedOption) {
-        // Convert string options to actual boolean for boolean fields if needed
         if (task.selectedOption === 'True' || task.selectedOption === 'False' ||
             task.selectedOption === 'Yes' || task.selectedOption === 'No') {
           data[task.id] = (task.selectedOption === 'True' || task.selectedOption === 'Yes');
         } else {
-          data[task.id] = task.selectedOption;
-        }
-        
-        // Add text value if present
-        if (task.textValue) {
-          data[`${task.id}_text`] = task.textValue;
+          data[task.id] = task.selectedOption; // e.g., data['rewrite'] = 'Completed'
         }
       }
+
+      // Add text value if present (for single text inputs like rewrite_text)
+      if (task.textInput && task.textValue !== undefined) { // Added textInput check for clarity, and check for undefined
+        data[`${task.id}_text`] = task.textValue; // e.g., data['rewrite_text'] = "Some text"
+      }
+
+      // Add textValues if present (for multiline text inputs like short_answer_list)
+      if (task.multiline && task.textValues && Array.isArray(task.textValues)) {
+        // Example: task.id = "short_answer_list"
+        // data["short_answer_list_items"] = ["item1", "item2"]
+        data[`${task.id}_items`] = task.textValues;
+      }
+
+      // Add supportingDocs if present
+      if (task.structuredInput && task.supportingDocs && Array.isArray(task.supportingDocs)) {
+        // Example: task.id = "supporting_docs"
+        // data["supporting_docs_data"] = [{link: "...", paragraph: "..."}]
+        data[`${task.id}_data`] = task.supportingDocs;
+      }
     });
+    console.log("[AnnotationSaver] convertTasksToData: Finished conversion. Final data:", JSON.parse(JSON.stringify(data)));
   };
 
   // Save annotation or consensus
@@ -87,11 +103,16 @@ export function useAnnotationSaver({
             break;
           default:
             toast.error('Invalid task ID');
+            setLoading(false); // Added to ensure loading is false on early return
             return;
         }
         
+        console.log("[AnnotationSaver] Current tasks before conversion for detail view:", JSON.parse(JSON.stringify(currentTasks))); // Logging line 1
+        
         // Convert form data to API format
         convertTasksToData(currentTasks, taskData);
+        
+        console.log("[AnnotationSaver] Prepared taskData for API (detail view):", taskData); // Logging line 2 - simplified
         
         // Save annotation - force this to NOT use mock data
         const success = await saveAnnotation({
@@ -125,11 +146,16 @@ export function useAnnotationSaver({
             break;
           default:
             toast.error('Invalid task ID');
+            setLoading(false); // Added to ensure loading is false on early return
             return;
         }
         
+        console.log("[AnnotationSaver] Current tasks before conversion for consensus view:", JSON.parse(JSON.stringify(currentTasks))); // Logging line 3
+
         // Convert form data to API format
         convertTasksToData(currentTasks, taskData);
+
+        console.log("[AnnotationSaver] Prepared taskData for API (consensus view):", taskData); // Logging line 4 - simplified
         
         // Save consensus annotation
         const success = await saveConsensusAnnotation({
@@ -172,9 +198,13 @@ export function useAnnotationSaver({
       // Prepare data based on current task
       let taskData: Record<string, any> = {};
       
+      console.log("[AnnotationSaver] SubTasks for override before conversion:", JSON.parse(JSON.stringify(subTasks))); // Logging line 5
+
       // Convert form data to API format
       convertTasksToData(subTasks, taskData);
       
+      console.log("[AnnotationSaver] Prepared taskData for override API:", taskData); // Logging line 6 - simplified
+
       // Add override metadata
       taskData._overridden_by_pod_lead = true;
       taskData._override_timestamp = new Date().toISOString();

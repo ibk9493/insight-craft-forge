@@ -72,30 +72,30 @@ const TaskCard: React.FC<TaskCardProps> = ({
   // Track supporting doc fields
   const [supportingDocFields, setSupportingDocFields] = useState<Record<string, SupportingDoc[]>>({});
 
-  // Initialize multiline fields if they don't exist
+  // Initialize multiline fields and supporting doc fields from subTasks prop
   React.useEffect(() => {
-    const initialFields: Record<string, string[]> = {};
-    const initialDocFields: Record<string, SupportingDoc[]> = {};
-    
+    const newMultilineFields: Record<string, string[]> = {};
+    const newSupportingDocFields: Record<string, SupportingDoc[]> = {};
+
     subTasks.forEach(task => {
-      if (task.multiline && !task.structuredInput && !multilineFields[task.id]) {
-        // Initialize with one empty field or with existing values if available
-        initialFields[task.id] = task.textValues || [''];
+      if (task.multiline && !task.structuredInput) {
+        // Always take textValues from the prop if available, otherwise default
+        newMultilineFields[task.id] = task.textValues && task.textValues.length > 0 ? [...task.textValues] : [''];
       }
-      
-      if (task.structuredInput && !supportingDocFields[task.id]) {
-        // Initialize supporting docs with one empty set or existing values
-        initialDocFields[task.id] = task.supportingDocs || [{ link: '', paragraph: '' }];
+      if (task.structuredInput) {
+        // Always take supportingDocs from the prop if available, otherwise default
+        // Ensure to map to new objects to avoid direct state mutation if subTasks comes from complex state
+        newSupportingDocFields[task.id] = task.supportingDocs && task.supportingDocs.length > 0 
+                                            ? task.supportingDocs.map(doc => ({...doc})) 
+                                            : [{ link: '', paragraph: '' }];
       }
     });
-    
-    if (Object.keys(initialFields).length > 0) {
-      setMultilineFields(prev => ({...prev, ...initialFields}));
-    }
-    
-    if (Object.keys(initialDocFields).length > 0) {
-      setSupportingDocFields(prev => ({...prev, ...initialDocFields}));
-    }
+
+    // Update local state
+    // Consider deep comparison here if performance becomes an issue due to frequent updates
+    setMultilineFields(newMultilineFields);
+    setSupportingDocFields(newSupportingDocFields);
+
   }, [subTasks]);
 
   const getStatusIcon = (status: SubTask['status']) => {
@@ -156,113 +156,110 @@ const TaskCard: React.FC<TaskCardProps> = ({
 
   // Add a new supporting doc field set
   const addSupportingDocField = (taskId: string) => {
-    setSupportingDocFields(prev => {
-      const currentFields = prev[taskId] || [{ link: '', paragraph: '' }];
-      const newFields = [...currentFields, { link: '', paragraph: '' }];
-      
-      // Update the parent component
-      onSubTaskChange(
-        taskId, 
-        subTasks.find(t => t.id === taskId)?.selectedOption, 
-        undefined, 
-        undefined, 
-        newFields
-      );
-      
-      return {
-        ...prev,
-        [taskId]: newFields
-      };
-    });
+    const currentDocFields = supportingDocFields[taskId] || [{ link: '', paragraph: '' }];
+    const newFields = [...currentDocFields, { link: '', paragraph: '' }];
+
+    // Update the parent component first
+    onSubTaskChange(
+      taskId,
+      subTasks.find(t => t.id === taskId)?.selectedOption,
+      undefined,
+      undefined,
+      newFields
+    );
+
+    // Then update local state
+    setSupportingDocFields(prev => ({
+      ...prev,
+      [taskId]: newFields
+    }));
   };
 
   // Remove a field from multiline input
   const removeField = (taskId: string, index: number) => {
-    setMultilineFields(prev => {
-      const currentFields = [...(prev[taskId] || [''])];
-      if (currentFields.length > 1) { // Don't remove the last field
-        currentFields.splice(index, 1);
-      } else {
-        currentFields[0] = ''; // Clear the last field instead of removing it
-      }
-      
-      // Update the parent component
-      const newTextValues = [...currentFields];
-      onSubTaskChange(taskId, subTasks.find(t => t.id === taskId)?.selectedOption, undefined, newTextValues);
-      
-      return {
-        ...prev,
-        [taskId]: currentFields
-      };
-    });
+    const prevFields = multilineFields[taskId] || [''];
+    const currentFields = [...prevFields];
+
+    if (currentFields.length > 1) { // Don't remove the last field
+      currentFields.splice(index, 1);
+    } else {
+      currentFields[0] = ''; // Clear the last field instead of removing it
+    }
+
+    // Update the parent component
+    const newTextValues = [...currentFields];
+    onSubTaskChange(taskId, subTasks.find(t => t.id === taskId)?.selectedOption, undefined, newTextValues);
+
+    // Then update local state
+    setMultilineFields(prev => ({
+      ...prev,
+      [taskId]: currentFields
+    }));
   };
 
   // Remove a supporting doc field
   const removeSupportingDocField = (taskId: string, index: number) => {
-    setSupportingDocFields(prev => {
-      const currentFields = [...(prev[taskId] || [{ link: '', paragraph: '' }])];
-      if (currentFields.length > 1) { // Don't remove the last field
-        currentFields.splice(index, 1);
-      } else {
-        currentFields[0] = { link: '', paragraph: '' }; // Clear the last field instead of removing it
-      }
-      
-      // Update the parent component
-      onSubTaskChange(
-        taskId, 
-        subTasks.find(t => t.id === taskId)?.selectedOption, 
-        undefined, 
-        undefined, 
-        currentFields
-      );
-      
-      return {
-        ...prev,
-        [taskId]: currentFields
-      };
-    });
+    const prevDocFields = supportingDocFields[taskId] || [{ link: '', paragraph: '' }];
+    const currentFields = [...prevDocFields];
+
+    if (currentFields.length > 1) { // Don't remove the last field
+      currentFields.splice(index, 1);
+    } else {
+      currentFields[0] = { link: '', paragraph: '' }; // Clear the last field instead of removing it
+    }
+
+    // Update the parent component
+    onSubTaskChange(
+      taskId,
+      subTasks.find(t => t.id === taskId)?.selectedOption,
+      undefined,
+      undefined,
+      currentFields
+    );
+
+    // Then update local state
+    setSupportingDocFields(prev => ({
+      ...prev,
+      [taskId]: currentFields
+    }));
   };
 
   // Handle changes in multiline fields
   const handleMultilineChange = (taskId: string, index: number, value: string) => {
-    setMultilineFields(prev => {
-      const currentFields = [...(prev[taskId] || [''])];
-      currentFields[index] = value;
-      
-      // Update the parent component
-      const newTextValues = [...currentFields];
-      onSubTaskChange(taskId, subTasks.find(t => t.id === taskId)?.selectedOption, undefined, newTextValues);
-      
-      return {
-        ...prev,
-        [taskId]: currentFields
-      };
-    });
+    // Construct the new textValues based on the change
+    const currentSubTaskFields = multilineFields[taskId] || [''];
+    const newTextValues = [...currentSubTaskFields];
+    newTextValues[index] = value;
+
+    console.log(`[TaskCard] handleMultilineChange for ${taskId}. Sending textValues:`, JSON.parse(JSON.stringify(newTextValues)));
+
+    // Only call parent to update. The useEffect will handle local state sync from props.
+    onSubTaskChange(
+      taskId, 
+      subTasks.find(t => t.id === taskId)?.selectedOption, 
+      undefined, 
+      newTextValues
+    );
   };
 
   // Handle changes in supporting doc fields
   const handleSupportingDocChange = (taskId: string, index: number, field: 'link' | 'paragraph', value: string) => {
-    setSupportingDocFields(prev => {
-      const currentFields = [...(prev[taskId] || [{ link: '', paragraph: '' }])];
-      currentFields[index] = {
-        ...currentFields[index],
-        [field]: value
-      };
-      
-      // Update the parent component
-      onSubTaskChange(
-        taskId, 
-        subTasks.find(t => t.id === taskId)?.selectedOption, 
-        undefined, 
-        undefined, 
-        currentFields
-      );
-      
-      return {
-        ...prev,
-        [taskId]: currentFields
-      };
-    });
+    // Construct the new supportingDocs based on the change
+    const currentSubTaskDocFields = supportingDocFields[taskId] || [{ link: '', paragraph: '' }];
+    const newSupportingDocs = currentSubTaskDocFields.map((doc, i) => 
+      i === index ? { ...doc, [field]: value } : doc
+    );
+    
+    console.log(`[TaskCard] handleSupportingDocChange for ${taskId}. Sending supportingDocs:`, JSON.parse(JSON.stringify(newSupportingDocs)));
+
+    // Only call parent to update. The useEffect will handle local state sync from props.
+    onSubTaskChange(
+      taskId,
+      subTasks.find(t => t.id === taskId)?.selectedOption,
+      undefined,
+      undefined,
+      newSupportingDocs
+    );
   };
 
   // Handle changes for a specific section

@@ -474,8 +474,23 @@ const Dashboard = () => {
                 description="Rewrite the question and answer to improve clarity, conciseness, and coherence."
                 subTasks={task3SubTasks}
                 status={getTask3Progress()}
-                onSubTaskChange={(taskId, selectedOption, textValue) => 
-                  handleSubTaskChange('task3', taskId, selectedOption, textValue)
+                onSubTaskChange={( 
+                  taskId,
+                  selectedOption,
+                  textValue,
+                  textValues,
+                  supportingDocs,
+                  sectionIndex
+                ) => 
+                  handleSubTaskChange(
+                    'task3',
+                    taskId,
+                    selectedOption,
+                    textValue,
+                    textValues,
+                    supportingDocs,
+                    sectionIndex
+                  )
                 }
                 active={true}
               />

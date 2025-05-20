@@ -212,6 +212,9 @@ export function useTaskSubtasks() {
     supportingDocs?: SupportingDoc[],
     sectionIndex?: number
   ) => {
+    console.log(`[useTaskSubtasks] handleSubTaskChange called for taskSet: ${taskSet}, taskId: ${taskId}`);
+    console.log(`[useTaskSubtasks] Received - selectedOption: ${selectedOption}, textValue: ${textValue}, textValues: ${JSON.stringify(textValues)}, supportingDocs: ${JSON.stringify(supportingDocs)}, sectionIndex: ${sectionIndex}`);
+
     let updated: SubTask[] = [];
 
     // Skip changes to consensus fields as they're system-determined
@@ -223,24 +226,31 @@ export function useTaskSubtasks() {
       // Handle updates to additional sections for Task 3
       if (taskSet === 'task3' && sectionIndex !== undefined) {
         if (sectionIndex < 0 || sectionIndex >= task3Sections.length) {
-          console.error(`Invalid section index: ${sectionIndex}`);
+          console.error(`[useTaskSubtasks] Invalid section index: ${sectionIndex}`);
           return;
         }
         
         const updatedSections = [...task3Sections];
-        updatedSections[sectionIndex] = updatedSections[sectionIndex].map(task => 
-          task.id === taskId 
-            ? { 
-                ...task, 
-                selectedOption, 
-                textValue: textValue !== undefined ? textValue : task.textValue,
-                textValues: textValues !== undefined ? textValues : task.textValues,
-                supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
-                status: selectedOption ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
-              } 
-            : task
-        );
-        
+        const originalSectionTasks = task3Sections[sectionIndex];
+        console.log(`[useTaskSubtasks] Original tasks for section ${sectionIndex}:`, JSON.parse(JSON.stringify(originalSectionTasks)));
+
+        updatedSections[sectionIndex] = updatedSections[sectionIndex].map(task => {
+          if (task.id === taskId) {
+            console.log(`[useTaskSubtasks] Updating task in section ${sectionIndex} - ID: ${taskId}. Original task:`, JSON.parse(JSON.stringify(task)));
+            const newTaskData = {
+              ...task,
+              selectedOption,
+              textValue: textValue !== undefined ? textValue : task.textValue,
+              textValues: textValues !== undefined ? textValues : task.textValues,
+              supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
+              status: selectedOption ? 'completed' as SubTaskStatus : task.status
+            };
+            console.log(`[useTaskSubtasks] New task data for section ${sectionIndex} - ID: ${taskId}:`, JSON.parse(JSON.stringify(newTaskData)));
+            return newTaskData;
+          }
+          return task;
+        });
+        console.log(`[useTaskSubtasks] Fully updated section ${sectionIndex} tasks:`, JSON.parse(JSON.stringify(updatedSections[sectionIndex])));
         setTask3Sections(updatedSections);
         return;
       }
@@ -295,18 +305,24 @@ export function useTaskSubtasks() {
         );
         setTask2SubTasks(updated);
       } else if (taskSet === 'task3') {
-        updated = task3SubTasks.map(task => 
-          task.id === taskId 
-            ? { 
-                ...task, 
-                selectedOption, 
-                textValue: textValue !== undefined ? textValue : task.textValue,
-                textValues: textValues !== undefined ? textValues : task.textValues,
-                supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
-                status: selectedOption ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
-              } 
-            : task
-        );
+        console.log('[useTaskSubtasks] Original task3SubTasks:', JSON.parse(JSON.stringify(task3SubTasks)));
+        updated = task3SubTasks.map(task => {
+          if (task.id === taskId) {
+            console.log(`[useTaskSubtasks] Updating task in task3SubTasks - ID: ${taskId}. Original task:`, JSON.parse(JSON.stringify(task)));
+            const newTaskData = {
+              ...task,
+              selectedOption,
+              textValue: textValue !== undefined ? textValue : task.textValue,
+              textValues: textValues !== undefined ? textValues : task.textValues,
+              supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
+              status: selectedOption ? 'completed' as SubTaskStatus : task.status // Potential: if selectedOption is undefined, status doesn't change to pending
+            };
+            console.log(`[useTaskSubtasks] New task data for task3SubTasks - ID: ${taskId}:`, JSON.parse(JSON.stringify(newTaskData)));
+            return newTaskData;
+          }
+          return task;
+        });
+        console.log('[useTaskSubtasks] Fully updated task3SubTasks before setState:', JSON.parse(JSON.stringify(updated)));
         setTask3SubTasks(updated);
       } else if (taskSet === 'consensus1') {
         updated = consensusTask1.map(task => 
