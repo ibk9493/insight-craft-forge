@@ -1,7 +1,9 @@
-
 import { SubTask } from '@/components/dashboard/TaskCard';
 import { User } from '@/contexts/UserContext';
-import { Annotation } from '@/services/api';
+import { Annotation as ApiAnnotation } from '@/services/api';
+
+// Re-export Annotation type
+export type Annotation = ApiAnnotation;
 
 export interface AnnotationHandlersProps {
   task1SubTasks: SubTask[];

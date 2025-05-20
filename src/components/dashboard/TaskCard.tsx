@@ -231,8 +231,6 @@ const TaskCard: React.FC<TaskCardProps> = ({
     const newTextValues = [...currentSubTaskFields];
     newTextValues[index] = value;
 
-    console.log(`[TaskCard] handleMultilineChange for ${taskId}. Sending textValues:`, JSON.parse(JSON.stringify(newTextValues)));
-
     // Only call parent to update. The useEffect will handle local state sync from props.
     onSubTaskChange(
       taskId, 
@@ -250,8 +248,6 @@ const TaskCard: React.FC<TaskCardProps> = ({
       i === index ? { ...doc, [field]: value } : doc
     );
     
-    console.log(`[TaskCard] handleSupportingDocChange for ${taskId}. Sending supportingDocs:`, JSON.parse(JSON.stringify(newSupportingDocs)));
-
     // Only call parent to update. The useEffect will handle local state sync from props.
     onSubTaskChange(
       taskId,

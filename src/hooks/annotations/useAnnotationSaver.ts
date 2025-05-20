@@ -27,7 +27,6 @@ export function useAnnotationSaver({
 
   // Convert tasks to data format
   const convertTasksToData = (tasks: SubTask[], data: Record<string, any>) => {
-    console.log("[AnnotationSaver] convertTasksToData: Starting conversion. Incoming tasks:", JSON.parse(JSON.stringify(tasks)), "Initial data:", JSON.parse(JSON.stringify(data)));
     tasks.forEach(task => {
       // Always save the status if a selection was made (original condition)
       if (task.selectedOption) {
@@ -58,7 +57,6 @@ export function useAnnotationSaver({
         data[`${task.id}_data`] = task.supportingDocs;
       }
     });
-    console.log("[AnnotationSaver] convertTasksToData: Finished conversion. Final data:", JSON.parse(JSON.stringify(data)));
   };
 
   // Save annotation or consensus
@@ -107,12 +105,8 @@ export function useAnnotationSaver({
             return;
         }
         
-        console.log("[AnnotationSaver] Current tasks before conversion for detail view:", JSON.parse(JSON.stringify(currentTasks))); // Logging line 1
-        
         // Convert form data to API format
         convertTasksToData(currentTasks, taskData);
-        
-        console.log("[AnnotationSaver] Prepared taskData for API (detail view):", taskData); // Logging line 2 - simplified
         
         // Save annotation - force this to NOT use mock data
         const success = await saveAnnotation({
@@ -150,12 +144,8 @@ export function useAnnotationSaver({
             return;
         }
         
-        console.log("[AnnotationSaver] Current tasks before conversion for consensus view:", JSON.parse(JSON.stringify(currentTasks))); // Logging line 3
-
         // Convert form data to API format
         convertTasksToData(currentTasks, taskData);
-
-        console.log("[AnnotationSaver] Prepared taskData for API (consensus view):", taskData); // Logging line 4 - simplified
         
         // Save consensus annotation
         const success = await saveConsensusAnnotation({
@@ -198,13 +188,9 @@ export function useAnnotationSaver({
       // Prepare data based on current task
       let taskData: Record<string, any> = {};
       
-      console.log("[AnnotationSaver] SubTasks for override before conversion:", JSON.parse(JSON.stringify(subTasks))); // Logging line 5
-
       // Convert form data to API format
       convertTasksToData(subTasks, taskData);
       
-      console.log("[AnnotationSaver] Prepared taskData for override API:", taskData); // Logging line 6 - simplified
-
       // Add override metadata
       taskData._overridden_by_pod_lead = true;
       taskData._override_timestamp = new Date().toISOString();
