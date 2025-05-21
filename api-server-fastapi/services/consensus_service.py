@@ -17,6 +17,7 @@ def get_consensus(db: Session, discussion_id: str, task_id: int) -> Optional[sch
         return None
     
     return schemas.Annotation(
+        id=consensus.id,
         discussion_id=consensus.discussion_id,
         user_id="consensus",
         task_id=consensus.task_id,

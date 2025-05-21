@@ -256,6 +256,7 @@ export const api = {
         data: consensus.data
       };
       
+      console.log('[api.consensus.save] Sending to API:', JSON.stringify(apiConsensus)); // DEBUG LOG
       return safeApiRequest<Annotation>('/api/consensus', 'POST', apiConsensus, undefined, {} as Annotation);
     },
     calculate: (discussionId: string, taskId: number) => 

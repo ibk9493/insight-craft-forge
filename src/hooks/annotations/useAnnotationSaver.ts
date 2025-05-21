@@ -157,6 +157,8 @@ export function useAnnotationSaver({
           taskData.comment = consensusComment;
         }
         
+        console.log('[useAnnotationSaver] Saving consensus data:', JSON.stringify(taskData)); // DEBUG LOG
+
         // Save consensus annotation
         const success = await saveConsensusAnnotation({
           user_id: user.id,

@@ -1,6 +1,5 @@
-
 // This is the main annotation handlers hook that combines the other hooks
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { SubTask } from '@/components/dashboard/TaskCard';
 import { User } from '@/contexts/UserContext';
 import { Annotation } from '@/services/api';
@@ -62,15 +61,15 @@ export function useAnnotationHandlers({
   });
 
   // Wrapper for loadUserAnnotation to use current user by default
-  const loadUserAnnotation = (discussionId: string, taskId: number): SubTask[] | null => {
+  const loadUserAnnotation = useCallback((discussionId: string, taskId: number): SubTask[] | null => {
     if (!user) return null;
     return _loadUserAnnotation(discussionId, taskId, user.id);
-  };
+  }, [_loadUserAnnotation, user]);
 
   // Load specific annotator's annotation (for pod leads to view/edit)
-  const loadAnnotatorAnnotation = (discussionId: string, annotatorId: string, taskId: number): SubTask[] | null => {
+  const loadAnnotatorAnnotation = useCallback((discussionId: string, annotatorId: string, taskId: number): SubTask[] | null => {
     return _loadUserAnnotation(discussionId, taskId, annotatorId);
-  };
+  }, [_loadUserAnnotation]);
 
   // Combine loading states
   const loading = loaderLoading || saverLoading;
