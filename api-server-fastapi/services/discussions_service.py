@@ -450,7 +450,12 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
                     release_tag=disc.release_tag,
                     release_url=disc.release_url,
                     release_date=disc.release_date,
-                    batch_id=discussion_batch_id
+                    batch_id=discussion_batch_id,
+                    question=getattr(disc, 'question', None),
+                    answer=getattr(disc, 'answer', None),
+                    category=getattr(disc, 'category', None),
+                    knowledge=getattr(disc, 'knowledge', None),
+                    code=getattr(disc, 'code', None)
                 )
                 db.add(new_discussion)
                 db.flush()  # Flush to get the ID

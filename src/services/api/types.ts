@@ -19,6 +19,12 @@ export interface Discussion {
   releaseDate?: string;
   // Batch ID
   batchId?: number;
+  // New fields from test.json
+  question?: string;
+  answer?: string;
+  category?: string;
+  knowledge?: string;
+  code?: string;
 }
 
 export interface Annotation {
