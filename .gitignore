@@ -35,3 +35,4 @@ api-server-fastapi/env
 api-server-fastapi/lib
 api-server-fastapi/Scripts
 swe_qa.db*
+api-server-fastapi/swe_qa.db
