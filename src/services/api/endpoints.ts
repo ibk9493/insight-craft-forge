@@ -511,8 +511,49 @@ export const api = {
         totalTasksCompleted: 0
       });
     },
-    
-    downloadReport: (format: 'csv' | 'json' = 'csv') => {
+    downloadReportAsFile: async (format: 'json' | 'csv' = 'json') => {
+      console.log(`[Summary] Downloading ${format} report as file`);
+
+      try {
+        // Make a direct fetch request to get the file
+        const response = await fetch(`${formatApiUrl('/api/summary/report')}?format=${format}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to download report: ${response.statusText}`);
+        }
+
+        // Get the blob data
+        const blob = await response.blob();
+
+        // Create a download link
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+        // Set download attributes
+        a.href = url;
+        a.download = `annotation-report-${timestamp}.${format}`;
+        a.style.display = 'none';
+
+        // Trigger the download
+        document.body.appendChild(a);
+        a.click();
+
+        // Clean up
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+
+        return { success: true };
+      } catch (error) {
+        console.error(`[Summary] Error downloading ${format} report:`, error);
+        return { success: false, error: error.message };
+      }
+    },
+    downloadReport: (format: 'json' | 'csv' = 'json') => {
       console.log(`[Summary] Downloading report in ${format} format`);
       return safeApiRequest<{downloadUrl: string}>(`/api/summary/report?format=${format}`, 'GET', undefined, undefined, {
         downloadUrl: ''

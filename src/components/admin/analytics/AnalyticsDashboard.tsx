@@ -75,7 +75,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   };
 
   // Handle export
-  const handleExport = async (format: 'csv' | 'json') => {
+  const handleExport = async (format: 'csv' | 'json'='json') => {
     setIsExporting(true);
     
     try {
@@ -161,7 +161,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                 variant="outline" 
                 className="flex items-center gap-2"
                 disabled={isExporting}
-                onClick={() => handleExport('csv')}
+                onClick={() => handleExport('json')}
               >
                 <Download className="h-4 w-4" />
                 <span>{isExporting ? 'Exporting...' : 'Export'}</span>

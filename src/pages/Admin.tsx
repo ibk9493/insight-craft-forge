@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import {useToast} from '@/hooks/use-toast'
 import { useNavigate } from 'react-router-dom';
 import { TabsContainer, TabList, Tab, TabPanel } from '@/components/ui/tabs';
 import { useUser } from '@/contexts/UserContext';
@@ -26,6 +27,7 @@ const Admin = () => {
   const [activeTab, setActiveTab] = useState("analytics-dashboard");
   const [systemSummary, setSystemSummary] = useState<SystemSummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const { toast } = useToast();
   
   // Redirect if not authenticated or not admin/pod lead
   useEffect(() => {
@@ -62,14 +64,46 @@ const Admin = () => {
     // In a real app, we would refresh the discussions list
   };
 
-  const handleExportReport = async (format: 'csv' | 'json') => {
+  const handleExportReport = async (format: 'json' | 'csv' = 'json') => {
     try {
-      const { downloadUrl } = await api.summary.downloadReport(format);
-      if (downloadUrl) {
-        window.open(downloadUrl, '_blank');
+      toast({
+        title: "Preparing Report",
+        description: `Generating ${format.toUpperCase()} report...`,
+      });
+
+      // // First try the downloadReport function which returns a URL
+      // const result = await api.summary.downloadReport(format);
+      //
+      // if (result && result.downloadUrl) {
+      //   // If it returns a downloadUrl, use it
+      //   window.open(result.downloadUrl, '_blank');
+      //   toast({
+      //     title: "Report Ready",
+      //     description: `${format.toUpperCase()} report is ready to view.`,
+      //     variant: "default",
+      //   });
+      //   return;
+      // }
+
+      // If no URL is returned, use the direct file download method
+      const downloadResult = await api.summary.downloadReportAsFile(format);
+
+      if (downloadResult.success) {
+        toast({
+          title: "Download Complete",
+          description: `${format.toUpperCase()} report has been downloaded.`,
+          variant: "default",
+        });
+      } else {
+        throw new Error(downloadResult.error || 'Failed to download file');
       }
     } catch (err) {
       console.error('Error exporting report:', err);
+      toast({
+        title: "Export Failed",
+        description: `Failed to export ${format.toUpperCase()} report. Please try again.`,
+        variant: "destructive",
+      });
     }
   };
   
