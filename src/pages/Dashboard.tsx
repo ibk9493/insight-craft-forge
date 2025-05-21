@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Header from '@/components/layout/Header';
 import UrlInput from '@/components/dashboard/UrlInput';
 import TaskCard, { SubTask, SubTaskStatus } from '@/components/dashboard/TaskCard';
@@ -20,6 +20,7 @@ import { useAppDispatch } from '@/hooks';
 import { openModal } from '@/store/discussionModalSlice';
 import { toast } from 'sonner';
 import { MOCK_USERS_DATA } from '@/contexts/UserContext';
+import { api } from '@/services/api';
 import { Textarea } from '@/components/ui/textarea';
 
 const Dashboard = () => {
@@ -111,13 +112,50 @@ const Dashboard = () => {
     updateStepCompletionStatus,
     overrideAnnotation: undefined
   });
-
+  const userCache = useRef<{[userId: string]: string}>({});
   // Helper function to get user email by ID
-  const getUserEmailById = (userId: string): string => {
-    const user = MOCK_USERS_DATA.find(u => u.id === userId);
-    return user ? user.username : 'Unknown User';
-  };
-
+ // Synchronous function that returns a string directly
+const getUserEmailById = useCallback((userId: string): string => {
+  if (!userId) {
+    return 'Unknown User';
+  }
+  
+  const userIdStr = String(userId);
+  
+  // First check in mock data for immediate response
+  const mockUser = MOCK_USERS_DATA.find(u => String(u.id) === userIdStr);
+  if (mockUser && mockUser.username) {
+    return mockUser.username;
+  }
+  
+  // If we have a cache of previously loaded users, check there
+  // This assumes you have some form of user cache in your app
+  const cachedUsers = userCache.current || {};
+  if (cachedUsers[userIdStr]) {
+    return cachedUsers[userIdStr];
+  }
+  
+  // Load in background for future use but return something now
+  // This won't affect the current render
+  setTimeout(() => {
+    api.users.getPublicUserInfo(userIdStr)
+      .then(userInfo => {
+        if (userInfo && userInfo.username) {
+          // Update cache for future use
+          userCache.current = {
+            ...userCache.current,
+            [userIdStr]: userInfo.username
+          };
+        }
+      })
+      .catch(error => {
+        console.warn(`Failed to load user info for ${userIdStr}:`, error);
+      });
+  }, 0);
+  
+  // Return a fallback immediately
+  return `User ${userIdStr}`;
+}, [api.users]);
   // Initialize data when task or discussion changes
   useEffect(() => {
     // Reset consensus feedback when relevant dependencies change
