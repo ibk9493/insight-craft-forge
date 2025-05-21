@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useUser } from '@/contexts/UserContext';
 import { api, Discussion, Annotation, ApiError, TaskStatus } from '@/services/api';
 import { toast } from 'sonner';
@@ -18,6 +19,7 @@ export function useAnnotationData() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [annotationsLoaded, setAnnotationsLoaded] = useState<boolean>(false);
+  const [searchParams] = useSearchParams();
 
   // Fetch discussions
   useEffect(() => {
@@ -51,34 +53,42 @@ export function useAnnotationData() {
 
   // Fetch annotations - improved error handling and logging
   useEffect(() => {
-    const fetchAnnotationsForSpecificDiscussion = async () => {
-      const specificDiscussionId = "marimo-team_marimo_3256"; // HARDCODED for testing
+    const discussionIdFromUrl = searchParams.get('discussionId');
+
+    const fetchAnnotationsForDiscussion = async () => {
+      if (!discussionIdFromUrl) {
+        console.log("[Debug] No discussionId in URL, skipping annotation fetch.");
+        setAnnotations([]);
+        setAnnotationsLoaded(true);
+        return;
+      }
+
       try {
         setLoading(true);
-        console.log(`[Debug] Fetching annotations ONLY for discussion: ${specificDiscussionId}`);
+        console.log(`[Debug] Fetching annotations for discussion from URL: ${discussionIdFromUrl}`);
         
-        const fetchedAnnotations = await api.annotations.getByDiscussionId(specificDiscussionId);
+        const fetchedAnnotations = await api.annotations.getByDiscussionId(discussionIdFromUrl);
         
         if (fetchedAnnotations) {
-          console.log(`[Debug] Fetched ${fetchedAnnotations.length} annotations for ${specificDiscussionId}:`, JSON.stringify(fetchedAnnotations, null, 2));
+          console.log(`[Debug] Fetched ${fetchedAnnotations.length} annotations for ${discussionIdFromUrl}:`, JSON.stringify(fetchedAnnotations, null, 2));
           
           const validAnnotations = fetchedAnnotations.filter(a => 
             a && a.discussion_id && a.user_id && a.task_id !== undefined
           );
 
           if (validAnnotations.length !== fetchedAnnotations.length) {
-            console.warn(`[Debug] Filtered out ${fetchedAnnotations.length - validAnnotations.length} invalid annotations from specific fetch.`);
+            console.warn(`[Debug] Filtered out ${fetchedAnnotations.length - validAnnotations.length} invalid annotations from fetch for ${discussionIdFromUrl}.`);
           }
           setAnnotations(validAnnotations);
         } else {
-          console.warn(`[Debug] No annotations returned from API for specific discussion ${specificDiscussionId}`);
+          console.warn(`[Debug] No annotations returned from API for discussion ${discussionIdFromUrl}`);
           setAnnotations([]);
         }
         setAnnotationsLoaded(true);
         setError(null);
       } catch (err) {
-        const errorMessage = (err as ApiError).message || `Failed to fetch annotations for ${specificDiscussionId}`;
-        console.error(`[Debug] Error fetching annotations for ${specificDiscussionId}:`, errorMessage);
+        const errorMessage = (err as ApiError).message || `Failed to fetch annotations for ${discussionIdFromUrl}`;
+        console.error(`[Debug] Error fetching annotations for ${discussionIdFromUrl}:`, errorMessage);
         toast.error(errorMessage);
         setAnnotations([]); // Set empty on error
       } finally {
@@ -86,87 +96,8 @@ export function useAnnotationData() {
       }
     };
 
-    // We run this test fetch if discussions have loaded (or skip that check for direct test)
-    // For this test, let's run it directly if you have at least one discussion or want to force it.
-    // If your `discussions` state might be empty initially, you might need to ensure `api.annotations.getByDiscussionId` can be called.
-    // For now, assuming it's okay to call, or that `discussions` will eventually populate.
-    // Let's tie it to discussions.length > 0 for safety, or remove this condition if testing independently.
-    if (discussions.length > 0) { // Or simply call `fetchAnnotationsForSpecificDiscussion()` if you want to test it without waiting for all discussions to load.
-        fetchAnnotationsForSpecificDiscussion();
-    } else if (discussions.length === 0 && !loading) { // If discussions is empty and we are not loading discussions already
-        // This case might indicate that we want to fetch for a specific ID even if the main discussion list is empty or hasn't loaded
-        // For this debug, let's assume if discussions array is empty, we still try to fetch for the specific ID once after initial discussion load attempt. 
-        // This logic might need refinement based on how your app initializes.
-        // Consider if this should run once unconditionally for the test.
-        console.log("[Debug] Discussions array is empty, attempting test fetch for specific ID anyway after initial load cycle.");
-        // To ensure it runs after the initial discussion fetch attempt (even if it yields empty), 
-        // a more robust way might involve a separate flag or a small timeout, but let's try this first.
-        // fetchAnnotationsForSpecificDiscussion(); // Potentially call here if you want it to run even if discussions array remains empty. 
-                                              // For now, the `if (discussions.length > 0)` handles it after discussions are populated.
-        // If `discussions.length > 0` is too restrictive for testing, you can call fetchAnnotationsForSpecificDiscussion() unconditionally once.
-        // Example: Call it once using a flag that's set after the first run. 
-    }
-
-    // Original fetch logic commented out for this test:
-    /*
-    const fetchAnnotations = async () => {
-      try {
-        if (discussions.length === 0) {
-          setAnnotations([]);
-          return;
-        }
-        
-        setLoading(true);
-        console.log('Fetching annotations for discussions...');
-        
-        const promises = discussions.map(discussion => 
-          api.annotations.getByDiscussionId(discussion.id)
-        );
-        
-        const results = await Promise.allSettled(promises);
-        
-        results.forEach((result, index) => {
-          if (result.status === 'rejected') {
-            console.error(`Failed to fetch annotations for discussion ${discussions[index].id}:`, result.reason);
-          }
-        });
-        
-        const data = results
-          .filter((result): result is PromiseFulfilledResult<Annotation[]> => 
-            result.status === 'fulfilled'
-          )
-          .flatMap(result => result.value || []);
-        
-        console.log(`Successfully fetched ${data.length} annotations across ${discussions.length} discussions`);
-        
-        const validAnnotations = data.filter(a => 
-          a && a.discussion_id && a.user_id && a.task_id !== undefined
-        );
-        
-        if (validAnnotations.length !== data.length) {
-          console.warn(`Filtered out ${data.length - validAnnotations.length} invalid annotations`);
-        }
-        
-        setAnnotations(validAnnotations);
-        setAnnotationsLoaded(true);
-        setError(null);
-      } catch (err) {
-        const errorMessage = (err as ApiError).message || 'Failed to fetch annotations';
-        console.error('Error fetching annotations:', errorMessage);
-        toast.error(`Failed to fetch some annotations. User status might be incomplete.`);
-        setAnnotations([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (discussions.length > 0) {
-      fetchAnnotations();
-    } else {
-      setAnnotations([]);
-    }
-    */
-  }, [discussions]); // MODIFIED: Removed loading from dependency array to prevent infinite loop
+    fetchAnnotationsForDiscussion();
+  }, [searchParams]);
 
   // Enhanced getUserAnnotationStatus function with better error handling
   const getUserAnnotationStatus = useCallback((discussionId: string, userId: string): UserAnnotationStatus => {
