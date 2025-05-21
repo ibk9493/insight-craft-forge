@@ -12,17 +12,18 @@ export const fetchDiscussions = async (): Promise<Discussion[]> => {
 };
 
 // Helper function to format GitHub discussions for API compatibility
+// Update formatGitHubDiscussion in endpoints.ts
 const formatGitHubDiscussion = (discussion: GitHubDiscussion): any => {
   // Create a new object to map camelCase to snake_case for API compatibility
   const apiFormatted: any = {
     url: discussion.url,
   };
-  
+
   // Map camelCase to snake_case fields
   if (discussion.id) apiFormatted.id = discussion.id;
   if (discussion.title) apiFormatted.title = discussion.title;
   if (discussion.repository) apiFormatted.repository = discussion.repository;
-  
+
   // Ensure created_at is in ISO format
   if (discussion.createdAt) {
     apiFormatted.created_at = new Date(discussion.createdAt).toISOString();
@@ -30,46 +31,55 @@ const formatGitHubDiscussion = (discussion: GitHubDiscussion): any => {
     // Fallback to current date if no date is provided
     apiFormatted.created_at = new Date().toISOString();
   }
-  
+
   // Handle repository information
   if (!discussion.repository && discussion.url) {
     apiFormatted.repository = extractRepositoryFromUrl(discussion.url);
   }
-  
+
   // Ensure we have a title
   if (!apiFormatted.title && discussion.title) {
     // Extract first line from question as title
     const firstLine = discussion.title.split('\n')[0].trim();
     apiFormatted.title = firstLine.substring(0, 120); // Limit title length
   }
-  
+
+  // Handle new fields
+  if (discussion.question) apiFormatted.question = discussion.question;
+  if (discussion.answer) apiFormatted.answer = discussion.answer;
+  if (discussion.category) apiFormatted.category = discussion.category;
+  if (discussion.knowledge) apiFormatted.knowledge = discussion.knowledge;
+  if (discussion.code) apiFormatted.code = discussion.code;
+
   // Convert metadata fields to snake_case
   if (discussion.repositoryLanguage) {
     apiFormatted.repository_language = discussion.repositoryLanguage;
+  } else if (discussion.lang) {
+    apiFormatted.repository_language = discussion.lang;
   }
-  
+
   if (discussion.releaseTag) {
     apiFormatted.release_tag = discussion.releaseTag;
   }
-  
+
   if (discussion.releaseUrl) {
     apiFormatted.release_url = discussion.releaseUrl;
   }
-  
+
   if (discussion.releaseDate) {
     apiFormatted.release_date = discussion.releaseDate;
   }
-  
+
   // Handle tasks if present
   if (discussion.tasks) {
     apiFormatted.tasks = discussion.tasks;
   }
-  
+
   // Handle batch ID if present
   if (discussion.batchId) {
     apiFormatted.batch_id = discussion.batchId;
   }
-  
+
   return apiFormatted;
 };
 

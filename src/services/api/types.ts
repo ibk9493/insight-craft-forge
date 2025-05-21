@@ -100,20 +100,26 @@ export interface GitHubDiscussionTasks {
   task3?: GitHubDiscussionTaskState;
 }
 
+// Update GitHubDiscussion in types.ts
 export interface GitHubDiscussion {
-  id?: string;  // Optional, will be generated if not provided
-  title?: string;  // Optional, will be generated if not provided
+  id?: string;
+  title?: string;
   url: string;
   repository?: string;
   createdAt: string;
-  // Metadata fields
   repositoryLanguage?: string;
   releaseTag?: string;
   releaseUrl?: string;
   releaseDate?: string;
-  tasks?: GitHubDiscussionTasks;
-  // Batch ID
+  tasks?: Record<string, any>;
   batchId?: number;
+  // New fields
+  question?: string;
+  answer?: string;
+  category?: string;
+  knowledge?: string;
+  code?: string;
+  lang?: string;  // Alternative to repositoryLanguage
 }
 
 // System summary types

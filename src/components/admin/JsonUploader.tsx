@@ -32,16 +32,16 @@ const JsonUploader: React.FC = () => {
       url: disc.url,
       createdAt: ''
     };
-    
+
     // Handle ID
     if (disc.id) normalized.id = disc.id;
-    
+
     // Handle title
     if (disc.title) normalized.title = disc.title;
-    
+
     // Handle repository
     if (disc.repository) normalized.repository = disc.repository;
-    
+
     // Convert date fields
     if (disc.createdAt) {
       normalized.createdAt = disc.createdAt;
@@ -50,7 +50,7 @@ const JsonUploader: React.FC = () => {
     } else {
       normalized.createdAt = new Date().toISOString();
     }
-    
+
     // Try to ensure date format is ISO
     try {
       normalized.createdAt = new Date(normalized.createdAt).toISOString();
@@ -58,34 +58,42 @@ const JsonUploader: React.FC = () => {
       console.warn(`[JsonUploader] Invalid date format for discussion: ${normalized.id || 'unknown'}`);
       normalized.createdAt = new Date().toISOString(); // Fallback
     }
-    
+
     // Handle repository language
     if (disc.repositoryLanguage) normalized.repositoryLanguage = disc.repositoryLanguage;
     else if (disc.repository_language) normalized.repositoryLanguage = disc.repository_language;
     else if (disc.lang) normalized.repositoryLanguage = disc.lang;
-    
+
     // Handle release info
     if (disc.releaseTag) normalized.releaseTag = disc.releaseTag;
     else if (disc.release_tag) normalized.releaseTag = disc.release_tag;
-    
+
     if (disc.releaseUrl) normalized.releaseUrl = disc.releaseUrl;
     else if (disc.release_url) normalized.releaseUrl = disc.release_url;
-    
+
     if (disc.releaseDate) normalized.releaseDate = disc.releaseDate;
     else if (disc.release_date) normalized.releaseDate = disc.release_date;
-    
+
     // Extract repository from URL if not provided
     if (!normalized.repository && normalized.url) {
       normalized.repository = extractRepositoryFromUrl(normalized.url);
     }
-    
+
     // Handle tasks if present
     if (disc.tasks) normalized.tasks = disc.tasks;
-    
+
     // Handle batch ID if present
     if (disc.batchId) normalized.batchId = disc.batchId;
     else if (disc.batch_id) normalized.batchId = disc.batch_id;
-    
+
+    // New fields from test.json
+    if (disc.question) normalized.question = disc.question;
+    if (disc.answer) normalized.answer = disc.answer;
+    if (disc.category) normalized.category = disc.category;
+    if (disc.knowledge) normalized.knowledge = disc.knowledge;
+    if (disc.code) normalized.code = disc.code;
+    if (disc.lang && !normalized.repositoryLanguage) normalized.repositoryLanguage = disc.lang;
+
     return normalized;
   };
 
@@ -548,61 +556,86 @@ const JsonUploader: React.FC = () => {
               )}
               
               {/* Preview section */}
+              {/* Preview section */}
               {parsedData && parsedData.length > 0 && (
-                <div className="border rounded-md p-3">
-                  <p className="font-medium mb-2">Preview (first 3 items):</p>
-                  <div className="max-h-40 overflow-y-auto space-y-2">
-                    {parsedData.slice(0, 3).map((item, index) => (
-                      <div key={index} className="bg-gray-50 p-2 rounded-md text-sm">
-                        <div><strong>ID:</strong> {item.id || 'Auto-generated'}</div>
-                        <div><strong>Title:</strong> {item.title || 'Auto-generated'}</div>
-                        <div><strong>Repository:</strong> {item.repository || extractRepositoryFromUrl(item.url)}</div>
-                        <div className="truncate"><strong>URL:</strong> {item.url}</div>
-                        <div><strong>Created At:</strong> {item.createdAt || 'Auto-generated'}</div>
-                        
-                        {/* Show enhanced metadata if available */}
-                        {(item.releaseTag || item.repositoryLanguage || item.releaseDate) && (
-                          <div className="mt-1 pt-1 border-t border-gray-200">
-                            {item.releaseTag && (
-                              <div className="flex items-center text-xs text-gray-600">
-                                <Tag className="w-3 h-3 mr-1" />
-                                <span>Release: {item.releaseTag}</span>
-                              </div>
+                  <div className="border rounded-md p-3">
+                    <p className="font-medium mb-2">Preview (first 3 items):</p>
+                    <div className="max-h-60 overflow-y-auto space-y-2">
+                      {parsedData.slice(0, 3).map((item, index) => (
+                          <div key={index} className="bg-gray-50 p-2 rounded-md text-sm">
+                            <div><strong>ID:</strong> {item.id || 'Auto-generated'}</div>
+                            <div><strong>Title:</strong> {item.title || 'Auto-generated'}</div>
+                            <div><strong>Repository:</strong> {item.repository || extractRepositoryFromUrl(item.url)}</div>
+                            <div className="truncate"><strong>URL:</strong> {item.url}</div>
+                            <div><strong>Created At:</strong> {item.createdAt || 'Auto-generated'}</div>
+
+                            {/* Show question preview if available */}
+                            {item.question && (
+                                <div className="mt-1">
+                                  <strong>Question:</strong>
+                                  <div className="bg-gray-100 p-1 rounded max-h-16 overflow-y-auto text-xs">
+                                    {item.question.substring(0, 150)}{item.question.length > 150 ? '...' : ''}
+                                  </div>
+                                </div>
                             )}
-                            {item.repositoryLanguage && (
-                              <div className="flex items-center text-xs text-gray-600">
-                                <Code className="w-3 h-3 mr-1" />
-                                <span>Language: {item.repositoryLanguage}</span>
-                              </div>
+
+                            {/* Show answer preview if available */}
+                            {item.answer && (
+                                <div className="mt-1">
+                                  <strong>Answer:</strong>
+                                  <div className="bg-gray-100 p-1 rounded max-h-16 overflow-y-auto text-xs">
+                                    {item.answer.substring(0, 150)}{item.answer.length > 150 ? '...' : ''}
+                                  </div>
+                                </div>
                             )}
-                            {item.releaseDate && (
-                              <div className="flex items-center text-xs text-gray-600">
-                                <Calendar className="w-3 h-3 mr-1" />
-                                <span>Release Date: {new Date(item.releaseDate).toLocaleDateString()}</span>
+
+                            {/* Show enhanced metadata if available */}
+                            <div className="mt-1 pt-1 border-t border-gray-200">
+                              {item.releaseTag && (
+                                  <div className="flex items-center text-xs text-gray-600">
+                                    <Tag className="w-3 h-3 mr-1" />
+                                    <span>Release: {item.releaseTag}</span>
+                                  </div>
+                              )}
+                              {(item.repositoryLanguage || item.lang) && (
+                                  <div className="flex items-center text-xs text-gray-600">
+                                    <Code className="w-3 h-3 mr-1" />
+                                    <span>Language: {item.repositoryLanguage || item.lang}</span>
+                                  </div>
+                              )}
+                              {item.releaseDate && (
+                                  <div className="flex items-center text-xs text-gray-600">
+                                    <Calendar className="w-3 h-3 mr-1" />
+                                    <span>Release Date: {new Date(item.releaseDate).toLocaleDateString()}</span>
+                                  </div>
+                              )}
+                              {item.category && (
+                                  <div className="flex items-center text-xs text-gray-600">
+                                    <Tag className="w-3 h-3 mr-1" />
+                                    <span>Category: {item.category}</span>
+                                  </div>
+                              )}
+                            </div>
+
+                            {/* Show task statuses */}
+                            <div className="mt-1 pt-1 border-t border-gray-200">
+                              <div className="text-xs text-gray-600">
+                                <span className="font-medium">Task 1:</span> {item.tasks?.task1?.status || 'unlocked'}
                               </div>
-                            )}
+                              <div className="text-xs text-gray-600">
+                                <span className="font-medium">Task 2:</span> {item.tasks?.task2?.status || 'locked'}
+                              </div>
+                              <div className="text-xs text-gray-600">
+                                <span className="font-medium">Task 3:</span> {item.tasks?.task3?.status || 'locked'}
+                              </div>
+                            </div>
                           </div>
-                        )}
-                        
-                        {/* Show task statuses */}
-                        <div className="mt-1 pt-1 border-t border-gray-200">
-                          <div className="text-xs text-gray-600">
-                            <span className="font-medium">Task 1:</span> {item.tasks?.task1?.status || 'unlocked'}
-                          </div>
-                          <div className="text-xs text-gray-600">
-                            <span className="font-medium">Task 2:</span> {item.tasks?.task2?.status || 'locked'}
-                          </div>
-                          <div className="text-xs text-gray-600">
-                            <span className="font-medium">Task 3:</span> {item.tasks?.task3?.status || 'locked'}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    {parsedData.length > 3 && (
-                      <p className="text-sm text-gray-500">...and {parsedData.length - 3} more</p>
-                    )}
+                      ))}
+                      {parsedData.length > 3 && (
+                          <p className="text-sm text-gray-500">...and {parsedData.length - 3} more</p>
+                      )}
+                    </div>
                   </div>
-                </div>
               )}
               
               {isUploading && (
