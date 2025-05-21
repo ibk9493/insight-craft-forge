@@ -19,6 +19,7 @@ export const MOCK_USERS_DATA: User[] = [
   { id: '1', username: 'user1@example.com', role: 'annotator', password: 'password123' },
   { id: '2', username: 'user2@example.com', role: 'pod_lead', password: 'password456' },
   { id: '3', username: 'admin@example.com', role: 'admin', password: 'adminpassword' },
+  { id: '4', username: 'podlead@example.com', role: 'pod_lead', password: 'podleadpassword' },
 ];
 
 // Define the AuthorizedUser interface

@@ -6,7 +6,7 @@ export interface Discussion {
   title: string;
   url: string;
   repository: string;
-  createdAt: string;
+  created_at: string;
   tasks: {
     task1: TaskState;
     task2: TaskState;

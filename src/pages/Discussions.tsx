@@ -121,11 +121,18 @@ const Discussions = () => {
     const params = new URLSearchParams(location.search);
     const filter = params.get('filter');
     const search = params.get('search');
-    const myAnnotations = params.get('mine') === 'true';
+    const userIdFromParams = params.get('user_id');
+    const myAnnotations = userIdFromParams === (user?.id?.toString() || ''); // Check against current user's ID
     const lang = params.get('lang')?.split(',').filter(Boolean) || [];
     const tag = params.get('tag')?.split(',').filter(Boolean) || [];
-    const from = params.get('from');
-    const to = params.get('to');
+    const fromParam = params.get('from_date'); // Changed 'from' to 'from_date'
+    const toParam = params.get('to_date');     // Changed 'to' to 'to_date'
+    console.log('[URL PARSE] from_date param:', fromParam, ', to_date param:', toParam);
+
+    const fromDateObj = fromParam ? new Date(fromParam) : undefined;
+    const toDateObj = toParam ? new Date(toParam) : undefined;
+    console.log('[URL PARSE] fromDateObj:', fromDateObj?.toISOString(), ', toDateObj:', toDateObj?.toISOString());
+    
     const batch = params.get('batch');
     
     setFilterValues({
@@ -133,15 +140,15 @@ const Discussions = () => {
       showMyAnnotations: myAnnotations,
       repositoryLanguage: lang,
       releaseTag: tag,
-      fromDate: from ? new Date(from) : undefined,
-      toDate: to ? new Date(to) : undefined,
+      fromDate: fromDateObj,
+      toDate: toDateObj,
       batchId: batch || ''
     });
     
     if (search) setSearchQuery(search);
     
     setIsMounted(true);
-  }, [location.search]);
+  }, [location.search, user?.id]);
   
   // Update URL when filters change
   useEffect(() => {
@@ -376,48 +383,85 @@ useEffect(() => {
   // Filter by date range - match with 'from_date' and 'to_date' parameters
   if (filterValues.fromDate instanceof Date) {
     const beforeCount = filtered.length;
+    console.log('[FILTER APPLY] filterValues.fromDate:', filterValues.fromDate.toISOString());
     
-    // Set fromDate to beginning of day for consistent comparison
-    const fromDate = new Date(filterValues.fromDate);
-    fromDate.setHours(0, 0, 0, 0);
+    const fromDateFilter = new Date(filterValues.fromDate); // This is YYYY-MM-DDT00:00:00.000Z
+    console.log('[FILTER APPLY] Initial fromDateFilter:', fromDateFilter.toISOString());
     
+    let discussionsChecked = 0;
     filtered = filtered.filter(discussion => {
-      if (!discussion.createdAt) return false;
+      discussionsChecked++;
+      if (!discussion.created_at) {
+        if (discussionsChecked <= 5) { // Log for first 5 checked
+          console.log(`[FROM DATE FILTER] Discussion ${discussion.id} skipped, created_at is:`, discussion.created_at);
+        }
+        return false;
+      }
       
       try {
-        // Parse discussion date safely
-        const discussionDate = new Date(discussion.createdAt);
-        return discussionDate >= fromDate;
+        const discussionDate = new Date(discussion.created_at);
+        if (isNaN(discussionDate.getTime())) {
+          if (discussionsChecked <= 5) { // Log for first 5 checked
+            console.log(`[FROM DATE FILTER] Discussion ${discussion.id} skipped, created_at "${discussion.created_at}" resulted in Invalid Date.`);
+          }
+          return false;
+        }
+
+        const comparison = discussionDate >= fromDateFilter;
+        console.log(`[FROM DATE FILTER CMP] DiscID: ${discussion.id}, Created: ${discussion.created_at}, Parsed: ${discussionDate.toISOString()}, FilterStart: ${fromDateFilter.toISOString()}, Passed: ${comparison}`);
+        return comparison;
       } catch (e) {
-        console.error(`Error parsing date: ${discussion.createdAt}`, e);
+        if (discussionsChecked <= 5) { // Log for first 5 checked
+           console.error(`[FROM DATE FILTER ERROR] Discussion ${discussion.id}, created_at "${discussion.created_at}", Error:`, e);
+        }
         return false;
       }
     });
-    
-    console.log(`From date filter (${fromDate.toISOString()}) reduced from ${beforeCount} to ${filtered.length} discussions`);
+    console.log(`[FROM DATE FILTER] Total discussions checked by fromDate filter: ${discussionsChecked}`);
+    console.log(`From date filter (${fromDateFilter.toISOString()}) reduced from ${beforeCount} to ${filtered.length} discussions`);
   }
   
   if (filterValues.toDate instanceof Date) {
     const beforeCount = filtered.length;
+    console.log('[FILTER APPLY] filterValues.toDate:', filterValues.toDate.toISOString());
     
-    // Set toDate to end of day for consistent comparison
-    const toDate = new Date(filterValues.toDate);
-    toDate.setHours(23, 59, 59, 999);
+    const toDateFilterEnd = new Date(filterValues.toDate); // This is YYYY-MM-DDT00:00:00.000Z
+    console.log('[FILTER APPLY] Initial toDateFilterEnd:', toDateFilterEnd.toISOString());
+    toDateFilterEnd.setUTCHours(23, 59, 59, 999); // Set to end of day in UTC
+    console.log('[FILTER APPLY] Adjusted toDateFilterEnd (UTC end of day):', toDateFilterEnd.toISOString());
     
+    let discussionsChecked = 0;
     filtered = filtered.filter(discussion => {
-      if (!discussion.createdAt) return false;
+      discussionsChecked++;
+      if (!discussion.created_at) {
+        if (discussionsChecked <= 5) { // Log for first 5 checked
+          console.log(`[TO DATE FILTER] Discussion ${discussion.id} skipped, created_at is:`, discussion.created_at);
+        }
+        return false;
+      }
       
       try {
-        // Parse discussion date safely
-        const discussionDate = new Date(discussion.createdAt);
-        return discussionDate <= toDate;
+        const discussionDate = new Date(discussion.created_at);
+        // Check if discussionDate is valid
+        if (isNaN(discussionDate.getTime())) {
+          if (discussionsChecked <= 5) { // Log for first 5 checked
+            console.log(`[TO DATE FILTER] Discussion ${discussion.id} skipped, created_at "${discussion.created_at}" resulted in Invalid Date.`);
+          }
+          return false;
+        }
+
+        const comparison = discussionDate <= toDateFilterEnd;
+        console.log(`[TO DATE FILTER CMP] DiscID: ${discussion.id}, Created: ${discussion.created_at}, Parsed: ${discussionDate.toISOString()}, FilterEnd: ${toDateFilterEnd.toISOString()}, Passed: ${comparison}`);
+        return comparison;
       } catch (e) {
-        console.error(`Error parsing date: ${discussion.createdAt}`, e);
+        if (discussionsChecked <= 5) { // Log for first 5 checked
+           console.error(`[TO DATE FILTER ERROR] Discussion ${discussion.id}, created_at "${discussion.created_at}", Error:`, e);
+        }
         return false;
       }
     });
-    
-    console.log(`To date filter (${toDate.toISOString()}) reduced from ${beforeCount} to ${filtered.length} discussions`);
+    console.log(`[TO DATE FILTER] Total discussions checked by toDate filter: ${discussionsChecked}`);
+    console.log(`To date filter (${toDateFilterEnd.toISOString()}) reduced from ${beforeCount} to ${filtered.length} discussions`);
   }
   
   // Filter by batch ID - match with 'batch_id' parameter
@@ -520,6 +564,11 @@ useEffect(() => {
   };
 
   const handleFilterChange = (newFilters: FilterValues) => {
+    console.log('[HANDLE FILTER CHANGE] Received newFilters:', {
+      ...newFilters,
+      fromDate: newFilters.fromDate?.toISOString(),
+      toDate: newFilters.toDate?.toISOString(),
+    });
     setFilterValues(newFilters);
   };
 
@@ -845,10 +894,10 @@ const startTask = useCallback((discussionId: string, taskNumber: number) => {
                         </Badge>
                       )}
                       
-                      {discussion.createdAt && (
+                      {discussion.created_at && (
                         <Badge variant="outline" className="flex items-center gap-1 bg-gray-100">
                           <Calendar className="h-3.5 w-3.5" />
-                          <span>{new Date(discussion.createdAt).toLocaleDateString()}</span>
+                          <span>{new Date(discussion.created_at).toLocaleDateString()}</span>
                         </Badge>
                       )}
                       
