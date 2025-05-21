@@ -83,14 +83,14 @@ const Discussions = () => {
       // Extract unique languages
       const languages = Array.from(new Set(
         discussions
-          .map(d => d.repositoryLanguage)
+          .map(d => d.repository_language)
           .filter(Boolean) as string[]
       ));
       
       // Extract unique tags
       const tags = Array.from(new Set(
         discussions
-          .map(d => d.releaseTag)
+          .map(d => d.release_tag)
           .filter(Boolean) as string[]
       ));
       
@@ -123,17 +123,17 @@ const Discussions = () => {
     const search = params.get('search');
     const userIdFromParams = params.get('user_id');
     const myAnnotations = userIdFromParams === (user?.id?.toString() || ''); // Check against current user's ID
-    const lang = params.get('lang')?.split(',').filter(Boolean) || [];
+    const lang = params.get('repository_language')?.split(',').filter(Boolean) || [];
     const tag = params.get('tag')?.split(',').filter(Boolean) || [];
-    const fromParam = params.get('from_date'); // Changed 'from' to 'from_date'
-    const toParam = params.get('to_date');     // Changed 'to' to 'to_date'
+    const fromParam = params.get('from_date');
+    const toParam = params.get('to_date');
     console.log('[URL PARSE] from_date param:', fromParam, ', to_date param:', toParam);
 
     const fromDateObj = fromParam ? new Date(fromParam) : undefined;
     const toDateObj = toParam ? new Date(toParam) : undefined;
     console.log('[URL PARSE] fromDateObj:', fromDateObj?.toISOString(), ', toDateObj:', toDateObj?.toISOString());
     
-    const batch = params.get('batch');
+    const batch = params.get('batch_id');
     
     setFilterValues({
       status: filter || 'all',
@@ -353,11 +353,11 @@ useEffect(() => {
     const beforeCount = filtered.length;
     
     filtered = filtered.filter(discussion => {
-      if (!discussion.repositoryLanguage) return false;
+      if (!discussion.repository_language) return false;
       
       // Case-insensitive comparison
       return filterValues.repositoryLanguage.some(lang => 
-        discussion.repositoryLanguage?.toLowerCase() === lang.toLowerCase()
+        discussion.repository_language?.toLowerCase() === lang.toLowerCase()
       );
     });
     
@@ -369,11 +369,11 @@ useEffect(() => {
     const beforeCount = filtered.length;
     
     filtered = filtered.filter(discussion => {
-      if (!discussion.releaseTag) return false;
+      if (!discussion.release_tag) return false;
       
       // Case-insensitive comparison
       return filterValues.releaseTag.some(tag => 
-        discussion.releaseTag?.toLowerCase() === tag.toLowerCase()
+        discussion.release_tag?.toLowerCase() === tag.toLowerCase()
       );
     });
     
@@ -471,7 +471,7 @@ useEffect(() => {
     
     if (!isNaN(batchIdNum) && batchIdNum > 0) {
       filtered = filtered.filter(discussion => {
-        return discussion.batchId === batchIdNum;
+        return discussion.batch_id === batchIdNum;
       });
       
       console.log(`Batch ID filter for ${batchIdNum} reduced from ${beforeCount} to ${filtered.length} discussions`);
@@ -880,17 +880,17 @@ const startTask = useCallback((discussionId: string, taskNumber: number) => {
                       <span className="font-medium">URL:</span> {discussion.url}
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      {discussion.repositoryLanguage && (
+                      {discussion.repository_language && (
                         <Badge variant="outline" className="flex items-center gap-1">
                           <Code className="h-3.5 w-3.5" />
-                          <span>{discussion.repositoryLanguage}</span>
+                          <span>{discussion.repository_language}</span>
                         </Badge>
                       )}
                       
-                      {discussion.releaseTag && (
+                      {discussion.release_tag && (
                         <Badge variant="secondary" className="flex items-center gap-1">
                           <Tag className="h-3.5 w-3.5" />
-                          <span>{discussion.releaseTag}</span>
+                          <span>{discussion.release_tag}</span>
                         </Badge>
                       )}
                       
@@ -901,9 +901,9 @@ const startTask = useCallback((discussionId: string, taskNumber: number) => {
                         </Badge>
                       )}
                       
-                      {discussion.batchId !== undefined && (
+                      {discussion.batch_id !== undefined && (
                         <Badge variant="outline" className="flex items-center gap-1 bg-blue-50">
-                          <span>Batch: {availableBatches.find(b => b.id === discussion.batchId)?.name || discussion.batchId}</span>
+                          <span>Batch: {availableBatches.find(b => b.id === discussion.batch_id)?.name || discussion.batch_id}</span>
                         </Badge>
                       )}
                     </div>

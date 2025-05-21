@@ -13,12 +13,12 @@ export interface Discussion {
     task3: TaskState;
   };
   // Repository metadata fields
-  repositoryLanguage?: string;
-  releaseTag?: string;
-  releaseUrl?: string;
-  releaseDate?: string;
+  repository_language?: string;
+  release_tag?: string;
+  release_url?: string;
+  release_date?: string;
   // Batch ID
-  batchId?: number;
+  batch_id?: number;
   // New fields from test.json
   question?: string;
   answer?: string;
@@ -65,11 +65,11 @@ export interface BatchUpload {
 export interface DiscussionFilter {
   status?: TaskStatus;
   userId?: string;
-  repositoryLanguage?: string[];
-  releaseTag?: string[];
+  repository_language?: string[];
+  release_tag?: string[];
   fromDate?: string;
   toDate?: string;
-  batchId?: number;
+  batch_id?: number;
   searchTerm?: string;
 }
 
@@ -78,7 +78,7 @@ export interface UploadResult {
   success: boolean;
   message: string;
   discussionsAdded: number;
-  batchId?: number;
+  batch_id?: number;
   errors?: string[];
 }
 
@@ -91,7 +91,7 @@ export interface TaskManagementResult {
 export interface BatchManagementResult {
   success: boolean;
   message: string;
-  batchId?: number;
+  batch_id?: number;
 }
 
 // GitHub Discussion format from JSON upload
@@ -113,19 +113,19 @@ export interface GitHubDiscussion {
   url: string;
   repository?: string;
   createdAt: string;
-  repositoryLanguage?: string;
-  releaseTag?: string;
-  releaseUrl?: string;
-  releaseDate?: string;
+  repository_language?: string;
+  release_tag?: string;
+  release_url?: string;
+  release_date?: string;
   tasks?: Record<string, any>;
-  batchId?: number;
+  batch_id?: number;
   // New fields
   question?: string;
   answer?: string;
   category?: string;
   knowledge?: string;
   code?: string;
-  lang?: string;  // Alternative to repositoryLanguage
+  lang?: string;  // Alternative to repository_language
 }
 
 // System summary types
