@@ -20,19 +20,11 @@ import { useAppDispatch } from '@/hooks';
 import { openModal } from '@/store/discussionModalSlice';
 import { toast } from 'sonner';
 import { MOCK_USERS_DATA } from '@/contexts/UserContext';
-
-// Define a type for the feedback data
-interface AnnotationFeedbackData {
-  rating?: number;
-  comment?: string;
-}
-
-interface AnnotationFeedbackState {
-  [compositeAnnotationId: string]: AnnotationFeedbackData;
-}
+import { Textarea } from '@/components/ui/textarea';
 
 const Dashboard = () => {
-  const [annotationFeedback, setAnnotationFeedback] = useState<AnnotationFeedbackState>({});
+  const [consensusStars, setConsensusStars] = useState<number | null>(null);
+  const [consensusComment, setConsensusComment] = useState<string>('');
 
   // Use the dashboard state hook
   const {
@@ -128,6 +120,10 @@ const Dashboard = () => {
 
   // Initialize data when task or discussion changes
   useEffect(() => {
+    // Reset consensus feedback when relevant dependencies change
+    setConsensusStars(null);
+    setConsensusComment('');
+
     if (discussionId && user && currentStep > 0 && currentStep <= 3 && annotationsLoaded) {
       console.log(`Loading data for discussion: ${discussionId}, task: ${currentStep}, mode: ${viewMode}, annotationsLoaded: ${annotationsLoaded}`);
       
@@ -190,7 +186,10 @@ const Dashboard = () => {
       viewMode, 
       uploadedImage, 
       codeDownloadUrl, 
-      handleBackToGrid
+      handleBackToGrid,
+      // Pass consensus feedback if in consensus mode
+      viewMode === 'consensus' ? consensusStars : null,
+      viewMode === 'consensus' ? consensusComment : ''
     );
   };
 
@@ -287,26 +286,6 @@ const Dashboard = () => {
         return;
     }
     toast.success("Consensus form populated with selected annotation.");
-  };
-
-  const handleAnnotationRatingChange = (compositeAnnotationId: string, rating: number) => {
-    setAnnotationFeedback(prevFeedback => ({
-      ...prevFeedback,
-      [compositeAnnotationId]: {
-        ...prevFeedback[compositeAnnotationId],
-        rating
-      }
-    }));
-  };
-
-  const handleAnnotationCommentChange = (compositeAnnotationId: string, comment: string) => {
-    setAnnotationFeedback(prevFeedback => ({
-      ...prevFeedback,
-      [compositeAnnotationId]: {
-        ...prevFeedback[compositeAnnotationId],
-        comment
-      }
-    }));
   };
 
   return (
@@ -409,7 +388,7 @@ const Dashboard = () => {
               <>
                 <TaskCard
                   title="Task 1: Question Quality Consensus"
-                  description="Create a consensus based on annotator assessments."
+                  description="Create a consensus based on annotator assessments of question quality."
                   subTasks={consensusTask1}
                   status={getTask1Progress(true)}
                   onSubTaskChange={(taskId, selectedOption, textValue) => 
@@ -417,15 +396,44 @@ const Dashboard = () => {
                   }
                   active={true}
                 />
+                {/* Component for overall consensus rating and comment */}
+                <div className="mt-4 p-4 border rounded bg-gray-50">
+                  <h3 className="text-lg font-semibold mb-2">Overall Consensus Feedback</h3>
+                  <div className="mb-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Rating (1-5 stars):</label>
+                    <div className="flex space-x-1">
+                      {[1, 2, 3, 4, 5].map(star => (
+                        <Button
+                          key={star}
+                          variant={consensusStars === star ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setConsensusStars(star)}
+                        >
+                          {star}
+                        </Button>
+                      ))}
+                      {consensusStars && (
+                        <Button variant="ghost" size="sm" onClick={() => setConsensusStars(null)}>Clear</Button>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <label htmlFor="consensusCommentTask1" className="block text-sm font-medium text-gray-700 mb-1">Comment:</label>
+                    <Textarea
+                      id="consensusCommentTask1"
+                      value={consensusComment}
+                      onChange={(e) => setConsensusComment(e.target.value)}
+                      placeholder="Provide an overall comment for this consensus..."
+                      rows={3}
+                    />
+                  </div>
+                </div>
                 <AnnotatorView 
                   discussionId={discussionId || ""} 
                   currentStep={currentStep} 
                   getAnnotationsForTask={getAnnotationsForTask}
                   onUseForConsensus={handleUseAnnotationForConsensus}
                   getUserEmailById={getUserEmailById}
-                  annotationFeedback={annotationFeedback}
-                  onRatingChange={handleAnnotationRatingChange}
-                  onCommentChange={handleAnnotationCommentChange}
                 />
               </>
             )}
@@ -455,15 +463,44 @@ const Dashboard = () => {
                   }
                   active={true}
                 />
+                {/* Component for overall consensus rating and comment */}
+                <div className="mt-4 p-4 border rounded bg-gray-50">
+                  <h3 className="text-lg font-semibold mb-2">Overall Consensus Feedback</h3>
+                  <div className="mb-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Rating (1-5 stars):</label>
+                    <div className="flex space-x-1">
+                      {[1, 2, 3, 4, 5].map(star => (
+                        <Button
+                          key={star}
+                          variant={consensusStars === star ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setConsensusStars(star)}
+                        >
+                          {star}
+                        </Button>
+                      ))}
+                      {consensusStars && (
+                        <Button variant="ghost" size="sm" onClick={() => setConsensusStars(null)}>Clear</Button>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <label htmlFor="consensusComment" className="block text-sm font-medium text-gray-700 mb-1">Comment:</label>
+                    <Textarea
+                      id="consensusComment"
+                      value={consensusComment}
+                      onChange={(e) => setConsensusComment(e.target.value)}
+                      placeholder="Provide an overall comment for this consensus..."
+                      rows={3}
+                    />
+                  </div>
+                </div>
                 <AnnotatorView 
                   discussionId={discussionId || ""} 
                   currentStep={currentStep} 
                   getAnnotationsForTask={getAnnotationsForTask}
                   onUseForConsensus={handleUseAnnotationForConsensus}
                   getUserEmailById={getUserEmailById}
-                  annotationFeedback={annotationFeedback}
-                  onRatingChange={handleAnnotationRatingChange}
-                  onCommentChange={handleAnnotationCommentChange}
                 />
               </>
             )}
@@ -508,15 +545,44 @@ const Dashboard = () => {
                   }
                   active={true}
                 />
+                {/* Component for overall consensus rating and comment */}
+                <div className="mt-4 p-4 border rounded bg-gray-50">
+                  <h3 className="text-lg font-semibold mb-2">Overall Consensus Feedback</h3>
+                  <div className="mb-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Rating (1-5 stars):</label>
+                    <div className="flex space-x-1">
+                      {[1, 2, 3, 4, 5].map(star => (
+                        <Button
+                          key={star}
+                          variant={consensusStars === star ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setConsensusStars(star)}
+                        >
+                          {star}
+                        </Button>
+                      ))}
+                      {consensusStars && (
+                        <Button variant="ghost" size="sm" onClick={() => setConsensusStars(null)}>Clear</Button>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <label htmlFor="consensusCommentTask3" className="block text-sm font-medium text-gray-700 mb-1">Comment:</label>
+                    <Textarea
+                      id="consensusCommentTask3"
+                      value={consensusComment}
+                      onChange={(e) => setConsensusComment(e.target.value)}
+                      placeholder="Provide an overall comment for this consensus..."
+                      rows={3}
+                    />
+                  </div>
+                </div>
                 <AnnotatorView 
                   discussionId={discussionId || ""} 
                   currentStep={currentStep} 
                   getAnnotationsForTask={getAnnotationsForTask}
                   onUseForConsensus={handleUseAnnotationForConsensus}
                   getUserEmailById={getUserEmailById}
-                  annotationFeedback={annotationFeedback}
-                  onRatingChange={handleAnnotationRatingChange}
-                  onCommentChange={handleAnnotationCommentChange}
                 />
               </>
             )}

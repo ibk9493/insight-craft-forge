@@ -66,7 +66,9 @@ export function useAnnotationSaver({
     viewMode: 'grid' | 'detail' | 'consensus',
     uploadedImage: string | null,
     codeDownloadUrl: string | null,
-    onComplete: () => void
+    onComplete: () => void,
+    consensusStars?: number | null,
+    consensusComment?: string
   ) => {
     if (!discussionId || !user) {
       toast.error('Missing discussion ID or user information');
@@ -146,6 +148,14 @@ export function useAnnotationSaver({
         
         // Convert form data to API format
         convertTasksToData(currentTasks, taskData);
+        
+        // Add consensus stars and comment if provided
+        if (consensusStars !== undefined && consensusStars !== null) {
+          taskData.stars = consensusStars;
+        }
+        if (consensusComment && consensusComment.trim() !== '') {
+          taskData.comment = consensusComment;
+        }
         
         // Save consensus annotation
         const success = await saveConsensusAnnotation({

@@ -2,18 +2,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Annotation } from '@/services/api';
 import { Button } from '@/components/ui/button';
-import { Edit, Check, Star } from 'lucide-react';
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-
-interface AnnotationFeedbackData {
-  rating?: number;
-  comment?: string;
-}
-
-interface AnnotationFeedbackState {
-  [compositeAnnotationId: string]: AnnotationFeedbackData;
-}
+import { Edit, Check } from 'lucide-react';
 
 interface AnnotatorViewProps {
   discussionId: string;
@@ -21,9 +10,6 @@ interface AnnotatorViewProps {
   getAnnotationsForTask: (discussionId: string, taskId: number) => Annotation[];
   onUseForConsensus?: (annotation: Annotation) => void;
   getUserEmailById?: (userId: string) => string;
-  annotationFeedback?: AnnotationFeedbackState;
-  onRatingChange?: (compositeAnnotationId: string, rating: number) => void;
-  onCommentChange?: (compositeAnnotationId: string, comment: string) => void;
 }
 
 const formatKey = (key: string): string => {
@@ -55,9 +41,6 @@ const AnnotatorView: React.FC<AnnotatorViewProps> = ({
   getAnnotationsForTask,
   onUseForConsensus,
   getUserEmailById,
-  annotationFeedback,
-  onRatingChange,
-  onCommentChange
 }) => {
   if (!discussionId) return null;
   
@@ -83,9 +66,6 @@ const AnnotatorView: React.FC<AnnotatorViewProps> = ({
       <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
         {annotations.map((annotation, index) => {
           const compositeKey = `${annotation.user_id}-${annotation.task_id}`;
-          const currentFeedback = annotationFeedback?.[compositeKey] || {};
-          const rating = currentFeedback.rating || 0;
-          const comment = currentFeedback.comment || '';
 
           return (
             <Card key={compositeKey} className="text-sm flex flex-col">
@@ -122,37 +102,6 @@ const AnnotatorView: React.FC<AnnotatorViewProps> = ({
                         </div>
                       );
                     })}
-                </div>
-                
-                {/* Star Rating and Comment Section */}
-                <div className="mt-4 pt-3 border-t">
-                  <div className="mb-2">
-                    <Label htmlFor={`rating-${compositeKey}`} className="text-xs font-medium text-gray-600">Rate this annotation:</Label>
-                    <div className="flex items-center mt-1">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <Button 
-                          key={star} 
-                          variant="ghost" 
-                          size="icon" 
-                          className={`h-6 w-6 p-0 ${rating >= star ? 'text-yellow-400' : 'text-gray-300'}`}
-                          onClick={() => onRatingChange?.(compositeKey, star)}
-                        >
-                          <Star className="h-4 w-4 fill-current" />
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <Label htmlFor={`comment-${compositeKey}`} className="text-xs font-medium text-gray-600">Comment:</Label>
-                    <Input 
-                      id={`comment-${compositeKey}`}
-                      type="text" 
-                      placeholder="Add a comment..."
-                      value={comment}
-                      onChange={(e) => onCommentChange?.(compositeKey, e.target.value)}
-                      className="mt-1 text-xs h-8"
-                    />
-                  </div>
                 </div>
               </CardContent>
               <CardFooter className="pt-0 pb-3 mt-auto">
