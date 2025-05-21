@@ -171,6 +171,43 @@ def update_task_status_route(task_data: schemas.TaskStatusUpdate, db: Session = 
         
     return result
 
+
+@app.put("/api/admin/tasks/bulk-status", response_model=schemas.BulkTaskManagementResult)
+def update_bulk_task_status_route(bulk_data: schemas.BulkTaskStatusUpdate, db: Session = Depends(get_db)):
+    results = []
+    for discussion_id in bulk_data.discussion_ids:
+        result = discussions_service.update_task_status(db, discussion_id, bulk_data.task_id, bulk_data.status)
+        
+        # Manual fix: Convert to dict and back to ensure proper serialization
+        if result.discussion:
+            # Create a clean dictionary with all the required fields
+            discussion_dict = {
+                "id": result.discussion.id,
+                "title": result.discussion.title,
+                "url": result.discussion.url,
+                "repository": result.discussion.repository,
+                "created_at": result.discussion.created_at,
+                "repository_language": result.discussion.repository_language,
+                "release_tag": result.discussion.release_tag,
+                "release_url": result.discussion.release_url,
+                "release_date": result.discussion.release_date,
+                "batch_id": result.discussion.batch_id,
+                "task1_status": result.discussion.task1_status,
+                "task1_annotators": result.discussion.task1_annotators,
+                "task2_status": result.discussion.task2_status,
+                "task2_annotators": result.discussion.task2_annotators,
+                "task3_status": result.discussion.task3_status,
+                "task3_annotators": result.discussion.task3_annotators,
+                "tasks": result.discussion.tasks
+            }
+            # Create a fresh Discussion model from the dict
+            discussion = schemas.Discussion(**discussion_dict)
+            # Replace in the result
+            result.discussion = discussion
+        
+        results.append(result)
+    
+    return schemas.BulkTaskManagementResult(results=results)
 # Upload discussions endpoint
 @app.post("/api/admin/discussions/upload", response_model=schemas.UploadResult)
 def upload_discussions(upload_data: schemas.DiscussionUpload, db: Session = Depends(get_db)):
@@ -487,7 +524,7 @@ async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
-    user = await schemas.authenticate_user(db, form_data.username, form_data.password)
+    user = await jwt_auth_service.authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -106,6 +106,7 @@ const Discussions = () => {
         try {
           const batches = await api.batches.getAllBatches();
           setAvailableBatches(batches.map(batch => ({ id: batch.id, name: batch.name })));
+          console.log('Batches',batches)
         } catch (error) {
           console.error('Failed to fetch batches:', error);
         }
@@ -213,6 +214,7 @@ const Discussions = () => {
     if (filterValues.showMyAnnotations && user) {
       filtered = filtered.filter(discussion => {
         const userAnnotationStatus = getUserAnnotationStatus(discussion.id, user.id);
+        console.log('User Annotation Status',userAnnotationStatus)
         return userAnnotationStatus.task1 || userAnnotationStatus.task2 || userAnnotationStatus.task3;
       });
     }
@@ -256,38 +258,61 @@ const Discussions = () => {
       );
     }
     
-    // Update discussions with user annotation status - THIS IS THE CRITICAL FIX
-    const updatedDiscussions = filtered.map(discussion => {
-      // Get accurate user annotation status by checking actual annotations
-      const userAnnotationStatus = getUserAnnotationStatus(discussion.id, user.id);
-      
-      // Log for debugging
-      if (userAnnotationStatus.task1 || userAnnotationStatus.task2 || userAnnotationStatus.task3) {
-        console.log(`User has annotated discussion ${discussion.id}:`, userAnnotationStatus);
-      }
-      
-      return {
-        ...discussion,
-        tasks: {
-          task1: {
-            ...discussion.tasks.task1,
-            // Force to boolean
-            userAnnotated: userAnnotationStatus.task1 === true
-          },
-          task2: {
-            ...discussion.tasks.task2,
-            // Force to boolean
-            userAnnotated: userAnnotationStatus.task2 === true
-          },
-          task3: {
-            ...discussion.tasks.task3,
-            // Force to boolean
-            userAnnotated: userAnnotationStatus.task3 === true
-          },
-        },
-      } as EnhancedDiscussion;
-    });
-    
+  // Update discussions with user annotation status - THIS IS THE CRITICAL FIX
+console.log('Filtered Discussions',filtered)
+const updatedDiscussions = filtered.map(discussion => {
+  // Get accurate user annotation status by checking act
+  // ual annotations
+  debugger;
+  const userAnnotationStatus = getUserAnnotationStatus(discussion.id, user.id);
+  
+  // Calculate ACTUAL annotator counts from the annotations arrays
+  const task1AnnotatorsCount = discussion.annotations?.task1_annotations?.length || 0;
+  const task2AnnotatorsCount = discussion.annotations?.task2_annotations?.length || 0;
+  const task3AnnotatorsCount = discussion.annotations?.task3_annotations?.length || 0;
+  
+  // Log meaningful debug information
+  console.log(`Discussion ${discussion.id} annotation counts:`, {
+    apiReportedCounts: {
+      task1: discussion.tasks?.task1?.annotators || 0,
+      task2: discussion.tasks?.task2?.annotators || 0,
+      task3: discussion.tasks?.task3?.annotators || 0
+    },
+    actualCounts: {
+      task1: task1AnnotatorsCount,
+      task2: task2AnnotatorsCount,
+      task3: task3AnnotatorsCount
+    },
+    userAnnotationStatus
+  });
+  
+  return {
+    ...discussion,
+    tasks: {
+      task1: {
+        ...discussion.tasks.task1,
+        // Force to boolean
+        userAnnotated: userAnnotationStatus.task1 === true,
+        // CRITICAL FIX: Update annotators count from actual data
+        annotators: task1AnnotatorsCount
+      },
+      task2: {
+        ...discussion.tasks.task2,
+        // Force to boolean
+        userAnnotated: userAnnotationStatus.task2 === true,
+        // CRITICAL FIX: Update annotators count from actual data
+        annotators: task2AnnotatorsCount
+      },
+      task3: {
+        ...discussion.tasks.task3,
+        // Force to boolean
+        userAnnotated: userAnnotationStatus.task3 === true,
+        // CRITICAL FIX: Update annotators count from actual data
+        annotators: task3AnnotatorsCount
+      },
+    },
+  } as EnhancedDiscussion;
+}); 
     console.log('Filtered discussions:', updatedDiscussions.length);
     setFilteredDiscussions(updatedDiscussions);
   }, [discussions, isAuthenticated, navigate, getUserAnnotationStatus, user, filterValues, searchQuery, getDiscussionsByStatus]);
@@ -306,51 +331,101 @@ const Discussions = () => {
     setFilterValues(newFilters);
   };
 
+
   // Optimized function to load only the specific task data
-  const startTask = useCallback((discussionId: string, taskNumber: number) => {
-    if (!user) {
-      toast.error("You must be logged in to annotate");
-      navigate('/');
-      return;
+// Enhanced function to handle task selection and navigation
+const startTask = useCallback((discussionId: string, taskNumber: number) => {
+  // Debug info
+  debugger;
+  console.log(`StartTask called with discussionId=${discussionId}, taskNumber=${taskNumber}`);
+  
+  // Authentication check
+  if (!user) {
+    toast.error("You must be logged in to annotate");
+    navigate('/');
+    return;
+  }
+  
+  // Ensure we're using fresh discussion data
+  // This force-gets the discussion from the source data rather than relying on potentially stale state
+  const freshDiscussions = [...discussions]; // Create a fresh copy
+  const discussion = freshDiscussions.find(d => d.id === discussionId);
+  
+  if (!discussion) {
+    toast.error("Discussion not found. Please refresh the page and try again.");
+    console.error(`Discussion with ID ${discussionId} not found in current discussions array.`);
+    return;
+  }
+  
+  console.log(`Found discussion:`, discussion);
+  
+  // Get the specific task data
+  const task = taskNumber === 1 ? discussion.tasks.task1 : 
+               taskNumber === 2 ? discussion.tasks.task2 : 
+               discussion.tasks.task3;
+               
+  console.log(`Task ${taskNumber} info:`, task);
+  
+  // Get actual annotations count from annotations array
+  let actualAnnotationsCount = 0;
+  if (discussion.annotations) {
+    if (taskNumber === 1 && discussion.annotations.task1_annotations) {
+      actualAnnotationsCount = discussion.annotations.task1_annotations.length;
+    } else if (taskNumber === 2 && discussion.annotations.task2_annotations) {
+      actualAnnotationsCount = discussion.annotations.task2_annotations.length;
+    } else if (taskNumber === 3 && discussion.annotations.task3_annotations) {
+      actualAnnotationsCount = discussion.annotations.task3_annotations.length;
     }
-    
-    // Check if user has already annotated this task
-    const discussion = discussions.find(d => d.id === discussionId);
-    if (!discussion) {
-      toast.error("Discussion not found");
-      return;
-    }
-    
-    // For pod leads, they can always view the results
-    if (isPodLead) {
-      navigate(`/dashboard?discussionId=${discussionId}&task=${taskNumber}`);
-      return;
-    }
-    
-    // Check if the task has reached maximum annotators
-    const task = taskNumber === 1 ? discussion.tasks.task1 : 
-                taskNumber === 2 ? discussion.tasks.task2 : discussion.tasks.task3;
-    
-    const requiredAnnotators = taskNumber === 3 ? 5 : 3;
-    
-    if (task.annotators >= requiredAnnotators) {
-      toast.error(`This task already has the maximum number of annotators (${requiredAnnotators}). Please choose another task.`);
-      return;
-    }
-    
-    // For annotators, check if they've already annotated
-    const userAnnotationStatus = getUserAnnotationStatus(discussionId, user.id);
-    const hasAnnotated = taskNumber === 1 ? userAnnotationStatus.task1 : 
+  }
+  
+  console.log(`Actual annotations count for task ${taskNumber}: ${actualAnnotationsCount}`);
+  console.log(`Reported annotations count: ${task.annotators}`);
+  
+  // Use the higher count to be safe
+  const annotationsCount = Math.max(task.annotators, actualAnnotationsCount);
+  
+  // Get user's existing annotation status for this discussion/task
+  const userAnnotationStatus = getUserAnnotationStatus(discussionId, user.id);
+  console.log(`User annotation status:`, userAnnotationStatus);
+  
+  const hasAnnotated = taskNumber === 1 ? userAnnotationStatus.task1 : 
                         taskNumber === 2 ? userAnnotationStatus.task2 : 
                         userAnnotationStatus.task3;
-    
-    if (hasAnnotated) {
-      toast.info("You've already annotated this task. You can view or edit your annotation.");
-    }
-    
-    navigate(`/dashboard?discussionId=${discussionId}&task=${taskNumber}`);
-  }, [discussions, getUserAnnotationStatus, isPodLead, navigate, user]);
-
+  
+  // Special case for pod leads - they can always access
+  if (isPodLead) {
+    console.log(`User is pod lead, navigating to task ${taskNumber}`);
+    toast.info(`Opening task ${taskNumber} in pod lead mode`);
+    navigate(`/dashboard?discussionId=${discussionId}&taskId=${taskNumber}&mode=podlead&timestamp=${Date.now()}`);
+    return;
+  }
+  
+  // Check task status
+  if (task.status === 'locked' && !hasAnnotated) {
+    toast.error(`Task ${taskNumber} is currently locked.`);
+    return;
+  }
+  
+  // Check maximum annotators
+  const requiredAnnotators = taskNumber === 3 ? 5 : 3;
+  
+  if (annotationsCount >= requiredAnnotators && !hasAnnotated) {
+    toast.error(`This task already has the maximum number of annotators (${annotationsCount}/${requiredAnnotators}). Please choose another task.`);
+    return;
+  }
+  
+  // Different handling based on whether user has already annotated
+  if (hasAnnotated) {
+    console.log(`User has already annotated task ${taskNumber}, navigating to view/edit mode`);
+    toast.info(`Opening your existing annotation for task ${taskNumber}`);
+    navigate(`/dashboard?discussionId=${discussionId}&taskId=${taskNumber}&mode=edit&timestamp=${Date.now()}`);
+  } else {
+    console.log(`User has not annotated task ${taskNumber} yet, navigating to annotation mode`);
+    toast.info(`Starting task ${taskNumber}`);
+    navigate(`/dashboard?discussionId=${discussionId}&taskId=${taskNumber}&mode=new&timestamp=${Date.now()}`);
+  }
+  
+}, [discussions, getUserAnnotationStatus, isPodLead, navigate, user]);
   const getTaskStatusClass = (status: 'locked' | 'unlocked' | 'completed', userAnnotated?: boolean) => {
     // If user has annotated, use purple regardless of task status
     if (userAnnotated === true) {

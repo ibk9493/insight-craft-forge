@@ -140,19 +140,34 @@ const BulkTaskManager: React.FC<BulkTaskManagerProps> = ({ discussions, onTaskUp
     try {
       // Create the bulk update payload
       const bulkUpdate = {
-        discussionIds: selectedDiscussionIds,
-        taskId: selectedTaskId,
+        discussion_ids: selectedDiscussionIds,
+        task_id: selectedTaskId,
         status: selectedStatus as TaskStatus
       };
-
+  
       console.log('Sending bulk update request:', bulkUpdate);
       
-      // Call the API endpoint for bulk updates (we'll need to add this to the API)
-      const result: BulkActionResult = await api.admin.bulkUpdateTaskStatus(
-        bulkUpdate.discussionIds,
-        bulkUpdate.taskId,
+      // Call the API endpoint for bulk updates
+      const response = await api.admin.bulkUpdateTaskStatus(
+        bulkUpdate.discussion_ids,
+        bulkUpdate.task_id,
         bulkUpdate.status
       );
+      
+      // Analyze the results to determine success/failure counts
+      const results = response.results || [];
+      const successfulUpdates = results.filter(result => result.success);
+      const failedUpdates = results.filter(result => !result.success);
+      
+      const result: BulkActionResult = {
+        success: failedUpdates.length === 0,
+        updatedCount: successfulUpdates.length,
+        failedCount: failedUpdates.length,
+        message: failedUpdates.length > 0
+          ? `${failedUpdates.length} updates failed. Check logs for details.`
+          : 'All updates successful',
+        results: []
+      };
       
       if (result.success) {
         toast.success(`Updated ${result.updatedCount} discussions successfully`);
@@ -162,13 +177,13 @@ const BulkTaskManager: React.FC<BulkTaskManagerProps> = ({ discussions, onTaskUp
         setSelectedStatus('');
         
         // Refresh the data to show updated statuses
-        // Note: In a real implementation, we might want to update the local state instead of fetching all discussions again
         const updatedDiscussions = await api.discussions.getAll();
         onTaskUpdated(updatedDiscussions);
       } else {
-        toast.error(`Failed to update discussions: ${result.message}`);
-        if (result.failedCount > 0) {
-          toast.error(`${result.failedCount} discussions could not be updated`);
+        toast.warning(`Updated ${result.updatedCount} discussions, but ${result.failedCount} failed`);
+        if (failedUpdates.length > 0) {
+          // Log the failed updates for debugging
+          console.error('Failed updates:', failedUpdates);
         }
       }
     } catch (error) {
@@ -179,7 +194,6 @@ const BulkTaskManager: React.FC<BulkTaskManagerProps> = ({ discussions, onTaskUp
       setIsConfirmDialogOpen(false);
     }
   };
-
   // Handle confirmation dialog result
   const handleConfirmAction = () => {
     if (actionType === 'apply') {

@@ -255,3 +255,11 @@ class LoginResponse(BaseModel):
     message: str
     user: Optional[Dict[str, Any]] = None
     token: Optional[str] = None
+
+class BulkTaskStatusUpdate(BaseModel):
+    discussion_ids: List[str]
+    task_id: int
+    status: str
+
+class BulkTaskManagementResult(BaseModel):
+    results: List[TaskManagementResult]

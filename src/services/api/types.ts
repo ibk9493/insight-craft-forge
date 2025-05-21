@@ -1,6 +1,7 @@
 // API types for the annotation system
 
 export interface Discussion {
+  annotations: any;
   id: string;
   title: string;
   url: string;

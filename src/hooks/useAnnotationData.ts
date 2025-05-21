@@ -175,76 +175,164 @@ export function useAnnotationData() {
     }
     
     try {
-      // Filter annotations for this discussion and user
-      const userAnnotationsForDiscussion = annotations.filter(a => 
-        a.discussion_id === discussionId && a.user_id === userId
-      );
+      // Get the specific discussion by ID
+      const discussion = discussions.find(d => d.id === discussionId);
       
-      // Log for debugging if we found any annotations
-      if (userAnnotationsForDiscussion.length > 0) {
-        console.log(`Found ${userAnnotationsForDiscussion.length} annotations for user ${userId} in discussion ${discussionId}`);
+      if (!discussion) {
+        console.warn(`Discussion ${discussionId} not found in discussions array`);
+        return { task1: false, task2: false, task3: false };
       }
       
-      // Create a status object with strict boolean values
-      const status = {
-        task1: userAnnotationsForDiscussion.some(a => a.task_id === 1) === true,
-        task2: userAnnotationsForDiscussion.some(a => a.task_id === 2) === true,
-        task3: userAnnotationsForDiscussion.some(a => a.task_id === 3) === true,
-      };
+      // Check if discussion has the annotations property with the expected structure
+      if (!discussion.annotations) {
+        console.warn(`Discussion ${discussionId} has no annotations property`);
+        return { task1: false, task2: false, task3: false };
+      }
       
-      return status;
+      // Convert user ID to string for consistent comparison
+      const userIdStr = userId.toString();
+      
+      // Check task1_annotations array
+      const hasTask1 = Array.isArray(discussion.annotations.task1_annotations) && 
+                      discussion.annotations.task1_annotations.some(a => 
+                        a.user_id?.toString() === userIdStr
+                      );
+      
+      // Check task2_annotations array
+      const hasTask2 = Array.isArray(discussion.annotations.task2_annotations) && 
+                      discussion.annotations.task2_annotations.some(a => 
+                        a.user_id?.toString() === userIdStr
+                      );
+      
+      // Check task3_annotations array
+      const hasTask3 = Array.isArray(discussion.annotations.task3_annotations) && 
+                      discussion.annotations.task3_annotations.some(a => 
+                        a.user_id?.toString() === userIdStr
+                      );
+      
+      // Log what we found for debugging
+      console.log(`User annotation check for discussion ${discussionId}, user ${userId}:`, {
+        task1: hasTask1,
+        task2: hasTask2,
+        task3: hasTask3,
+        task1_annotations_count: discussion.annotations.task1_annotations?.length || 0,
+        task2_annotations_count: discussion.annotations.task2_annotations?.length || 0,
+        task3_annotations_count: discussion.annotations.task3_annotations?.length || 0
+      });
+      
+      return {
+        task1: hasTask1 === true,
+        task2: hasTask2 === true,
+        task3: hasTask3 === true
+      };
     } catch (error) {
-      console.error('Error in getUserAnnotationStatus:', error);
-      // Return all false on error
+      console.error(`Error checking user annotations for discussion ${discussionId}:`, error);
       return { task1: false, task2: false, task3: false };
     }
-  }, [annotations]);
+  }, [discussions]);
 
   // Get user's annotation for a specific discussion and task
-  const getUserAnnotation = useCallback((discussionId: string, userId: string, taskId: number) => {
-    if (!discussionId || !userId) {
-      console.log('[useAnnotationData] getUserAnnotation: Aborted due to missing discussionId or userId. Provided:', { discussionId, userId });
-      return null;
-    }
-    
-    console.log('[useAnnotationData] getUserAnnotation: Attempting to find annotation with:', { discussionId, userId, taskId });
-    console.log('[useAnnotationData] getUserAnnotation: Full annotations array before find (first 5 items):', annotations.slice(0, 5).map(a => ({discussion_id: a.discussion_id, user_id: a.user_id, task_id: a.task_id, dataKeys: Object.keys(a.data)})));
-    console.log('[useAnnotationData] getUserAnnotation: Total annotations in array:', annotations.length);
-
-    const foundAnnotation = annotations.find(
-      a => {
-        const discussionMatch = a.discussion_id === discussionId;
-        const userMatch = String(a.user_id) === String(userId); // Compare as strings for safety
-        const taskMatch = a.task_id === taskId;
-
-        // Log comparison for the specific item if it's the one we're interested in
-        if (discussionId === "marimo-team_marimo_3256" && String(userId) === "7" && taskId === 1) {
-          // console.log('[useAnnotationData] getUserAnnotation - COMPARING ITEM:', a, 'WITH PARAMS:', { discussionId, userId, taskId });
-          // console.log('[useAnnotationData] getUserAnnotation - MATCHES:', { discussionMatch, userMatch, taskMatch });
-        }
-        return discussionMatch && userMatch && taskMatch;
-      }
+const getUserAnnotation = useCallback((discussionId: string, userId: string, taskId: number) => {
+  if (!discussionId || !userId) {
+    console.log('[useAnnotationData] getUserAnnotation: Aborted due to missing discussionId or userId. Provided:', { discussionId, userId });
+    return null;
+  }
+  
+  console.log('[useAnnotationData] getUserAnnotation: Attempting to find annotation with:', { discussionId, userId, taskId });
+  
+  // Find the specific discussion first
+  const discussion = discussions.find(d => d.id === discussionId);
+  
+  if (!discussion) {
+    console.log('[useAnnotationData] getUserAnnotation: Discussion not found:', discussionId);
+    return null;
+  }
+  
+  if (!discussion.annotations) {
+    console.log('[useAnnotationData] getUserAnnotation: Discussion has no annotations property:', discussionId);
+    return null;
+  }
+  
+  // Map task ID to the corresponding annotations array
+  let relevantAnnotations: any[] = [];
+  if (taskId === 1 && Array.isArray(discussion.annotations.task1_annotations)) {
+    relevantAnnotations = discussion.annotations.task1_annotations;
+    console.log('[useAnnotationData] getUserAnnotation: Found task1_annotations array with', relevantAnnotations.length, 'items');
+  } else if (taskId === 2 && Array.isArray(discussion.annotations.task2_annotations)) {
+    relevantAnnotations = discussion.annotations.task2_annotations;
+    console.log('[useAnnotationData] getUserAnnotation: Found task2_annotations array with', relevantAnnotations.length, 'items');
+  } else if (taskId === 3 && Array.isArray(discussion.annotations.task3_annotations)) {
+    relevantAnnotations = discussion.annotations.task3_annotations;
+    console.log('[useAnnotationData] getUserAnnotation: Found task3_annotations array with', relevantAnnotations.length, 'items');
+  } else {
+    console.log('[useAnnotationData] getUserAnnotation: No annotations array found for task', taskId);
+    return null;
+  }
+  
+  // Log the first few annotations for debugging
+  if (relevantAnnotations.length > 0) {
+    console.log('[useAnnotationData] getUserAnnotation: First few annotations in array:', 
+      relevantAnnotations.slice(0, 3).map(a => ({
+        discussion_id: a.discussion_id, 
+        user_id: a.user_id, 
+        task_id: a.task_id, 
+        dataKeys: Object.keys(a.data || {})
+      }))
     );
-
-    if (!foundAnnotation) {
-      console.log('[useAnnotationData] getUserAnnotation: Annotation NOT FOUND. Searched with:', { discussionId, userId, taskId });
-      // For debugging, let's see if an annotation for this discussion & user exists AT ALL (ignoring task_id)
-      const anyAnnotationForUserAndDiscussion = annotations.find(
-        a => a.discussion_id === discussionId && String(a.user_id) === String(userId)
+  }
+  
+  // Find the specific annotation for this user
+  const userIdStr = String(userId);
+  const foundAnnotation = relevantAnnotations.find(a => String(a.user_id) === userIdStr);
+  
+  if (!foundAnnotation) {
+    console.log('[useAnnotationData] getUserAnnotation: Annotation NOT FOUND for user:', userIdStr);
+    
+    // For debugging, log all user IDs in the relevant annotations array
+    if (relevantAnnotations.length > 0) {
+      console.log('[useAnnotationData] getUserAnnotation: Available user IDs in this task:', 
+        relevantAnnotations.map(a => String(a.user_id))
       );
-      if (anyAnnotationForUserAndDiscussion) {
-        console.log('[useAnnotationData] getUserAnnotation: Found an annotation for this discussion & user, but task_id did not match. Found task_id:', anyAnnotationForUserAndDiscussion.task_id, 'Expected task_id:', taskId);
-      } else {
-        console.log('[useAnnotationData] getUserAnnotation: No annotations found for this discussion & user combination AT ALL.');
-      }
-    } else {
-      console.log('[useAnnotationData] getUserAnnotation: Annotation FOUND:', JSON.stringify(foundAnnotation, null, 2));
     }
     
-    return foundAnnotation;
-  }, [annotations]);
+    // Check if the user has annotations for other tasks
+    let hasOtherTaskAnnotations = false;
+    
+    if (taskId !== 1 && Array.isArray(discussion.annotations.task1_annotations)) {
+      const task1Anno = discussion.annotations.task1_annotations.find(a => String(a.user_id) === userIdStr);
+      if (task1Anno) {
+        console.log('[useAnnotationData] getUserAnnotation: User has an annotation for task 1');
+        hasOtherTaskAnnotations = true;
+      }
+    }
+    
+    if (taskId !== 2 && Array.isArray(discussion.annotations.task2_annotations)) {
+      const task2Anno = discussion.annotations.task2_annotations.find(a => String(a.user_id) === userIdStr);
+      if (task2Anno) {
+        console.log('[useAnnotationData] getUserAnnotation: User has an annotation for task 2');
+        hasOtherTaskAnnotations = true;
+      }
+    }
+    
+    if (taskId !== 3 && Array.isArray(discussion.annotations.task3_annotations)) {
+      const task3Anno = discussion.annotations.task3_annotations.find(a => String(a.user_id) === userIdStr);
+      if (task3Anno) {
+        console.log('[useAnnotationData] getUserAnnotation: User has an annotation for task 3');
+        hasOtherTaskAnnotations = true;
+      }
+    }
+    
+    if (!hasOtherTaskAnnotations) {
+      console.log('[useAnnotationData] getUserAnnotation: User has no annotations for ANY task in this discussion');
+    }
+  } else {
+    console.log('[useAnnotationData] getUserAnnotation: Annotation FOUND:', JSON.stringify(foundAnnotation, null, 2));
+  }
+  
+  return foundAnnotation;
+}, [discussions]);
 
-  // Save an annotation with proper type signature to return a Promise
+// Save an annotation with proper type signature to return a Promise
   const saveAnnotation = useCallback(async (annotation: Omit<Annotation, 'timestamp'>): Promise<boolean> => {
     try {
       if (!annotation.discussion_id || !annotation.user_id) { 

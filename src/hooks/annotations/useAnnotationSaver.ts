@@ -39,7 +39,7 @@ export function useAnnotationSaver({
       }
 
       // Add text value if present (for single text inputs like rewrite_text)
-      if (task.textInput && task.textValue !== undefined) { // Added textInput check for clarity, and check for undefined
+      if (task.textValue !== undefined) { // Added textInput check for clarity, and check for undefined
         data[`${task.id}_text`] = task.textValue; // e.g., data['rewrite_text'] = "Some text"
       }
 

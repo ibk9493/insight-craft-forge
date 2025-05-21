@@ -29,7 +29,15 @@ def create_batch(db: Session, batch: schemas.BatchUploadCreate) -> models.BatchU
     db.commit()
     db.refresh(db_batch)
     return db_batch
+# Add this to batch_service.py
+def increment_discussion_count(db: Session, batch_id: int) -> None:
+    """Increment the discussion count for a batch."""
+    batch = db.query(models.BatchUpload).filter(models.BatchUpload.id == batch_id).first()
+    if batch:
+        batch.discussion_count += 1
+        db.commit()
 
+        
 def delete_batch(db: Session, batch_id: int) -> bool:
     """
     Delete a batch upload and its associated discussions
