@@ -108,6 +108,7 @@ export function useAnnotationSaver({
         }
         
         // Convert form data to API format
+        console.log('[useAnnotationSaver] Converting tasks to data:', currentTasks);
         convertTasksToData(currentTasks, taskData);
         
         // Save annotation - force this to NOT use mock data
@@ -157,6 +158,8 @@ export function useAnnotationSaver({
           taskData.comment = consensusComment;
         }
         
+        console.log('[useAnnotationSaver] Saving consensus data:', JSON.stringify(taskData)); // DEBUG LOG
+
         // Save consensus annotation
         const success = await saveConsensusAnnotation({
           user_id: user.id,

@@ -266,6 +266,7 @@ export const api = {
         data: consensus.data
       };
       
+      console.log('[api.consensus.save] Sending to API:', JSON.stringify(apiConsensus)); // DEBUG LOG
       return safeApiRequest<Annotation>('/api/consensus', 'POST', apiConsensus, undefined, {} as Annotation);
     },
     calculate: (discussionId: string, taskId: number) => 
@@ -411,7 +412,8 @@ export const api = {
         success: false,
         message: 'Failed to bulk update task status',
         updatedCount: 0,
-        failedCount: 0
+        failedCount: 0,
+        results: []
       });
     },
     
@@ -574,5 +576,43 @@ export const api = {
       console.log('[Summary] Getting repository breakdown');
       return safeApiRequest<{repository: string, count: number}[]>('/api/summary/repositories', 'GET', undefined, undefined, []);
     }
+  },
+  // Add this to the api object within api.ts
+
+// User endpoints
+users: {
+  getUserById: (userId: string) => {
+    console.log(`[Users] Getting user with ID: ${userId}`);
+    return safeApiRequest<{id: string, email: string, username: string, role: UserRole}>(
+      `/api/auth/users/${encodeURIComponent(userId)}`, 
+      'GET', 
+      undefined, 
+      undefined, 
+      {id: userId, email: '', username: '', role: 'annotator' as UserRole}
+    );
+  },
+  
+  getAllUsers: () => {
+    console.log('[Users] Getting all users');
+    return safeApiRequest<{id: string, email: string, username: string, role: UserRole}[]>(
+      '/api/auth/users', 
+      'GET', 
+      undefined, 
+      undefined, 
+      []
+    );
+  },
+  
+  // Add a method to check if a user exists and get basic info without needing admin privileges
+  getPublicUserInfo: (userId: string) => {
+    console.log(`[Users] Getting public info for user: ${userId}`);
+    return safeApiRequest<{id: string, username: string}>(
+      `/api/auth/users/${encodeURIComponent(userId)}/public`, 
+      'GET', 
+      undefined, 
+      undefined, 
+      {id: userId, username: `User ${userId}`}
+    );
   }
+}
 };

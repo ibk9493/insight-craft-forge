@@ -17,7 +17,7 @@ export interface AnnotationHandlersProps {
   saveConsensusAnnotation: (annotation: Omit<Annotation, 'timestamp'>) => Promise<boolean>;
   getUserAnnotation: (discussionId: string, userId: string, taskId: number) => Annotation | undefined;
   getAnnotationsForTask: (discussionId: string, taskId: number) => Annotation[];
-  getConsensusAnnotation: (discussionId: string, taskId: number) => Annotation | undefined;
+  getConsensusAnnotation: (discussionId: string, taskId: number) => Promise<Annotation | undefined>;
   updateStepCompletionStatus: (stepIndex: number, completed: boolean) => void;
   overrideAnnotation?: (podLeadId: string, annotatorId: string, discussionId: string, taskId: number, data: Record<string, any>) => Promise<boolean>;
 }
