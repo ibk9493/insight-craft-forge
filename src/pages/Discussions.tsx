@@ -263,7 +263,6 @@ console.log('Filtered Discussions',filtered)
 const updatedDiscussions = filtered.map(discussion => {
   // Get accurate user annotation status by checking act
   // ual annotations
-  debugger;
   const userAnnotationStatus = getUserAnnotationStatus(discussion.id, user.id);
   
   // Calculate ACTUAL annotator counts from the annotations arrays
@@ -336,7 +335,6 @@ const updatedDiscussions = filtered.map(discussion => {
 // Enhanced function to handle task selection and navigation
 const startTask = useCallback((discussionId: string, taskNumber: number) => {
   // Debug info
-  debugger;
   console.log(`StartTask called with discussionId=${discussionId}, taskNumber=${taskNumber}`);
   
   // Authentication check
