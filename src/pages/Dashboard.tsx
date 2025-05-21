@@ -28,7 +28,7 @@ interface AnnotationFeedbackData {
 }
 
 interface AnnotationFeedbackState {
-  [annotationId: string]: AnnotationFeedbackData;
+  [compositeAnnotationId: string]: AnnotationFeedbackData;
 }
 
 const Dashboard = () => {
@@ -289,21 +289,21 @@ const Dashboard = () => {
     toast.success("Consensus form populated with selected annotation.");
   };
 
-  const handleAnnotationRatingChange = (annotationId: string, rating: number) => {
-    setAnnotationFeedback(prev => ({
-      ...prev,
-      [annotationId]: {
-        ...prev[annotationId],
+  const handleAnnotationRatingChange = (compositeAnnotationId: string, rating: number) => {
+    setAnnotationFeedback(prevFeedback => ({
+      ...prevFeedback,
+      [compositeAnnotationId]: {
+        ...prevFeedback[compositeAnnotationId],
         rating
       }
     }));
   };
 
-  const handleAnnotationCommentChange = (annotationId: string, comment: string) => {
-    setAnnotationFeedback(prev => ({
-      ...prev,
-      [annotationId]: {
-        ...prev[annotationId],
+  const handleAnnotationCommentChange = (compositeAnnotationId: string, comment: string) => {
+    setAnnotationFeedback(prevFeedback => ({
+      ...prevFeedback,
+      [compositeAnnotationId]: {
+        ...prevFeedback[compositeAnnotationId],
         comment
       }
     }));
