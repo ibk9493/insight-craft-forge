@@ -108,6 +108,7 @@ export function useAnnotationSaver({
         }
         
         // Convert form data to API format
+        console.log('[useAnnotationSaver] Converting tasks to data:', currentTasks);
         convertTasksToData(currentTasks, taskData);
         
         // Save annotation - force this to NOT use mock data

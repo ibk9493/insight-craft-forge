@@ -87,7 +87,7 @@ export const handleResponse = async <T>(response: Response): Promise<T> => {
       // Don't redirect if we're already at the login page
       if (!window.location.pathname.includes('/login')) {
         toast.error('Your session has expired. Please login again.');
-        window.location.href = '/login';
+        window.location.href = '/';
       }
     }
     

@@ -236,7 +236,7 @@ const getUserEmailById = useCallback((userId: string): string => {
         loadConsensus();
       }
     }
-  }, [discussionId, currentStep, viewMode, user, isPodLead, annotationsLoaded, loadUserAnnotation, prepareConsensusView, setConsensusTask1, setConsensusTask2, setConsensusTask3]); // Added dependencies from IIFE
+  },  [discussionId, currentStep, viewMode, user, isPodLead])// Added dependencies from IIFE
 
   // Get summary data for all tasks
   const getSummaryData = () => {

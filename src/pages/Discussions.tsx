@@ -18,7 +18,7 @@ import DiscussionFilters from '@/components/discussions/DiscussionFilters';
 import { api } from '@/services/api/endpoints';
 
 // Discussion type imported from api service
-import { Discussion, TaskState, BatchUpload } from '@/services/api';
+import { Discussion, TaskState, BatchUpload, TaskStatus } from '@/services/api';
 
 interface EnhancedDiscussion extends Discussion {
   tasks: {
@@ -148,175 +148,368 @@ const Discussions = () => {
     if (!isMounted) return;
     
     const params = new URLSearchParams();
-    if (filterValues.status !== 'all') params.set('filter', filterValues.status);
-    if (searchQuery) params.set('search', searchQuery);
-    if (filterValues.showMyAnnotations) params.set('mine', 'true');
     
-    if (filterValues.repositoryLanguage.length > 0) {
-      params.set('lang', filterValues.repositoryLanguage.join(','));
+    // Format status parameter to match backend expectations
+    if (filterValues.status !== 'all') {
+      // Ensure status matches one of the valid task statuses in the API
+      const validStatus = ['completed', 'unlocked', 'locked'].includes(filterValues.status) 
+        ? filterValues.status 
+        : 'all';
+      params.set('status', validStatus);
     }
     
-    if (filterValues.releaseTag.length > 0) {
-      params.set('tag', filterValues.releaseTag.join(','));
-    }
-    
-    if (filterValues.fromDate) {
-      params.set('from', filterValues.fromDate.toISOString());
-    }
-    
-    if (filterValues.toDate) {
-      params.set('to', filterValues.toDate.toISOString());
-    }
-    
-    if (filterValues.batchId) {
-      params.set('batch', filterValues.batchId);
-    }
-    
-    const newUrl = params.toString() ? `?${params.toString()}` : '';
-    navigate(`/discussions${newUrl}`, { replace: true });
-  }, [filterValues, searchQuery, navigate, isMounted]);
-  
-  // Apply filters to discussions
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigate('/');
-      return;
-    }
-    
-    if (!discussions || !user) {
-      return;
-    }
-    
-    console.log('Applying filters to discussions. Total discussions:', discussions.length);
-    
-    // Apply filters to discussions
-    let filtered = [...discussions];
-    
-    // Filter by status
-    if (filterValues.status === 'completed') {
-      filtered = getDiscussionsByStatus('completed');
-    } else if (filterValues.status === 'unlocked') {
-      filtered = getDiscussionsByStatus('unlocked');
-    } else if (filterValues.status === 'locked') {
-      filtered = getDiscussionsByStatus('locked');
-    }
-    
-    // Filter by search query
+    // Search query parameter - sanitize to prevent injection
     if (searchQuery) {
-      filtered = filtered.filter(
-        discussion => 
-          discussion.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-          discussion.repository.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+      params.set('search', searchQuery.trim());
     }
     
-    // Filter for user's annotations
-    if (filterValues.showMyAnnotations && user) {
-      filtered = filtered.filter(discussion => {
-        const userAnnotationStatus = getUserAnnotationStatus(discussion.id, user.id);
-        console.log('User Annotation Status',userAnnotationStatus)
-        return userAnnotationStatus.task1 || userAnnotationStatus.task2 || userAnnotationStatus.task3;
-      });
+    // My annotations filter
+    if (filterValues.showMyAnnotations && user?.id) {
+      params.set('user_id', user.id.toString());
     }
     
-    // Filter by repository language
-    if (filterValues.repositoryLanguage.length > 0) {
-      filtered = filtered.filter(discussion => 
-        discussion.repositoryLanguage && 
-        filterValues.repositoryLanguage.includes(discussion.repositoryLanguage)
-      );
+    // Format repository language filter as comma-separated string
+    if (filterValues.repositoryLanguage && filterValues.repositoryLanguage.length > 0) {
+      // Ensure all languages are properly encoded
+      const encodedLanguages = filterValues.repositoryLanguage
+        .map(lang => encodeURIComponent(lang))
+        .join(',');
+      params.set('repository_language', encodedLanguages);
     }
     
-    // Filter by release tag
-    if (filterValues.releaseTag.length > 0) {
-      filtered = filtered.filter(discussion => 
-        discussion.releaseTag && 
-        filterValues.releaseTag.includes(discussion.releaseTag)
-      );
+    // Format release tag filter
+    if (filterValues.releaseTag && filterValues.releaseTag.length > 0) {
+      // Ensure all tags are properly encoded
+      const encodedTags = filterValues.releaseTag
+        .map(tag => encodeURIComponent(tag))
+        .join(',');
+      params.set('release_tag', encodedTags);
     }
     
-    // Filter by date range
-    if (filterValues.fromDate) {
-      filtered = filtered.filter(discussion => {
-        const discussionDate = new Date(discussion.createdAt);
-        return discussionDate >= filterValues.fromDate!;
-      });
+    // Format date parameters to match API expectations (ISO format)
+    if (filterValues.fromDate instanceof Date) {
+      try {
+        params.set('from_date', filterValues.fromDate.toISOString().split('T')[0]); // YYYY-MM-DD format
+      } catch (error) {
+        console.error('Error formatting fromDate:', error);
+      }
     }
     
-    if (filterValues.toDate) {
-      filtered = filtered.filter(discussion => {
-        const discussionDate = new Date(discussion.createdAt);
-        return discussionDate <= filterValues.toDate!;
-      });
+    if (filterValues.toDate instanceof Date) {
+      try {
+        params.set('to_date', filterValues.toDate.toISOString().split('T')[0]); // YYYY-MM-DD format
+      } catch (error) {
+        console.error('Error formatting toDate:', error);
+      }
     }
     
-    // Filter by batch ID
+    // Format batch ID parameter - ensure it's a valid number
     if (filterValues.batchId) {
-      filtered = filtered.filter(discussion => 
-        discussion.batchId && 
-        discussion.batchId.toString() === filterValues.batchId
-      );
+      // Only include if it's a non-empty string or number
+      const batchIdNum = Number(filterValues.batchId);
+      if (!isNaN(batchIdNum) && batchIdNum > 0) {
+        params.set('batch_id', batchIdNum.toString());
+      }
     }
     
-  // Update discussions with user annotation status - THIS IS THE CRITICAL FIX
-console.log('Filtered Discussions',filtered)
-const updatedDiscussions = filtered.map(discussion => {
-  // Get accurate user annotation status by checking act
-  // ual annotations
-  const userAnnotationStatus = getUserAnnotationStatus(discussion.id, user.id);
+    // Create the new URL with proper parameters
+    const newUrl = params.toString() ? `?${params.toString()}` : '';
+    
+    // Log the constructed URL for debugging
+    console.log('Updating URL with filters:', newUrl);
+    
+    // Navigate with the updated parameters
+    navigate(`/discussions${newUrl}`, { replace: true });
+  }, [filterValues, searchQuery, navigate, isMounted, user?.id]);
+
+
+// Apply filters to discussions
+useEffect(() => {
+  if (!isAuthenticated) {
+    navigate('/');
+    return;
+  }
   
-  // Calculate ACTUAL annotator counts from the annotations arrays
-  const task1AnnotatorsCount = discussion.annotations?.task1_annotations?.length || 0;
-  const task2AnnotatorsCount = discussion.annotations?.task2_annotations?.length || 0;
-  const task3AnnotatorsCount = discussion.annotations?.task3_annotations?.length || 0;
+  if (!discussions || !user) {
+    return;
+  }
   
-  // Log meaningful debug information
-  console.log(`Discussion ${discussion.id} annotation counts:`, {
-    apiReportedCounts: {
-      task1: discussion.tasks?.task1?.annotators || 0,
-      task2: discussion.tasks?.task2?.annotators || 0,
-      task3: discussion.tasks?.task3?.annotators || 0
-    },
-    actualCounts: {
-      task1: task1AnnotatorsCount,
-      task2: task2AnnotatorsCount,
-      task3: task3AnnotatorsCount
-    },
-    userAnnotationStatus
+  console.log('Applying filters to discussions. Total discussions:', discussions.length);
+  
+  // Start with all discussions
+  let filtered = [...discussions];
+  
+  // IMPROVED: Log task status distribution before filtering
+  const statusCounts = {
+    completed: 0,
+    unlocked: 0,
+    locked: 0,
+    unknown: 0
+  };
+  
+  // Count discussions by task status for debugging
+  discussions.forEach(discussion => {
+    if (discussion.tasks?.task1?.status) statusCounts[discussion.tasks.task1.status] = (statusCounts[discussion.tasks.task1.status] || 0) + 1;
+    if (discussion.tasks?.task2?.status) statusCounts[discussion.tasks.task2.status] = (statusCounts[discussion.tasks.task2.status] || 0) + 1;
+    if (discussion.tasks?.task3?.status) statusCounts[discussion.tasks.task3.status] = (statusCounts[discussion.tasks.task3.status] || 0) + 1;
   });
   
-  return {
-    ...discussion,
-    tasks: {
-      task1: {
-        ...discussion.tasks.task1,
-        // Force to boolean
-        userAnnotated: userAnnotationStatus.task1 === true,
-        // CRITICAL FIX: Update annotators count from actual data
-        annotators: task1AnnotatorsCount
+  console.log('Task status distribution:', statusCounts);
+  
+  // IMPROVED FILTER: Status filter with fallback implementation
+  if (filterValues.status !== 'all') {
+    // First try the helper function
+    const statusFilteredDiscussions = getDiscussionsByStatus(filterValues.status as TaskStatus);
+    console.log(`getDiscussionsByStatus returned ${statusFilteredDiscussions.length} discussions with status '${filterValues.status}'`);
+    
+    if (statusFilteredDiscussions.length > 0) {
+      // If helper returned results, use them
+      filtered = statusFilteredDiscussions;
+    } else {
+      console.log(`Helper function returned 0 results, using fallback filter for ${filterValues.status} status`);
+      
+      // Fallback filter implementation
+      filtered = filtered.filter(discussion => {
+        // Check status definitions
+        const isCompleted = (status: string | undefined) => status === 'completed';
+        const isUnlocked = (status: string | undefined) => status === 'unlocked';
+        const isLocked = (status: string | undefined) => status === 'locked';
+        
+        // Get task statuses
+        const task1Status = discussion.tasks?.task1?.status;
+        const task2Status = discussion.tasks?.task2?.status;
+        const task3Status = discussion.tasks?.task3?.status;
+        
+        if (filterValues.status === 'completed') {
+          // Discussion is completed if all tasks are completed
+          return isCompleted(task1Status) && isCompleted(task2Status) && isCompleted(task3Status);
+        }
+        
+        if (filterValues.status === 'unlocked') {
+          // Discussion is unlocked if any task is unlocked
+          return isUnlocked(task1Status) || isUnlocked(task2Status) || isUnlocked(task3Status);
+        }
+        
+        if (filterValues.status === 'locked') {
+          // Discussion is locked if all tasks are locked
+          return isLocked(task1Status) && isLocked(task2Status) && isLocked(task3Status);
+        }
+        
+        return true; // Default case
+      });
+      
+      console.log(`Fallback filter found ${filtered.length} discussions with status '${filterValues.status}'`);
+    }
+  }
+  
+  // Filter by search query - match with the 'search' parameter
+  if (searchQuery) {
+    const searchLower = searchQuery.toLowerCase().trim();
+    const beforeCount = filtered.length;
+    
+    filtered = filtered.filter(
+      discussion => 
+        (discussion.title?.toLowerCase() || '').includes(searchLower) || 
+        (discussion.repository?.toLowerCase() || '').includes(searchLower)
+    );
+    
+    console.log(`Search filter for "${searchQuery}" reduced from ${beforeCount} to ${filtered.length} discussions`);
+  }
+  
+  // Filter for user's annotations - match with 'user_id' parameter
+  if (filterValues.showMyAnnotations && user) {
+    const beforeCount = filtered.length;
+    
+    // Loop through each discussion and check if the user has any annotations
+    filtered = filtered.filter(discussion => {
+      const userAnnotationStatus = getUserAnnotationStatus(discussion.id, user.id);
+      
+      // Check if any task is annotated by this user
+      const hasUserAnnotation = 
+        userAnnotationStatus.task1 === true || 
+        userAnnotationStatus.task2 === true || 
+        userAnnotationStatus.task3 === true;
+      
+      // Log when we find user annotations
+      if (hasUserAnnotation) {
+        console.log(`Found user ${user.id} annotations for discussion ${discussion.id}:`, userAnnotationStatus);
+      }
+      
+      return hasUserAnnotation;
+    });
+    
+    console.log(`User annotations filter reduced from ${beforeCount} to ${filtered.length} discussions`);
+  }
+  
+  // Filter by repository language - match with 'repository_language' parameter
+  if (filterValues.repositoryLanguage && filterValues.repositoryLanguage.length > 0) {
+    const beforeCount = filtered.length;
+    
+    filtered = filtered.filter(discussion => {
+      if (!discussion.repositoryLanguage) return false;
+      
+      // Case-insensitive comparison
+      return filterValues.repositoryLanguage.some(lang => 
+        discussion.repositoryLanguage?.toLowerCase() === lang.toLowerCase()
+      );
+    });
+    
+    console.log(`Repository language filter for [${filterValues.repositoryLanguage.join(', ')}] reduced from ${beforeCount} to ${filtered.length} discussions`);
+  }
+  
+  // Filter by release tag - match with 'release_tag' parameter
+  if (filterValues.releaseTag && filterValues.releaseTag.length > 0) {
+    const beforeCount = filtered.length;
+    
+    filtered = filtered.filter(discussion => {
+      if (!discussion.releaseTag) return false;
+      
+      // Case-insensitive comparison
+      return filterValues.releaseTag.some(tag => 
+        discussion.releaseTag?.toLowerCase() === tag.toLowerCase()
+      );
+    });
+    
+    console.log(`Release tag filter for [${filterValues.releaseTag.join(', ')}] reduced from ${beforeCount} to ${filtered.length} discussions`);
+  }
+  
+  // Filter by date range - match with 'from_date' and 'to_date' parameters
+  if (filterValues.fromDate instanceof Date) {
+    const beforeCount = filtered.length;
+    
+    // Set fromDate to beginning of day for consistent comparison
+    const fromDate = new Date(filterValues.fromDate);
+    fromDate.setHours(0, 0, 0, 0);
+    
+    filtered = filtered.filter(discussion => {
+      if (!discussion.createdAt) return false;
+      
+      try {
+        // Parse discussion date safely
+        const discussionDate = new Date(discussion.createdAt);
+        return discussionDate >= fromDate;
+      } catch (e) {
+        console.error(`Error parsing date: ${discussion.createdAt}`, e);
+        return false;
+      }
+    });
+    
+    console.log(`From date filter (${fromDate.toISOString()}) reduced from ${beforeCount} to ${filtered.length} discussions`);
+  }
+  
+  if (filterValues.toDate instanceof Date) {
+    const beforeCount = filtered.length;
+    
+    // Set toDate to end of day for consistent comparison
+    const toDate = new Date(filterValues.toDate);
+    toDate.setHours(23, 59, 59, 999);
+    
+    filtered = filtered.filter(discussion => {
+      if (!discussion.createdAt) return false;
+      
+      try {
+        // Parse discussion date safely
+        const discussionDate = new Date(discussion.createdAt);
+        return discussionDate <= toDate;
+      } catch (e) {
+        console.error(`Error parsing date: ${discussion.createdAt}`, e);
+        return false;
+      }
+    });
+    
+    console.log(`To date filter (${toDate.toISOString()}) reduced from ${beforeCount} to ${filtered.length} discussions`);
+  }
+  
+  // Filter by batch ID - match with 'batch_id' parameter
+  if (filterValues.batchId) {
+    const beforeCount = filtered.length;
+    const batchIdNum = Number(filterValues.batchId);
+    
+    if (!isNaN(batchIdNum) && batchIdNum > 0) {
+      filtered = filtered.filter(discussion => {
+        return discussion.batchId === batchIdNum;
+      });
+      
+      console.log(`Batch ID filter for ${batchIdNum} reduced from ${beforeCount} to ${filtered.length} discussions`);
+    }
+  }
+  
+  // Summary log of all applied filters
+  console.log('Applied filters with these criteria:', {
+    status: filterValues.status,
+    searchQuery: searchQuery.trim() || 'none',
+    myAnnotations: filterValues.showMyAnnotations,
+    repositoryLanguage: filterValues.repositoryLanguage,
+    releaseTag: filterValues.releaseTag,
+    fromDate: filterValues.fromDate?.toISOString(),
+    toDate: filterValues.toDate?.toISOString(),
+    batchId: filterValues.batchId || 'none'
+  });
+  
+  console.log('Filtered discussions count before user annotation status update:', filtered.length);
+  
+  // Update discussions with user annotation status - THIS IS THE CRITICAL FIX
+  const updatedDiscussions = filtered.map(discussion => {
+    // Get accurate user annotation status by checking actual annotations
+    const userAnnotationStatus = getUserAnnotationStatus(discussion.id, user.id);
+    
+    // Calculate ACTUAL annotator counts from the annotations arrays
+    const task1AnnotatorsCount = 
+      Array.isArray(discussion.annotations?.task1_annotations) 
+        ? discussion.annotations.task1_annotations.length 
+        : 0;
+    
+    const task2AnnotatorsCount = 
+      Array.isArray(discussion.annotations?.task2_annotations) 
+        ? discussion.annotations.task2_annotations.length 
+        : 0;
+    
+    const task3AnnotatorsCount = 
+      Array.isArray(discussion.annotations?.task3_annotations) 
+        ? discussion.annotations.task3_annotations.length 
+        : 0;
+    
+    // Enhanced debugging for annotation counts
+    if (task1AnnotatorsCount > 0 || task2AnnotatorsCount > 0 || task3AnnotatorsCount > 0) {
+      console.log(`Discussion ${discussion.id} annotation counts:`, {
+        task1: task1AnnotatorsCount,
+        task2: task2AnnotatorsCount,
+        task3: task3AnnotatorsCount
+      });
+    }
+    
+    // Create enhanced discussion with correct annotation status
+    return {
+      ...discussion,
+      tasks: {
+        task1: {
+          ...discussion.tasks.task1,
+          // Force to boolean
+          userAnnotated: userAnnotationStatus.task1 === true,
+          // CRITICAL FIX: Update annotators count from actual data
+          annotators: task1AnnotatorsCount
+        },
+        task2: {
+          ...discussion.tasks.task2,
+          // Force to boolean
+          userAnnotated: userAnnotationStatus.task2 === true,
+          // CRITICAL FIX: Update annotators count from actual data
+          annotators: task2AnnotatorsCount
+        },
+        task3: {
+          ...discussion.tasks.task3,
+          // Force to boolean
+          userAnnotated: userAnnotationStatus.task3 === true,
+          // CRITICAL FIX: Update annotators count from actual data
+          annotators: task3AnnotatorsCount
+        },
       },
-      task2: {
-        ...discussion.tasks.task2,
-        // Force to boolean
-        userAnnotated: userAnnotationStatus.task2 === true,
-        // CRITICAL FIX: Update annotators count from actual data
-        annotators: task2AnnotatorsCount
-      },
-      task3: {
-        ...discussion.tasks.task3,
-        // Force to boolean
-        userAnnotated: userAnnotationStatus.task3 === true,
-        // CRITICAL FIX: Update annotators count from actual data
-        annotators: task3AnnotatorsCount
-      },
-    },
-  } as EnhancedDiscussion;
-}); 
-    console.log('Filtered discussions:', updatedDiscussions.length);
-    setFilteredDiscussions(updatedDiscussions);
-  }, [discussions, isAuthenticated, navigate, getUserAnnotationStatus, user, filterValues, searchQuery, getDiscussionsByStatus]);
-
-  // Handle search input change
+    } as EnhancedDiscussion;
+  });
+  
+  console.log('Final filtered discussions count:', updatedDiscussions.length);
+  setFilteredDiscussions(updatedDiscussions);
+}, [discussions, isAuthenticated, navigate, getUserAnnotationStatus, user, filterValues, searchQuery, getDiscussionsByStatus]);  // Handle search input change
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
   };
