@@ -163,10 +163,10 @@ export function useAnnotationData() {
   }, [discussions]);
 
   // Get user's annotation for a specific discussion and task
-const getUserAnnotation = useCallback((discussionId: string, userId: string, taskId: number) => {
+const getUserAnnotation = useCallback((discussionId: string, userId: string, taskId: number): Annotation | undefined => {
   if (!discussionId || !userId) {
     console.log('[useAnnotationData] getUserAnnotation: Aborted due to missing discussionId or userId. Provided:', { discussionId, userId });
-    return null;
+    return undefined;
   }
   
   console.log('[useAnnotationData] getUserAnnotation: Attempting to find annotation with:', { discussionId, userId, taskId });
@@ -176,12 +176,12 @@ const getUserAnnotation = useCallback((discussionId: string, userId: string, tas
   
   if (!discussion) {
     console.log('[useAnnotationData] getUserAnnotation: Discussion not found:', discussionId);
-    return null;
+    return undefined;
   }
   
   if (!discussion.annotations) {
     console.log('[useAnnotationData] getUserAnnotation: Discussion has no annotations property:', discussionId);
-    return null;
+    return undefined;
   }
   
   // Map task ID to the corresponding annotations array
@@ -197,7 +197,7 @@ const getUserAnnotation = useCallback((discussionId: string, userId: string, tas
     console.log('[useAnnotationData] getUserAnnotation: Found task3_annotations array with', relevantAnnotations.length, 'items');
   } else {
     console.log('[useAnnotationData] getUserAnnotation: No annotations array found for task', taskId);
-    return null;
+    return undefined;
   }
   
   // Log the first few annotations for debugging
@@ -260,7 +260,7 @@ const getUserAnnotation = useCallback((discussionId: string, userId: string, tas
     console.log('[useAnnotationData] getUserAnnotation: Annotation FOUND:', JSON.stringify(foundAnnotation, null, 2));
   }
   
-  return foundAnnotation;
+  return foundAnnotation ? (foundAnnotation as Annotation) : undefined;
 }, [discussions]);
 
 // Save an annotation with proper type signature to return a Promise
@@ -411,13 +411,36 @@ const getUserAnnotation = useCallback((discussionId: string, userId: string, tas
     return discussionAnnotations;
   }, [annotations]);
 
-  // Get consensus annotation for a discussion task
-  const getConsensusAnnotation = useCallback((discussionId: string, taskId: number) => {
-    if (!discussionId) return null;
-    return consensusAnnotations.find(
-      a => a.discussion_id === discussionId && a.task_id === taskId
-    );
-  }, [consensusAnnotations]);
+  // Get consensus annotation for a specific discussion and task
+  // This will now fetch from the API directly.
+  const getConsensusAnnotation = useCallback(async (discussionId: string, taskId: number): Promise<Annotation | undefined> => {
+    if (!discussionId || taskId === undefined) {
+      console.warn('[useAnnotationData] getConsensusAnnotation: Aborted due to missing discussionId or taskId.');
+      return undefined;
+    }
+    try {
+      setLoading(true);
+      console.log(`[useAnnotationData] Fetching consensus for discussion: ${discussionId}, task: ${taskId}`);
+      const consensus = await api.consensus.get(discussionId, taskId);
+      if (consensus && Object.keys(consensus).length > 0 && consensus.data) { // Check if it's a meaningful object and has data
+        // Optionally, update a local cache/state if you maintain one for consensus annotations
+        // For now, just returning the fetched one.
+        // Example: setConsensusAnnotations(prev => [...prev.filter(ca => !(ca.discussion_id === discussionId && ca.task_id === taskId)), consensus]);
+        console.log(`[useAnnotationData] Fetched consensus successfully:`, consensus);
+        return consensus;
+      } else {
+        console.log(`[useAnnotationData] No consensus found or empty data for discussion: ${discussionId}, task: ${taskId}`);
+        return undefined;
+      }
+    } catch (err) {
+      const errorMessage = (err as ApiError).message || 'Failed to fetch consensus annotation';
+      console.error('[useAnnotationData] Error fetching consensus annotation:', errorMessage);
+      toast.error(errorMessage);
+      return undefined;
+    } finally {
+      setLoading(false);
+    }
+  }, [setLoading]); // Removed api.consensus.get from dependencies, as api object itself is stable.
 
   // Filter discussions by their status
   const getDiscussionsByStatus = useCallback((status: TaskStatus) => {

@@ -161,11 +161,23 @@ const getUserEmailById = useCallback((userId: string): string => {
     // Reset consensus feedback when relevant dependencies change
     setConsensusStars(null);
     setConsensusComment('');
+    console.log('[Dashboard useEffect] Triggered. discussionId:', discussionId, 'currentStep:', currentStep, 'viewMode:', viewMode, 'user:', !!user, 'isPodLead:', isPodLead, 'annotationsLoaded:', annotationsLoaded); // DEBUG LOG
+    
+    // Log dependency references
+    console.log('[Dashboard useEffect Deps] discussionId:', discussionId);
+    console.log('[Dashboard useEffect Deps] currentStep:', currentStep);
+    console.log('[Dashboard useEffect Deps] viewMode:', viewMode);
+    console.log('[Dashboard useEffect Deps] user:', user);
+    console.log('[Dashboard useEffect Deps] isPodLead:', isPodLead);
+    console.log('[Dashboard useEffect Deps] annotationsLoaded:', annotationsLoaded);
+    // For functions, we can't easily log their content, but logging their existence or a simple marker can help.
+    // console.log('[Dashboard useEffect Deps] loadUserAnnotation === prevLoadUserAnnotation:', /* need a way to store previous */);
+    // console.log('[Dashboard useEffect Deps] prepareConsensusView === prevPrepareConsensusView:', /* need a way to store previous */);
 
     if (discussionId && user && currentStep > 0 && currentStep <= 3 && annotationsLoaded) {
-      console.log(`Loading data for discussion: ${discussionId}, task: ${currentStep}, mode: ${viewMode}, annotationsLoaded: ${annotationsLoaded}`);
-      
+      console.log('[Dashboard useEffect] Basic conditions met. Processing viewMode...'); // DEBUG LOG
       if (viewMode === 'detail') {
+        console.log('[Dashboard useEffect] ViewMode is detail. Loading user annotation...'); // DEBUG LOG
         // Load user's existing annotation only for the current task
         const updatedSubTasks = loadUserAnnotation(discussionId, currentStep);
         
@@ -186,26 +198,45 @@ const getUserEmailById = useCallback((userId: string): string => {
           console.log("No saved annotation found or error loading");
         }
       } else if (viewMode === 'consensus' && isPodLead) {
+        console.log('[Dashboard useEffect] ViewMode is consensus and user is PodLead. Preparing consensus view...'); // DEBUG LOG
         // Prepare consensus view only for the current task
-        const consensusTasks = prepareConsensusView(discussionId, currentStep);
-        
-        if (consensusTasks && consensusTasks.length > 0) {
-          console.log("Loaded consensus view successfully");
-          switch (currentStep) {
-            case TaskId.QUESTION_QUALITY:
-              setConsensusTask1(consensusTasks);
-              break;
-            case TaskId.ANSWER_QUALITY:
-              setConsensusTask2(consensusTasks);
-              break;
-            case TaskId.REWRITE:
-              setConsensusTask3(consensusTasks);
-              break;
+        const loadConsensus = async () => {
+          const consensusViewData = await prepareConsensusView(discussionId, currentStep);
+          console.log('[Dashboard] Prepared consensus view data:', JSON.stringify(consensusViewData)); // DEBUG LOG
+          
+          if (consensusViewData && consensusViewData.tasks) {
+            console.log("Loaded consensus view successfully");
+            // Set the subtasks for the consensus view
+            switch (currentStep) {
+              case TaskId.QUESTION_QUALITY:
+                setConsensusTask1(consensusViewData.tasks);
+                break;
+              case TaskId.ANSWER_QUALITY:
+                setConsensusTask2(consensusViewData.tasks);
+                break;
+              case TaskId.REWRITE:
+                setConsensusTask3(consensusViewData.tasks);
+                break;
+            }
+            // Set overall consensus feedback if available
+            setConsensusStars(consensusViewData.stars ?? null);
+            setConsensusComment(consensusViewData.comment ?? '');
+          } else {
+            // Reset if view data is null or tasks are null (e.g., error in preparation)
+            setConsensusStars(null);
+            setConsensusComment('');
+            // Optionally, reset the task views too if tasks are null
+            // switch (currentStep) {
+            //   case TaskId.QUESTION_QUALITY: setConsensusTask1([]); break;
+            //   case TaskId.ANSWER_QUALITY: setConsensusTask2([]); break;
+            //   case TaskId.REWRITE: setConsensusTask3([]); break;
+            // }
           }
-        }
+        };
+        loadConsensus();
       }
     }
-  }, [discussionId, currentStep, viewMode, user, isPodLead, annotationsLoaded]);
+  }, [discussionId, currentStep, viewMode, user, isPodLead, annotationsLoaded, loadUserAnnotation, prepareConsensusView, setConsensusTask1, setConsensusTask2, setConsensusTask3]); // Added dependencies from IIFE
 
   // Get summary data for all tasks
   const getSummaryData = () => {
@@ -323,7 +354,10 @@ const getUserEmailById = useCallback((userId: string): string => {
         toast.error("Cannot determine which consensus task to update.");
         return;
     }
-    toast.success("Consensus form populated with selected annotation.");
+    // Reset overall consensus feedback fields
+    setConsensusStars(null);
+    setConsensusComment('');
+    toast.success("Consensus form populated with selected annotation. Please provide overall feedback.");
   };
 
   return (

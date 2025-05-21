@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { SubTask, SubTaskStatus } from '@/components/dashboard/TaskCard';
 import { Annotation } from '@/services/api';
 import { toast } from 'sonner';
@@ -8,8 +8,14 @@ interface AnnotationLoaderProps {
   task2SubTasks: SubTask[];
   task3SubTasks: SubTask[];
   getUserAnnotation: (discussionId: string, userId: string, taskId: number) => Annotation | undefined;
-  getConsensusAnnotation: (discussionId: string, taskId: number) => Annotation | undefined;
+  getConsensusAnnotation: (discussionId: string, taskId: number) => Promise<Annotation | undefined>;
   getAnnotationsForTask: (discussionId: string, taskId: number) => Annotation[];
+}
+
+interface PreparedConsensusView {
+  tasks: SubTask[] | null;
+  stars?: number | null;
+  comment?: string;
 }
 
 export function useAnnotationLoader({
@@ -23,7 +29,7 @@ export function useAnnotationLoader({
   const [loading, setLoading] = useState(false);
 
   // Load user's annotation for a specific task
-  const loadUserAnnotation = (discussionId: string, taskId: number, userId: string = 'current'): SubTask[] | null => {
+  const loadUserAnnotation = useCallback((discussionId: string, taskId: number, userId: string = 'current'): SubTask[] | null => {
     try {
       // If userId is 'current', use default behavior
       const annotation = getUserAnnotation(discussionId, userId, taskId);
@@ -132,13 +138,13 @@ export function useAnnotationLoader({
       toast.error('Failed to load annotation');
       return null;
     }
-  };
+  }, [getUserAnnotation, task1SubTasks, task2SubTasks, task3SubTasks]);
 
   // Prepare consensus view based on annotations
-  const prepareConsensusView = (discussionId: string, taskId: number): SubTask[] | null => {
+  const prepareConsensusView = useCallback(async (discussionId: string, taskId: number): Promise<PreparedConsensusView> => {
     try {
       // First check if there's already a consensus annotation
-      const consensusAnnotation = getConsensusAnnotation(discussionId, taskId);
+      const consensusAnnotation = await getConsensusAnnotation(discussionId, taskId);
       
       // Initialize with empty consensus tasks based on taskId
       let consensusTasks: SubTask[] = [];
@@ -153,24 +159,33 @@ export function useAnnotationLoader({
       // If we have an existing consensus annotation, use it
       if (consensusAnnotation) {
         console.log("Using existing consensus annotation:", consensusAnnotation.data);
-        return mapAnnotationToSubTasks(consensusTasks, consensusAnnotation);
+        console.log('[useAnnotationLoader] Fetched consensus data from API:', JSON.stringify(consensusAnnotation.data)); // DEBUG LOG
+        const mappedTasks = mapAnnotationToSubTasks(consensusTasks, consensusAnnotation);
+        const starsValue = consensusAnnotation.data?.stars;
+        const commentValue = consensusAnnotation.data?.comment;
+        return {
+          tasks: mappedTasks,
+          stars: typeof starsValue === 'number' ? starsValue : null,
+          comment: typeof commentValue === 'string' ? commentValue : undefined
+        };
       }
       
       // If no consensus exists yet, populate with annotator data
       const annotations = getAnnotationsForTask(discussionId, taskId);
       
       if (!annotations || annotations.length === 0) {
-        return consensusTasks;
+        return { tasks: consensusTasks }; // Return default tasks, no stars/comment
       }
       
       console.log(`Generating consensus from ${annotations.length} annotations`);
-      return generateConsensusFromAnnotations(consensusTasks, annotations);
+      const generatedTasks = generateConsensusFromAnnotations(consensusTasks, annotations);
+      return { tasks: generatedTasks }; // No specific stars/comment when generated
     } catch (error) {
       console.error('Failed to prepare consensus view:', error);
       toast.error('Failed to prepare consensus view');
-      return null;
+      return { tasks: null };
     }
-  };
+  }, [getConsensusAnnotation, getAnnotationsForTask, task1SubTasks, task2SubTasks, task3SubTasks]);
 
   // Helper function to map annotation data to subtasks
   const mapAnnotationToSubTasks = (tasks: SubTask[], annotation: Annotation): SubTask[] => {
