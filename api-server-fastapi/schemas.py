@@ -73,6 +73,12 @@ class DiscussionBase(BaseModel):
     release_tag: Optional[str] = None
     release_url: Optional[str] = None
     release_date: Optional[str] = None
+    # New fields from importable json
+    question: Optional[str] = None
+    answer: Optional[str] = None
+    category: Optional[str] = None
+    knowledge: Optional[str] = None
+    code: Optional[str] = None
 
 class DiscussionCreate(DiscussionBase):
     batch_id: Optional[int] = None
@@ -179,6 +185,13 @@ class GitHubDiscussion(BaseModel):
     release_date: Optional[str] = None
     tasks: Optional[Dict[str, Dict[str, Any]]] = None
     batch_id: Optional[int] = None
+    # New fields from json
+    question: Optional[str] = None
+    answer: Optional[str] = None
+    category: Optional[str] = None
+    knowledge: Optional[str] = None
+    code: Optional[str] = None
+    lang: Optional[str] = None
 
     @validator('created_at')
     def validate_created_at(cls, v):

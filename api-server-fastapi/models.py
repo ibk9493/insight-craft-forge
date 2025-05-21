@@ -27,6 +27,7 @@ class BatchUpload(Base):
     # Relationships
     discussions = relationship("Discussion", back_populates="batch")
 
+# Add to models.py in the Discussion class
 class Discussion(Base):
     __tablename__ = "discussions"
 
@@ -35,12 +36,19 @@ class Discussion(Base):
     url = Column(String, nullable=False)
     repository = Column(String, nullable=False)
     created_at = Column(String, nullable=False)
-    
+
     # Add repository metadata fields
     repository_language = Column(String, nullable=True)
     release_tag = Column(String, nullable=True)
     release_url = Column(String, nullable=True)
     release_date = Column(String, nullable=True)
+
+    # New fields from test.json
+    question = Column(String, nullable=True)
+    answer = Column(String, nullable=True)
+    category = Column(String, nullable=True)
+    knowledge = Column(String, nullable=True)
+    code = Column(String, nullable=True)
     
     # Add batch relationship
     batch_id = Column(Integer, ForeignKey("batch_uploads.id"), nullable=True)
