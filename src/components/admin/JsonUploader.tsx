@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,8 +35,18 @@ const JsonUploader: React.FC = () => {
     // Handle ID
     if (disc.id) normalized.id = disc.id;
 
-    // Handle title
-    if (disc.title) normalized.title = disc.title;
+    // Handle title: Prioritize question, then original title
+    const MAX_TITLE_LENGTH = 70;
+    if (disc.question && typeof disc.question === 'string' && disc.question.trim() !== '') {
+      if (disc.question.length > MAX_TITLE_LENGTH) {
+        normalized.title = disc.question.substring(0, MAX_TITLE_LENGTH - 3) + "...";
+      } else {
+        normalized.title = disc.question;
+      }
+    } else if (disc.title && typeof disc.title === 'string') {
+      normalized.title = disc.title;
+    }
+    // If title is still not set, it will be handled by the fallback logic later in handleFileChange
 
     // Handle repository
     if (disc.repository) normalized.repository = disc.repository;
