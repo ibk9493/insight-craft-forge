@@ -46,6 +46,7 @@ const Dashboard = () => {
     handleCodeUrlChange,
     validateGitHubCodeUrl,
     isPodLead,
+    isAdmin,
     user,
     getUserAnnotation,
     getAnnotationsForTask,
@@ -161,7 +162,7 @@ const getUserEmailById = useCallback((userId: string): string => {
     // Reset consensus feedback when relevant dependencies change
     setConsensusStars(null);
     setConsensusComment('');
-    console.log('[Dashboard useEffect] Triggered. discussionId:', discussionId, 'currentStep:', currentStep, 'viewMode:', viewMode, 'user:', !!user, 'isPodLead:', isPodLead, 'annotationsLoaded:', annotationsLoaded); // DEBUG LOG
+    console.log('[Dashboard useEffect] Triggered. discussionId:', discussionId, 'currentStep:', currentStep, 'viewMode:', viewMode, 'user:', !!user, 'isPodLead:', isPodLead, 'isAdmin:', isAdmin, 'annotationsLoaded:', annotationsLoaded); // DEBUG LOG
     
     // Log dependency references
     console.log('[Dashboard useEffect Deps] discussionId:', discussionId);
@@ -169,6 +170,7 @@ const getUserEmailById = useCallback((userId: string): string => {
     console.log('[Dashboard useEffect Deps] viewMode:', viewMode);
     console.log('[Dashboard useEffect Deps] user:', user);
     console.log('[Dashboard useEffect Deps] isPodLead:', isPodLead);
+    console.log('[Dashboard useEffect Deps] isAdmin:', isAdmin);
     console.log('[Dashboard useEffect Deps] annotationsLoaded:', annotationsLoaded);
     // For functions, we can't easily log their content, but logging their existence or a simple marker can help.
     // console.log('[Dashboard useEffect Deps] loadUserAnnotation === prevLoadUserAnnotation:', /* need a way to store previous */);
@@ -197,8 +199,8 @@ const getUserEmailById = useCallback((userId: string): string => {
         } else {
           console.log("No saved annotation found or error loading");
         }
-      } else if (viewMode === 'consensus' && isPodLead) {
-        console.log('[Dashboard useEffect] ViewMode is consensus and user is PodLead. Preparing consensus view...'); // DEBUG LOG
+      } else if (viewMode === 'consensus' && (isPodLead || isAdmin)) {
+        console.log('[Dashboard useEffect] ViewMode is consensus and user is PodLead or Admin. Preparing consensus view...'); // DEBUG LOG
         // Prepare consensus view only for the current task
         const loadConsensus = async () => {
           const consensusViewData = await prepareConsensusView(discussionId, currentStep);
@@ -236,7 +238,7 @@ const getUserEmailById = useCallback((userId: string): string => {
         loadConsensus();
       }
     }
-  },  [discussionId, currentStep, viewMode, user, isPodLead])// Added dependencies from IIFE
+  },  [discussionId, currentStep, viewMode, user, isPodLead, isAdmin])// Added dependencies from IIFE
 
   // Get summary data for all tasks
   const getSummaryData = () => {
@@ -430,7 +432,7 @@ const getUserEmailById = useCallback((userId: string): string => {
               )}
               
               {/* Consensus mode toggle button */}
-              {isPodLead && currentStep > 0 && (
+              {(isPodLead || isAdmin) && currentStep > 0 && (
                 <Button 
                   onClick={toggleConsensusMode} 
                   variant="outline"
@@ -456,7 +458,7 @@ const getUserEmailById = useCallback((userId: string): string => {
               />
             )}
             
-            {currentStep === TaskId.QUESTION_QUALITY && viewMode === 'consensus' && isPodLead && (
+            {currentStep === TaskId.QUESTION_QUALITY && viewMode === 'consensus' && (isPodLead || isAdmin) && (
               <>
                 <TaskCard
                   title="Task 1: Question Quality Consensus"
@@ -523,7 +525,7 @@ const getUserEmailById = useCallback((userId: string): string => {
               />
             )}
             
-            {currentStep === TaskId.ANSWER_QUALITY && viewMode === 'consensus' && isPodLead && (
+            {currentStep === TaskId.ANSWER_QUALITY && viewMode === 'consensus' && (isPodLead || isAdmin) && (
               <>
                 <TaskCard
                   title="Task 2: Answer Quality Consensus"
@@ -605,7 +607,7 @@ const getUserEmailById = useCallback((userId: string): string => {
               />
             )}
             
-            {currentStep === TaskId.REWRITE && viewMode === 'consensus' && isPodLead && (
+            {currentStep === TaskId.REWRITE && viewMode === 'consensus' && (isPodLead || isAdmin) && (
               <>
                 <TaskCard
                   title="Task 3: Rewrite Consensus"

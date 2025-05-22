@@ -356,9 +356,9 @@ const getUserAnnotation = useCallback((discussionId: string, userId: string, tas
   // Save consensus annotation with proper type signature
   const saveConsensusAnnotation = useCallback(async (consensusAnnotation: Omit<Annotation, 'timestamp'>): Promise<boolean> => {
     try {
-      // Ensure that the user is a pod lead to save consensus
-      if (!user || user.role !== 'pod_lead') {
-        toast.error('Only pod leads can save consensus annotations');
+      // Ensure that the user is a pod lead or admin to save consensus
+      if (!user || (user.role !== 'pod_lead' && user.role !== 'admin')) {
+        toast.error('Only pod leads or admins can save consensus annotations');
         return false;
       }
       

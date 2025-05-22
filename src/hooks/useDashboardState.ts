@@ -9,7 +9,7 @@ import { TaskId } from './annotations/useAnnotationTypes';
 export function useDashboardState() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, isAuthenticated, isPodLead, logout } = useUser();
+  const { user, isAuthenticated, isPodLead, isAdmin, logout } = useUser();
   const queryParams = new URLSearchParams(location.search);
   const discussionId = queryParams.get('discussionId');
   const taskNumber = queryParams.get('task') ? parseInt(queryParams.get('task')!) : null;
@@ -291,6 +291,7 @@ export function useDashboardState() {
     taskNumber,
     user,
     isPodLead,
+    isAdmin,
     getUserAnnotation,
     getAnnotationsForTask,
     saveAnnotation,

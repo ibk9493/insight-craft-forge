@@ -126,8 +126,8 @@ export function useAnnotationSaver({
         }
       } else if (viewMode === 'consensus') {
         // Consensus annotation
-        if (!isPodLead(user)) {
-          toast.error('Only pod leads can save consensus annotations');
+        if (!user || (user.role !== 'pod_lead' && user.role !== 'admin')) {
+          toast.error('Only pod leads or admins can save consensus annotations');
           return;
         }
         
