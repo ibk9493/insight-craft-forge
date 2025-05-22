@@ -64,7 +64,7 @@ export function useAnnotationSaver({
     discussionId: string | null, 
     taskId: number, 
     viewMode: 'grid' | 'detail' | 'consensus',
-    uploadedImage: string | null,
+    screenshotUrl: string | null,
     codeDownloadUrl: string | null,
     onComplete: () => void,
     consensusStars?: number | null,
@@ -91,8 +91,8 @@ export function useAnnotationSaver({
           case TaskId.ANSWER_QUALITY:
             currentTasks = task2SubTasks;
             // Add screenshot and code download URL for task 2
-            if (uploadedImage) {
-              taskData.screenshot = uploadedImage;
+            if (screenshotUrl) {
+              taskData.screenshot = screenshotUrl;
             }
             if (codeDownloadUrl) {
               taskData.codeDownloadUrl = codeDownloadUrl;

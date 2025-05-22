@@ -16,7 +16,8 @@ interface DashboardNavigationProps {
   onBackToGrid: () => void;
   onSave: () => void;
   isConsensus: boolean;
-  onFileUpload?: (file: File) => void;
+  screenshotUrl?: string | null;
+  onScreenshotUrlChange?: (url: string) => void;
   codeDownloadUrl?: string | null;
   discussionId?: string;
   onCodeUrlChange?: (url: string) => void;
@@ -31,7 +32,8 @@ const DashboardNavigation = ({
   onBackToGrid,
   onSave,
   isConsensus,
-  onFileUpload,
+  screenshotUrl,
+  onScreenshotUrlChange,
   codeDownloadUrl,
   discussionId,
   onCodeUrlChange,
@@ -42,10 +44,10 @@ const DashboardNavigation = ({
   const dispatch = useAppDispatch();
   const [useAutomaticUrl, setUseAutomaticUrl] = useState<boolean>(true);
   
-  // Handle file input change
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0] && onFileUpload) {
-      onFileUpload(e.target.files[0]);
+  // Handle screenshot URL input change
+  const handleScreenshotUrlInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (onScreenshotUrlChange) {
+      onScreenshotUrlChange(e.target.value);
     }
   };
 
@@ -77,17 +79,17 @@ const DashboardNavigation = ({
   
   // Use repository release URL if available
   useEffect(() => {
-    if (useAutomaticUrl && currentDiscussion?.releaseUrl && onCodeUrlChange) {
-      onCodeUrlChange(currentDiscussion.releaseUrl);
+    if (useAutomaticUrl && currentDiscussion?.release_url && onCodeUrlChange) {
+      onCodeUrlChange(currentDiscussion.release_url);
     }
   }, [currentDiscussion, useAutomaticUrl, onCodeUrlChange]);
   
   // Toggle between automatic and manual URLs
   const toggleUrlMode = () => {
     setUseAutomaticUrl(!useAutomaticUrl);
-    if (!useAutomaticUrl && currentDiscussion?.releaseUrl && onCodeUrlChange) {
+    if (!useAutomaticUrl && currentDiscussion?.release_url && onCodeUrlChange) {
       // Switching back to automatic - use the repository release URL
-      onCodeUrlChange(currentDiscussion.releaseUrl);
+      onCodeUrlChange(currentDiscussion.release_url);
     }
   };
   
@@ -148,22 +150,17 @@ const DashboardNavigation = ({
 
       {viewMode !== 'grid' && currentStep === 2 && (
         <div className="flex flex-col gap-4 mt-2">
-          {/* File upload button for screenshots */}
-          <div className="flex items-center">
-            <input
-              type="file"
-              id="file-upload"
-              className="hidden"
-              onChange={handleFileChange}
-              accept="image/*"
+          {/* Screenshot Google Drive URL input field */}
+          <div className="flex flex-col space-y-2 w-full">
+            <label htmlFor="screenshot-url" className="text-sm font-medium text-gray-700 mb-1 block">Screenshot Google Drive URL</label>
+            <Input
+              id="screenshot-url"
+              type="text"
+              value={screenshotUrl || ''}
+              onChange={handleScreenshotUrlInputChange}
+              placeholder="Enter Google Drive URL for the screenshot"
+              className="flex-1"
             />
-            <label
-              htmlFor="file-upload"
-              className="cursor-pointer flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
-            >
-              <Upload className="h-4 w-4" />
-              <span>Upload Screenshot</span>
-            </label>
           </div>
           
           {/* Code download URL input field with validation */}
@@ -179,7 +176,7 @@ const DashboardNavigation = ({
                     onChange={handleCodeUrlChange}
                     placeholder="https://github.com/owner/repo/archive/refs/tags/version.tar.gz"
                     className="flex-1"
-                    disabled={useAutomaticUrl && !!currentDiscussion?.releaseUrl}
+                    disabled={useAutomaticUrl && !!currentDiscussion?.release_url}
                   />
                   {codeDownloadUrl && (
                     isValidGitHubUrl(codeDownloadUrl) ? 
@@ -191,13 +188,13 @@ const DashboardNavigation = ({
             </div>
             
             {/* Show repository release info if available */}
-            {currentDiscussion?.releaseTag && (
+            {currentDiscussion?.release_tag && (
               <div className="flex items-center gap-2 text-sm">
                 <Tag className="h-4 w-4 text-blue-500" />
                 <span>
                   {useAutomaticUrl ? 
-                    `Using release: ${currentDiscussion.releaseTag}` : 
-                    `Repository has release: ${currentDiscussion.releaseTag}`
+                    `Using release: ${currentDiscussion.release_tag}` : 
+                    `Repository has release: ${currentDiscussion.release_tag}`
                   }
                 </span>
                 <Button 

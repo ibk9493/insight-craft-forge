@@ -35,13 +35,13 @@ const Dashboard = () => {
     handleUrlSubmit,
     handleSelectTask,
     handleBackToGrid,
-    handleFileUpload,
+    handleScreenshotUrlChange,
     updateStepCompletionStatus,
     toggleConsensusMode,
     discussionId,
     steps,
     tasks,
-    uploadedImage,
+    screenshotUrl,
     codeDownloadUrl,
     handleCodeUrlChange,
     validateGitHubCodeUrl,
@@ -252,7 +252,7 @@ const Dashboard = () => {
       discussionId, 
       currentStep, 
       viewMode, 
-      uploadedImage, 
+      screenshotUrl,
       codeDownloadUrl, 
       handleBackToGrid,
       // Pass consensus feedback if in consensus mode
@@ -671,9 +671,10 @@ const Dashboard = () => {
           onBackToGrid={handleBackToGrid}
           onSave={onSaveClick}
           isConsensus={viewMode === 'consensus'}
-          onFileUpload={handleFileUpload}
+          screenshotUrl={screenshotUrl}
+          onScreenshotUrlChange={handleScreenshotUrlChange}
           codeDownloadUrl={codeDownloadUrl}
-          discussionId={discussionId || undefined}
+          discussionId={discussionId ?? undefined}
           onCodeUrlChange={handleCodeUrlChange}
           onCodeUrlVerify={validateGitHubCodeUrl}
           currentDiscussion={currentDiscussion}
