@@ -100,35 +100,35 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   
   // Load authorized users from API
   const loadAuthorizedUsers = async () => {
-    try {
-      // Use the API helper to get authorized users
-      const apiUsers = await api.auth.getAuthorizedUsers();
-      
-      // Ensure we cast the roles to UserRole type
-      const typedUsers: AuthorizedUser[] = apiUsers.map((user) => ({
-        email: user.email,
-        role: user.role as UserRole
-      }));
-      
-      setAuthorizedUsers(typedUsers);
-      
-      // Cache in localStorage for offline use
-      localStorage.setItem(AUTH_CONFIG.STORAGE_KEYS.AUTHORIZED_USERS, JSON.stringify(typedUsers));
-    } catch (error) {
-      console.error('Failed to load authorized users from API', error);
-      
-      // Fall back to localStorage if API fails
-      const storedAuthorizedUsers = localStorage.getItem(AUTH_CONFIG.STORAGE_KEYS.AUTHORIZED_USERS);
-      if (storedAuthorizedUsers) {
-        try {
-          const parsedAuthorizedUsers = JSON.parse(storedAuthorizedUsers);
-          setAuthorizedUsers(parsedAuthorizedUsers);
-        } catch (error) {
-          console.error('Failed to parse authorized users from localStorage', error);
-          localStorage.removeItem(AUTH_CONFIG.STORAGE_KEYS.AUTHORIZED_USERS);
-        }
-      }
-    }
+    // try {
+    //   // Use the API helper to get authorized users
+    //   const apiUsers = await api.auth.getAuthorizedUsers();
+    //
+    //   // Ensure we cast the roles to UserRole type
+    //   const typedUsers: AuthorizedUser[] = apiUsers.map((user) => ({
+    //     email: user.email,
+    //     role: user.role as UserRole
+    //   }));
+    //
+    //   setAuthorizedUsers(typedUsers);
+    //
+    //   // Cache in localStorage for offline use
+    //   localStorage.setItem(AUTH_CONFIG.STORAGE_KEYS.AUTHORIZED_USERS, JSON.stringify(typedUsers));
+    // } catch (error) {
+    //   console.error('Failed to load authorized users from API', error);
+    //
+    //   // Fall back to localStorage if API fails
+    //   const storedAuthorizedUsers = localStorage.getItem(AUTH_CONFIG.STORAGE_KEYS.AUTHORIZED_USERS);
+    //   if (storedAuthorizedUsers) {
+    //     try {
+    //       const parsedAuthorizedUsers = JSON.parse(storedAuthorizedUsers);
+    //       setAuthorizedUsers(parsedAuthorizedUsers);
+    //     } catch (error) {
+    //       console.error('Failed to parse authorized users from localStorage', error);
+    //       localStorage.removeItem(AUTH_CONFIG.STORAGE_KEYS.AUTHORIZED_USERS);
+    //     }
+    //   }
+    // }
   };
 
   // Login function using the API helper

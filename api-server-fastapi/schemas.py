@@ -338,3 +338,23 @@ class BulkTaskStatusUpdate(BaseModel):
 class BulkTaskManagementResult(BaseModel):
     results: List[TaskManagementResult]
 
+# Schema for returning user details by ID
+class UserResponse(BaseModel):
+    id: str # Keep as string to match frontend User interface
+    email: str
+    username: str # Will be populated with email
+    role: str
+
+    model_config = {
+        "from_attributes": True
+    }
+
+class UserPublicResponse(BaseModel):
+    id: str
+    username: str
+
+    model_config = {
+        "from_attributes": True
+    }
+
+# Discussion Schemas

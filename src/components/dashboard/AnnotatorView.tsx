@@ -3,13 +3,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Annotation } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Edit, Check } from 'lucide-react';
+import AnnotatorEmail from './AnnotatorEmail';
 
 interface AnnotatorViewProps {
   discussionId: string;
   currentStep: number;
   getAnnotationsForTask: (discussionId: string, taskId: number) => Annotation[];
   onUseForConsensus?: (annotation: Annotation) => void;
-  getUserEmailById?: (userId: string) => string;
+  getUserEmailById?: (userId: string) => Promise<string>;
 }
 
 const formatKey = (key: string): string => {
@@ -72,7 +73,11 @@ const AnnotatorView: React.FC<AnnotatorViewProps> = ({
               <CardHeader className="py-3">
                 <CardTitle className="text-base flex justify-between">
                   <span>
-                    {getUserEmailById ? getUserEmailById(annotation.user_id) : `Annotator (ID: ${annotation.user_id})`}
+                    {getUserEmailById ? (
+                      <AnnotatorEmail userId={annotation.user_id} getUserEmailById={getUserEmailById} />
+                    ) : (
+                      `Annotator (ID: ${annotation.user_id})`
+                    )}
                   </span>
                   <span className="text-xs text-gray-500">{new Date(annotation.timestamp).toLocaleString()}</span>
                 </CardTitle>

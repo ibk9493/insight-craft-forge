@@ -1,5 +1,6 @@
+
 from datetime import datetime, timezone, timedelta
-from fastapi import FastAPI, Depends, HTTPException, Query, Response, Body, status, Request, APIRouter
+from fastapi import FastAPI, Depends, HTTPException, Query, Response, Body, status, Request, APIRouter, Path
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List, Dict, Optional, Union, Any
@@ -28,7 +29,11 @@ from pydantic import BaseModel
 
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI()
+app = FastAPI(
+    title="Annotation Tool API",
+    version="1.0.0",
+    description="API for managing discussions, annotations, and user authentication for an annotation tool."
+)
 
 # Configure CORS
 app.add_middleware(
@@ -800,8 +805,37 @@ async def override_consensus_annotation_endpoint(  # Renamed for clarity
 # @app.post("/api/consensus", response_model=schemas.Annotation)
 # def create_or_update_consensus_route( ... )
 
-# @app.post("/api/consensus/calculate", response_model=Dict[str, Any])
-# def calculate_consensus_route( ... )
+@app.post("/api/consensus/override", response_model=schemas.Annotation)
+def override_consensus_route(
+    override_data: schemas.ConsensusOverride, 
+    db: Session = Depends(get_db)
+):
+    return consensus_service.override_consensus(db, override_data)
 
-# @app.post("/api/consensus/override", response_model=schemas.Annotation)
-# def override_consensus_route( ... )
+# Add this new endpoint
+@app.get("/api/auth/users/{user_id}", response_model=schemas.UserResponse)
+async def get_user_by_id(
+    user_id: int = Path(..., title="The ID of the user to retrieve"), 
+    db: Session = Depends(get_db)
+):
+    """Retrieve a specific user by their ID."""
+    db_user = db.query(models.AuthorizedUser).filter(models.AuthorizedUser.id == user_id).first()
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Populate username with email as per frontend expectation / previous findings
+    return schemas.UserResponse(
+        id=str(db_user.id),
+        email=db_user.email,
+        username=db_user.email, 
+        role=db_user.role
+    )
+
+@app.get("/api/auth/users/{user_id}/public", response_model=schemas.UserPublicResponse)
+async def get_public_user_info(
+    user_id: int = Path(..., title="The ID of the user to retrieve"), 
+    db: Session = Depends(get_db)
+):
+    # Implementation of the new endpoint
+    # This is a placeholder and should be replaced with the actual implementation
+    return {"message": "This endpoint is not implemented yet"}

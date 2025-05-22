@@ -258,6 +258,10 @@ export const api = {
     get: (discussionId: string, taskId: number) => 
       safeApiRequest<Annotation>(`/api/consensus/${discussionId}/${taskId}`, 'GET', undefined, undefined, {} as Annotation),
     save: (consensus: Omit<Annotation, 'timestamp'>) => {
+      if (consensus.data.grounded == "N/A") {
+        consensus.data.grounded = "False"
+      }
+      console.log("OKAY: WHOLA!", consensus.data)
       // The incoming 'consensus' object is already expected to have snake_case keys.
       const apiConsensus = {
         discussion_id: consensus.discussion_id,
