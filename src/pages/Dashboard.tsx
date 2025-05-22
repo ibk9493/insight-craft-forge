@@ -113,50 +113,47 @@ const Dashboard = () => {
     updateStepCompletionStatus,
     overrideAnnotation: undefined
   });
-  const userCache = useRef<{[userId: string]: string}>({});
+  // const userCache = useRef<{[userId: string]: string}>({});
+  const userEmailCache = useRef<{[userId: string]: string}>({});
+
   // Helper function to get user email by ID
- // Synchronous function that returns a string directly
-const getUserEmailById = useCallback((userId: string): string => {
-  if (!userId) {
-    return 'Unknown User';
-  }
-  
-  const userIdStr = String(userId);
-  
-  // First check in mock data for immediate response
-  const mockUser = MOCK_USERS_DATA.find(u => String(u.id) === userIdStr);
-  if (mockUser && mockUser.username) {
-    return mockUser.username;
-  }
-  
-  // If we have a cache of previously loaded users, check there
-  // This assumes you have some form of user cache in your app
-  const cachedUsers = userCache.current || {};
-  if (cachedUsers[userIdStr]) {
-    return cachedUsers[userIdStr];
-  }
-  
-  // Load in background for future use but return something now
-  // This won't affect the current render
-  setTimeout(() => {
-    api.users.getPublicUserInfo(userIdStr)
-      .then(userInfo => {
-        if (userInfo && userInfo.username) {
-          // Update cache for future use
-          userCache.current = {
-            ...userCache.current,
-            [userIdStr]: userInfo.username
-          };
-        }
-      })
-      .catch(error => {
-        console.warn(`Failed to load user info for ${userIdStr}:`, error);
-      });
-  }, 0);
-  
-  // Return a fallback immediately
-  return `User ${userIdStr}`;
-}, [api.users]);
+  const getUserEmailById = useCallback(async (userId: string): Promise<string> => {
+    if (!userId) {
+      return 'Unknown User';
+    }
+    const userIdStr = String(userId);
+
+    // Check cache first
+    if (userEmailCache.current[userIdStr]) {
+      return userEmailCache.current[userIdStr];
+    }
+
+    // User has confirmed mock user check is disabled, so removing that part.
+    // const mockUser = MOCK_USERS_DATA.find(u => String(u.id) === userIdStr);
+    // if (mockUser && mockUser.username) { // Assuming username was email-like
+    //   userEmailCache.current[userIdStr] = mockUser.username;
+    //   return mockUser.username;
+    // }
+
+    try {
+      const userInfo = await api.users.getUserById(userIdStr);
+      if (userInfo && userInfo.email) {
+        userEmailCache.current[userIdStr] = userInfo.email;
+        return userInfo.email;
+      } else {
+        // User info not found or email missing, cache a fallback to prevent constant re-fetching
+        const fallback = `User ${userIdStr}`;
+        userEmailCache.current[userIdStr] = fallback;
+        return fallback;
+      }
+    } catch (error) {
+      console.warn(`Failed to load user email for ${userIdStr}:`, error);
+      // Do not cache error, to allow retries on subsequent calls if needed,
+      // unless this becomes too noisy.
+      return `User ${userIdStr}`; // Fallback on error
+    }
+  }, [api.users.getUserById]);
+
   // Initialize data when task or discussion changes
   useEffect(() => {
     // Reset consensus feedback when relevant dependencies change
