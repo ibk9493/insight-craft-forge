@@ -119,7 +119,7 @@ const Discussions = () => {
   // Parse URL query parameters
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const filter = params.get('filter');
+    const statusFromParams = params.get('status');
     const search = params.get('search');
     const userIdFromParams = params.get('user_id');
     const myAnnotations = userIdFromParams === (user?.id?.toString() || ''); // Check against current user's ID
@@ -136,7 +136,7 @@ const Discussions = () => {
     const batch = params.get('batch_id');
     
     setFilterValues({
-      status: filter || 'all',
+      status: statusFromParams || 'all',
       showMyAnnotations: myAnnotations,
       repositoryLanguage: lang,
       releaseTag: tag,
