@@ -9,6 +9,7 @@ from datetime import datetime
 import logging
 from typing import List, Optional, Tuple, Dict, Any
 from contextlib import contextmanager
+from services.github_metadata_service import schedule_metadata_fetch
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -289,6 +290,12 @@ def get_discussion_by_id(db: Session, discussion_id: str) -> Optional[schemas.Di
             release_url=db_discussion.release_url,
             release_date=db_discussion.release_date,
             batch_id=db_discussion.batch_id,
+            # Include the content fields from upload
+            question=db_discussion.question,
+            answer=db_discussion.answer,
+            category=db_discussion.category,
+            knowledge=db_discussion.knowledge,
+            code=db_discussion.code,
             # For backward compatibility with older code
             task1_status=tasks["task1"].status,
             task1_annotators=tasks["task1"].annotators,
@@ -504,6 +511,45 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
         
         db.commit()
         logger.info(f"Successfully uploaded {discussions_added} discussions")
+        
+        # Schedule background metadata fetching for discussions that need it
+        try:
+            discussions_for_metadata = []
+            for disc in upload_data.discussions:
+                discussion_id = disc.id
+                if not discussion_id:
+                    repository, _, _ = extract_repository_info_from_url(disc.url)
+                    discussion_id = generate_discussion_id(repository, disc.url)
+                
+                # Check if discussion needs metadata fetching
+                needs_metadata = (
+                    not disc.repository_language or 
+                    not disc.release_tag or 
+                    not disc.release_url or 
+                    not disc.release_date
+                )
+                
+                if needs_metadata:
+                    discussions_for_metadata.append({
+                        'id': discussion_id,
+                        'url': disc.url,
+                        'repository_language': disc.repository_language,
+                        'release_tag': disc.release_tag,
+                        'release_url': disc.release_url,
+                        'release_date': disc.release_date,
+                        'created_at': disc.created_at
+                    })
+            
+            if discussions_for_metadata:
+                logger.info(f"Scheduling background metadata fetch for {len(discussions_for_metadata)} discussions")
+                schedule_metadata_fetch(discussions_for_metadata)
+            else:
+                logger.info("No discussions require metadata fetching")
+                
+        except Exception as meta_error:
+            logger.error(f"Error scheduling metadata fetch: {str(meta_error)}")
+            # Don't fail the upload if metadata scheduling fails
+        
         return schemas.UploadResult(
             success=True,
             message=f"Successfully uploaded {discussions_added} discussions",
@@ -601,6 +647,12 @@ def update_task_status(db: Session, discussion_id: str, task_id: int, status: st
                 "release_url": updated_discussion.release_url,
                 "release_date": updated_discussion.release_date,
                 "batch_id": updated_discussion.batch_id,
+                # Include content fields
+                "question": updated_discussion.question,
+                "answer": updated_discussion.answer,
+                "category": updated_discussion.category,
+                "knowledge": updated_discussion.knowledge,
+                "code": updated_discussion.code,
                 "task1_status": updated_discussion.task1_status,
                 "task1_annotators": updated_discussion.task1_annotators,
                 "task2_status": updated_discussion.task2_status,
