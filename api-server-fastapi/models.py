@@ -84,7 +84,10 @@ class ConsensusAnnotation(Base):
     task_id = Column(Integer, nullable=False)
     data = Column(JSON, nullable=False)
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
-    
+    # Stores the ID of the authenticated user (from token) who created/updated this record.
+    user_id = Column(String, nullable=False, index=True)
+    # Stores the ID of the annotator this data belongs to (from payload's 'user_id' field).
+    annotator_id = Column(String, nullable=False, index=True)
     # Relationships
     discussion = relationship("Discussion", back_populates="consensus_annotations")
     

@@ -1,4 +1,3 @@
-
 from typing import List, Dict, Any, Optional, Union
 from pydantic import BaseModel, Field, validator
 from datetime import datetime
@@ -10,8 +9,8 @@ class UserSignup(BaseModel):
     password: str
 
 # Base class for GoogleToken
-class GoogleToken(BaseModel):
-    token: str
+# class GoogleToken(BaseModel): # Defined later, remove duplicate
+#     token: str
 
 # Base class for AuthorizedUser
 class AuthorizedUserBase(BaseModel):
@@ -44,8 +43,8 @@ class BatchUpload(BatchUploadBase):
     discussion_count: int
 
     model_config = {
-        "from_attributes": True,  # Replaces orm_mode=True
-        "populate_by_name": True  # Helps with field aliases
+        "from_attributes": True,
+        "populate_by_name": True
     }
 # Task state for discussions
 class TaskState(BaseModel):
@@ -93,11 +92,11 @@ class Discussion(DiscussionBase):
     task3_annotators: Optional[int] = None
     batch_id: Optional[int] = None
     tasks: Dict[str, TaskState] = {}
-    annotations: Optional[Dict[str, Any]] = None  # Added this field
+    annotations: Optional[Dict[str, Any]] = None
 
     model_config = {
-        "from_attributes": True,  # Replaces orm_mode=True
-        "populate_by_name": True  # Helps with field aliases
+        "from_attributes": True,
+        "populate_by_name": True
     }
           
     @classmethod
@@ -130,10 +129,10 @@ class TaskStatusUpdate(BaseModel):
     task_id: int
     status: str
 
-# Schemas for Annotation
+# Schemas for Annotation (General Purpose)
 class AnnotationBase(BaseModel):
     discussion_id: str
-    user_id: str
+    user_id: str # In this context, this is the user who created the annotation
     task_id: int
     data: Dict[str, Any]
 
@@ -148,29 +147,88 @@ class Annotation(AnnotationBase):
     timestamp: datetime
 
     model_config = {
-        "from_attributes": True,  # Replaces orm_mode=True
-        "populate_by_name": True  # Helps with field aliases
+        "from_attributes": True,
+        "populate_by_name": True
     }
+
+# --- START: Schemas for ConsensusAnnotation ---
+class ConsensusAnnotationData(BaseModel):
+    relevance: bool
+    relevance_text: Optional[str] = None
+    learning: bool
+    learning_text: Optional[str] = None
+    clarity: bool
+    clarity_text: Optional[str] = None
+    grounded: bool
+    grounded_text: Optional[str] = None
+    stars: int = Field(..., ge=0, le=5) # Example: stars between 0 and 5
+    comment: Optional[str] = None
+    # _last_updated: Optional[datetime] = None
+
+    model_config = {
+        "from_attributes": True,
+         "json_schema_extra": { # Renamed from schema_extra for Pydantic v2
+            "example": {
+                "relevance": True,
+                "relevance_text": "This is highly relevant.",
+                "learning": True,
+                "learning_text": "Learned a new approach.",
+                "clarity": False,
+                "clarity_text": "The explanation was a bit vague.",
+                "grounded": True,
+                "grounded_text": "References provided are solid.",
+                "stars": 4,
+                "comment": "Overall good, but clarity could be improved."
+            }
+        }
+    }
+
+class ConsensusAnnotationBase(BaseModel):
+    discussion_id: str
+    # 'user_id' from payload will be mapped to 'annotator_id'
+    annotator_id: str = Field(alias="user_id")
+    task_id: int
+    data: ConsensusAnnotationData
+
+class ConsensusAnnotationCreate(ConsensusAnnotationBase):
+    pass
+
+class ConsensusAnnotationResponse(ConsensusAnnotationBase):
+    id: int
+    # This 'user_id' is the ID of the user who saved/updated the consensus (from auth token)
+    user_id: str
+    # 'annotator_id' is inherited from ConsensusAnnotationBase and comes from payload's 'user_id'
+    timestamp: datetime
+    # The 'data' field inherited from ConsensusAnnotationBase will be used.
+    # The service layer will ensure 'data._last_updated' is populated before sending response.
+
+    model_config = {
+        "from_attributes": True,
+        "populate_by_name": True # Ensures aliases are handled if needed for response too
+    }
+# --- END: Schemas for ConsensusAnnotation ---
+
+
 # Schema for annotation override by pod lead
 class PodLeadAnnotationOverride(BaseModel):
     pod_lead_id: str
-    annotator_id: str
+    annotator_id: str # This refers to the original annotator whose work is being overridden
     discussion_id: str
     task_id: int
-    data: Dict[str, Any]
+    data: Dict[str, Any] # TBA: Should this be ConsensusAnnotationData or a generic Dict?
 
 # Schema for annotation override by admin
 class AnnotationOverride(BaseModel):
     discussion_id: str
-    user_id: str
+    user_id: str # TBA: The user whose annotation is being overridden or the admin performing it?
     task_id: int
-    data: Dict[str, Any]
+    data: Dict[str, Any] # Again, consider specific data schema?
 
 # Schema for consensus override
 class ConsensusOverride(BaseModel):
     discussion_id: str
     task_id: int
-    data: Dict[str, Any]
+    data: Dict[str, Any] # TBA: Consider specific data schema, perhaps ConsensusAnnotationData
 
 # Schema for GitHub Discussion upload with batch_id
 class GitHubDiscussion(BaseModel):
@@ -195,6 +253,8 @@ class GitHubDiscussion(BaseModel):
 
     @validator('created_at')
     def validate_created_at(cls, v):
+        if isinstance(v, datetime): # Allow datetime objects directly
+            return v.isoformat() + 'Z' # Convert to ISO string format expected
         try:
             # Try parsing the date to validate format
             datetime.fromisoformat(v.replace('Z', '+00:00'))
@@ -202,10 +262,11 @@ class GitHubDiscussion(BaseModel):
         except (ValueError, TypeError):
             raise ValueError('created_at must be a valid ISO format date string')
 
-    class Config:
-        json_encoders = {
+    model_config = { # Replaces class Config for Pydantic v2
+        "json_encoders": {
             datetime: lambda dt: dt.isoformat()
         }
+    }
 
 class DiscussionUpload(BaseModel):
     discussions: List[GitHubDiscussion]
@@ -213,8 +274,8 @@ class DiscussionUpload(BaseModel):
     batch_description: Optional[str] = None
 
     # Custom JSON serializer for the entire model
-    def json(self, **kwargs):
-        return json.dumps(self.dict(), default=str, **kwargs)
+    def model_dump_json(self, **kwargs): # Pydantic v2 method
+        return json.dumps(self.model_dump(), default=str, **kwargs) # Use model_dump()
 
 # Schema for batch deletion
 class BatchDelete(BaseModel):
@@ -276,3 +337,4 @@ class BulkTaskStatusUpdate(BaseModel):
 
 class BulkTaskManagementResult(BaseModel):
     results: List[TaskManagementResult]
+
