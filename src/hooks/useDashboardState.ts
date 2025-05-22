@@ -19,7 +19,7 @@ export function useDashboardState() {
   const [viewMode, setViewMode] = useState<'grid' | 'detail' | 'consensus'>(taskNumber ? 'detail' : 'grid');
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(taskNumber);
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
-  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
   const [codeDownloadUrl, setCodeDownloadUrl] = useState<string | null>(null);
   const [isCodeUrlValid, setIsCodeUrlValid] = useState<boolean>(false);
   const [currentDiscussion, setCurrentDiscussion] = useState<any | null>(null);
@@ -120,19 +120,9 @@ export function useDashboardState() {
     }
   }, [discussionId, navigate]);
 
-  const handleFileUpload = (file: File) => {
-    // Create a URL for the uploaded file
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (e.target && e.target.result) {
-        setUploadedImage(e.target.result as string);
-        
-        toast.success("Screenshot uploaded successfully", {
-          description: "The image can be used for code execution verification"
-        });
-      }
-    };
-    reader.readAsDataURL(file);
+  const handleScreenshotUrlChange = (url: string) => {
+    setScreenshotUrl(url);
+    toast.success("Screenshot URL saved");
   };
   
   const handleCodeUrlChange = (url: string) => {
@@ -163,15 +153,20 @@ export function useDashboardState() {
       if (discussion && user && currentStep === TaskId.ANSWER_QUALITY) {
         // First try to get URL from user's saved annotation
         const annotation = getUserAnnotation(discussionId, user.id, currentStep);
-        if (annotation && annotation.data.codeDownloadUrl) {
-          const url = annotation.data.codeDownloadUrl as string;
-          setCodeDownloadUrl(url);
-          setIsCodeUrlValid(validateGitHubCodeUrl(url));
+        if (annotation) {
+          if (annotation.data.codeDownloadUrl) {
+            const url = annotation.data.codeDownloadUrl as string;
+            setCodeDownloadUrl(url);
+            setIsCodeUrlValid(validateGitHubCodeUrl(url));
+          }
+          if (annotation.data.screenshot) {
+            setScreenshotUrl(annotation.data.screenshot as string);
+          }
         } 
-        // Then try to use the repository's release URL if available
-        else if (discussion.releaseUrl) {
-          setCodeDownloadUrl(discussion.releaseUrl);
-          setIsCodeUrlValid(validateGitHubCodeUrl(discussion.releaseUrl));
+        // Then try to use the repository's release URL if available (for code download)
+        else if (discussion.release_url && !codeDownloadUrl) {
+          setCodeDownloadUrl(discussion.release_url);
+          setIsCodeUrlValid(validateGitHubCodeUrl(discussion.release_url));
         }
         // Finally fall back to a default URL based on repository name
         else if (!codeDownloadUrl && discussion.repository) {
@@ -270,8 +265,8 @@ export function useDashboardState() {
     setSelectedTaskId,
     isInitialized,
     setIsInitialized,
-    uploadedImage,
-    setUploadedImage,
+    screenshotUrl,
+    setScreenshotUrl,
     codeDownloadUrl,
     setCodeDownloadUrl,
     isCodeUrlValid,
@@ -282,7 +277,7 @@ export function useDashboardState() {
     handleUrlSubmit,
     handleSelectTask,
     handleBackToGrid,
-    handleFileUpload,
+    handleScreenshotUrlChange,
     handleCodeUrlChange,
     validateGitHubCodeUrl,
     updateStepCompletionStatus,
