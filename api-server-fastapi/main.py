@@ -1,4 +1,4 @@
-
+import logging
 from datetime import datetime, timezone, timedelta
 from fastapi import FastAPI, Depends, HTTPException, Query, Response, Body, status, Request, APIRouter, Path
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,12 +34,15 @@ app = FastAPI(
     version="1.0.0",
     description="API for managing discussions, annotations, and user authentication for an annotation tool."
 )
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+logger.info(f"Server started")
 
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:8080", "http://localhost:8081", "http://34.9.91.120:8080",
-                   "http://34.9.91.120:8081"],  # Specific origin for credentials
+                   "http://34.9.91.120:8081", "http://localhost:8082"],  # Specific origin for credentials
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -730,87 +733,87 @@ async def admin_override_annotation(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
-# ================= Consensus APIs (Updated) =================
-
-# Get a specific consensus annotation for a discussion, task, and annotator
-@app.get("/api/consensus/{discussion_id}/{task_id}/{annotator_id}",
+# ================= Consensus APIs (Cleaned Up) =================
+@app.get("/api/hello")
+async def hello():
+    return {"message": "hello"}
+# Get a specific consensus annotation for a discussion and task
+@app.get("/api/selected/consensus/{discussion_id}/{task_id}",
          response_model=Optional[schemas.ConsensusAnnotationResponse], tags=["Consensus"])
 async def get_specific_consensus_annotation(
-        discussion_id: str,
-        task_id: int,
-        annotator_id: str,
+        discussion_id: str = Path(..., description="Discussion ID"),
+        task_id: int = Path(..., description="Task ID"),
         current_user: schemas.AuthorizedUser = Depends(jwt_auth_service.require_authentication),
         db: Session = Depends(get_db)
 ):
-    consensus_annotation = consensus_service.get_consensus_annotation_by_ids(db, discussion_id, task_id, annotator_id)
-    if not consensus_annotation:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Consensus annotation not found")
-    return consensus_annotation
+    """Get consensus annotation for a specific discussion and task."""
+    logger.info(f"Getting consensus for discussion_id='{discussion_id}', task_id={task_id}")
 
+    try:
+        consensus_annotation = consensus_service.get_consensus_annotation_by_discussion_and_task(db, discussion_id, task_id)
+
+        if not consensus_annotation:
+            logger.warning(f"No consensus annotation found for discussion='{discussion_id}', task={task_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Consensus annotation not found for discussion '{discussion_id}' and task {task_id}"
+            )
+
+        logger.info(f"Found consensus annotation with id={consensus_annotation.id}")
+        return consensus_annotation
+
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions
+    except Exception as e:
+        logger.error(f"Error getting consensus annotation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 # Get all consensus annotations for a discussion and task
-@app.get("/api/consensus/all/{discussion_id}/{task_id}", response_model=List[schemas.ConsensusAnnotationResponse],
-         tags=["Consensus"])
+@app.get("/api/consensus/all/{discussion_id}/{task_id}",
+         response_model=List[schemas.ConsensusAnnotationResponse], tags=["Consensus"])
 async def get_all_consensus_annotations_for_task_endpoint(
-        discussion_id: str,
-        task_id: int,
+        discussion_id: str = Path(..., description="Discussion ID"),
+        task_id: int = Path(..., description="Task ID"),
         current_user: schemas.AuthorizedUser = Depends(jwt_auth_service.require_authentication),
         db: Session = Depends(get_db)
 ):
+    """Get all consensus annotations for a discussion and task."""
     return consensus_service.get_all_consensus_annotations_for_task(db, discussion_id, task_id)
 
-
-# Create or update a consensus annotation (for a specific annotator)
+# Create or update a consensus annotation
 @app.post("/api/consensus", response_model=schemas.ConsensusAnnotationResponse, tags=["Consensus"])
 async def create_or_update_consensus_annotation_endpoint(
-        consensus_data: schemas.ConsensusAnnotationCreate,  # Uses new schema with annotator_id aliased from user_id
+        consensus_data: schemas.ConsensusAnnotationCreate,
         current_user: schemas.AuthorizedUser = Depends(jwt_auth_service.require_authentication),
-        # Any authenticated user
         db: Session = Depends(get_db)
 ):
-    # The consensus_data.annotator_id will have the 'user_id' from the payload
-    # The current_user.email (or id) will be the user performing the save
+    """Create or update a consensus annotation."""
     result = consensus_service.create_or_update_consensus_annotation(db, consensus_data, current_user.email)
     return result
 
-
-# Calculate consensus (remains as is, operates on general annotations)
-@app.get("/api/consensus/{discussion_id}/{task_id}/calculate", response_model=Dict[str, Any], tags=["Consensus"])
-async def calculate_consensus_endpoint(  # Renamed for clarity
-        discussion_id: str,
-        task_id: int,
+# Calculate consensus (operates on regular annotations)
+@app.get("/api/consensus/{discussion_id}/{task_id}/calculate",
+         response_model=Dict[str, Any], tags=["Consensus"])
+async def calculate_consensus_endpoint(
+        discussion_id: str = Path(..., description="Discussion ID"),
+        task_id: int = Path(..., description="Task ID"),
         current_user: schemas.AuthorizedUser = Depends(jwt_auth_service.require_authentication),
         db: Session = Depends(get_db)
 ):
+    """Calculate consensus from regular annotations."""
     result = consensus_service.calculate_consensus(db, discussion_id, task_id)
     return result
 
-
 # Override consensus annotation (admin only)
 @app.put("/api/consensus/override", response_model=schemas.ConsensusAnnotationResponse, tags=["Consensus", "Admin"])
-async def override_consensus_annotation_endpoint(  # Renamed for clarity
-        override_data: schemas.ConsensusOverride,  # Ensure this schema is appropriate or updated
-        # to include annotator_id if overriding a specific one.
+async def override_consensus_annotation_endpoint(
+        override_data: schemas.ConsensusOverride,
         admin: schemas.AuthorizedUser = Depends(jwt_auth_service.get_admin),
         db: Session = Depends(get_db)
 ):
-    # The service function override_consensus_annotation expects current_user_id
+    """Override a consensus annotation (admin only)."""
     result = consensus_service.override_consensus_annotation(db, override_data, admin.email)
     return result
-
-# The following duplicate/older consensus endpoints are removed, kept for reference:
-# @app.get("/api/consensus", response_model=Optional[schemas.Annotation])
-# def get_consensus_route( ... )
-
-# @app.post("/api/consensus", response_model=schemas.Annotation)
-# def create_or_update_consensus_route( ... )
-
-@app.post("/api/consensus/override", response_model=schemas.Annotation)
-def override_consensus_route(
-    override_data: schemas.ConsensusOverride, 
-    db: Session = Depends(get_db)
-):
-    return consensus_service.override_consensus(db, override_data)
 
 # Add this new endpoint
 @app.get("/api/auth/users/{user_id}", response_model=schemas.UserResponse)
