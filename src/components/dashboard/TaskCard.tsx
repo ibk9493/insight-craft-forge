@@ -17,7 +17,7 @@ export interface SubTask {
   id: string;
   title: string;
   status: SubTaskStatus;
-  options: string[];
+  options?: string[];
   description: string;
   selectedOption?: string;
   textInput?: boolean;
@@ -30,6 +30,9 @@ export interface SubTask {
   requiresRemarks?: boolean;
   placeholder?: string;
   sections?: SubTask[][];
+  // NEW: Properties for doc download link
+  enableDocDownload?: boolean;
+  docDownloadLink?: string;
 }
 
 interface TaskCardProps {
@@ -44,7 +47,8 @@ interface TaskCardProps {
       textValues?: string[],
       supportingDocs?: SupportingDoc[],
       sectionIndex?: number,
-      weights?: number[]
+      weights?: number[],
+      docDownloadLink?: string  // NEW
   ) => void;
   onAddSection?: () => void;
   onRemoveSection?: (sectionIndex: number) => void;
@@ -288,7 +292,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   customFieldRenderers?.[task.id] ? (
                       customFieldRenderers[task.id](task, (taskId, selectedOption, textValue, textValues, supportingDocs, sectionIdx, weights) => {
                         if (weights) {
-                          const updatedTask = { ...task, weights };
+                          onSubTaskChange(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIdx, weights);
                         }
                         onSubTaskChange(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIdx);
                       })
@@ -401,6 +405,40 @@ const TaskCard: React.FC<TaskCardProps> = ({
                     </Button>
                   </div>
               )}
+              {task.id === 'doc_download_link' && (
+    <div className="mt-3">
+      {/* Show current selection */}
+      {task.selectedOption && (
+        <div className="mb-2 text-sm text-gray-600">
+          Selected: <span className="font-medium">{task.selectedOption}</span>
+        </div>
+      )}
+      
+      {/* Show text input when "Needed" is selected OR if there's already a value */}
+      {(task.selectedOption === 'Needed' || task.textValue) && (
+        <div className="mt-2">
+          <label className="block text-xs font-medium text-gray-700 mb-1">
+            Document Download URL
+          </label>
+          <Input
+            value={task.textValue || ''}
+            onChange={e => {
+              if (sectionIndex !== undefined) {
+                handleSectionSubTaskChange(sectionIndex, task.id, task.selectedOption, e.target.value);
+              } else {
+                onSubTaskChange(task.id, task.selectedOption, e.target.value);
+              }
+            }}
+            onClick={e => e.stopPropagation()}
+            onMouseDown={e => e.stopPropagation()}
+            placeholder="https://example.com/document.pdf"
+            className="text-sm w-full"
+          />
+        </div>
+      )}
+    </div>
+  )}
+
             </div>
         ))}
       </div>

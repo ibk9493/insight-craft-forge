@@ -20,6 +20,8 @@ export interface AnnotationHandlersProps {
   getConsensusAnnotation: (discussionId: string, taskId: number) => Promise<Annotation | undefined>;
   updateStepCompletionStatus: (stepIndex: number, completed: boolean) => void;
   overrideAnnotation?: (podLeadId: string, annotatorId: string, discussionId: string, taskId: number, data: Record<string, any>) => Promise<boolean>;
+  task3Forms : Array<{ id: string; name: string; subTasks: SubTask[] }>;    // Add with default
+  consensusTask3Forms : Array<{ id: string; name: string; subTasks: SubTask[] }>  ;
 }
 
 // Task IDs for clearer code
