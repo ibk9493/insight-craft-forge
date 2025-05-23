@@ -360,7 +360,7 @@ export const api = {
   // Consensus endpoints
   consensus: {
     get: (discussionId: string, taskId: number) => 
-      safeApiRequest<Annotation>(`/api/consensus/${discussionId}/${taskId}`, 'GET', undefined, undefined, {} as Annotation),
+      safeApiRequest<Annotation>(`/api/selected/consensus/${discussionId}/${taskId}`, 'GET', undefined, undefined, {} as Annotation),
     save: (consensus: Omit<Annotation, 'timestamp'>) => {
       // The incoming 'consensus' object is already expected to have snake_case keys.
       const apiConsensus = {
