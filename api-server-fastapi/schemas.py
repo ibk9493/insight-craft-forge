@@ -188,7 +188,7 @@ class ConsensusAnnotationBase(BaseModel):
     # 'user_id' from payload will be mapped to 'annotator_id'
     annotator_id: str = Field(alias="user_id")
     task_id: int
-    data: ConsensusAnnotationData
+    data: Dict[str, Any]
 
 class PaginatedDiscussionResponse(BaseModel):
     items: List[Discussion]

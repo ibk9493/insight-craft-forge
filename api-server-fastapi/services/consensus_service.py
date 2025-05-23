@@ -116,7 +116,11 @@ def create_or_update_consensus_annotation(
     iso_current_time = current_time.isoformat()
 
     # Prepare data from input schema
-    annotation_data_dict = consensus_input.data.model_dump()  # Pydantic v2 .model_dump()
+    # Check if data is already a dict or if it's a Pydantic model
+    if isinstance(consensus_input.data, dict):
+        annotation_data_dict = consensus_input.data.copy()  # Make a copy of the dict
+    else:
+        annotation_data_dict = consensus_input.data.model_dump()  # For Pydantic models
 
     if db_annotation:
         # Update existing annotation
