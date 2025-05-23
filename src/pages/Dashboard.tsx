@@ -565,7 +565,7 @@ const handleDuplicateForm = (type: string) => {
   
   const newForm = {
     id: `form-${Date.now()}`,
-    name: `Form ${task3Forms.length + 1}`,
+    name: `Form ${task3Forms.length + 1+ type}`,
     subTasks: JSON.parse(JSON.stringify(task3SubTasks)),
     type: type
   };

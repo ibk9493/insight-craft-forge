@@ -339,144 +339,364 @@ async def get_summary_report(
     if format.lower() not in ["json", "csv"]:
         raise HTTPException(status_code=400, detail="Format must be 'json' or 'csv'")
 
-    # GET ALL DISCUSSIONS - Use large limit to get everything for report
+    def _process_task3_annotation_data(data):
+        """Process Task 3 annotation data to handle new forms structure"""
+        processed_data = data.copy()
+        
+        # Handle short_answer_list conversion from new format to old format for API compatibility
+        if data.get("short_answer_list"):
+            short_answers = data["short_answer_list"]
+            
+            # If it's the new nested array format (multiple forms)
+            if isinstance(short_answers, list) and len(short_answers) > 0 and isinstance(short_answers[0], list):
+                # Flatten for API - convert claim/weight objects to strings
+                flattened = []
+                for form_answers in short_answers:
+                    for item in form_answers:
+                        if isinstance(item, dict) and 'claim' in item:
+                            flattened.append(f"{item['claim']} (weight: {item.get('weight', 1)})")
+                        else:
+                            flattened.append(str(item))
+                processed_data["short_answer_list"] = flattened
+            
+            # If it's single form with claim/weight objects
+            elif isinstance(short_answers, list) and len(short_answers) > 0 and isinstance(short_answers[0], dict):
+                flattened = []
+                for item in short_answers:
+                    if isinstance(item, dict) and 'claim' in item:
+                        flattened.append(f"{item['claim']} (weight: {item.get('weight', 1)})")
+                    else:
+                        flattened.append(str(item))
+                processed_data["short_answer_list"] = flattened
+        
+        return processed_data
+    
+    def _process_task3_consensus_data(data):
+        """Process Task 3 consensus data to handle new forms structure"""
+        if not data:
+            return [{}]  # Return array with empty object
+        
+        # Handle the new forms structure in consensus
+        if data.get("forms") and isinstance(data["forms"], list):
+            # Determine if this is Type Q (Questions) or Type A (Answers)
+            # First form is default (no type), subsequent forms have type indicators
+            form_types = []
+            has_answer_type = False
+            
+            for i, form in enumerate(data["forms"]):
+                form_name = form.get("formName", "")
+                if i == 0:
+                    # First form is default, we'll determine its type based on other forms
+                    form_types.append("default")
+                elif "A" in form_name:
+                    form_types.append("A")
+                    has_answer_type = True
+                elif "Q" in form_name:
+                    form_types.append("Q")
+                else:
+                    # Fallback for subsequent forms
+                    form_types.append("Q")
+            
+            # If any subsequent form has type A, then this is an Answer scenario
+            # and the first form should also be treated as type A
+            if has_answer_type:
+                form_types[0] = "A"  # Set first form to A as well
+            else:
+                form_types[0] = "Q"  # Set first form to Q (different questions)
+            
+            # If all forms are Type A (Answers), merge them
+            if all(t == "A" for t in form_types):
+                processed_data = data.copy()  # Start with base data
+                
+                # Collect all answers from different forms
+                all_short_answers = []
+                all_long_answers = []
+                all_rewritten_questions = []
+                all_supporting_docs = []
+                question_types = []
+                
+                for form in data["forms"]:
+                    # Collect short answers
+                    if "short_answer_list" in form and isinstance(form["short_answer_list"], list):
+                        form_short_answers = []
+                        for item in form["short_answer_list"]:
+                            if isinstance(item, dict) and 'claim' in item:
+                                form_short_answers.append({"claim": item['claim'], "weight": str(item.get('weight', 1))})
+                            else:
+                                form_short_answers.append({"claim": str(item), "weight": "1"})
+                        all_short_answers.append(form_short_answers)
+                    
+                    # Collect long answers
+                    if "longAnswer_text" in form:
+                        all_long_answers.append(form["longAnswer_text"])
+                    
+                    # Collect rewritten questions (should be same for Type A, but collect anyway)
+                    if "rewrite_text" in form:
+                        all_rewritten_questions.append(form["rewrite_text"])
+                    
+                    # Collect supporting docs
+                    if "supporting_docs" in form:
+                        form_supporting_docs = []
+                        for doc in form["supporting_docs"]:
+                            form_supporting_docs.append({
+                                "link": doc.get("link", ""),
+                                "supporting_paragraph": doc.get("paragraph", "")
+                            })
+                        all_supporting_docs.extend(form_supporting_docs)
+                    
+                    # Collect question types
+                    if "classify" in form:
+                        question_types.append(form["classify"])
+                
+                # Set merged data
+                processed_data["short_answer_list"] = all_short_answers  # Array of arrays
+                processed_data["long_answer"] = all_long_answers  # Array of strings
+                processed_data["rewritten_question"] = list(set(all_rewritten_questions)) if all_rewritten_questions else []  # Unique questions
+                processed_data["supporting_docs"] = all_supporting_docs  # Combined docs
+                processed_data["question_type"] = question_types[0] if question_types else "Reasoning"  # Use first type
+                
+                # Add metadata
+                processed_data["form_type"] = "A"
+                processed_data["total_forms"] = len(data["forms"])
+                
+                return [processed_data]  # Return single merged entry
+            
+            # If Type Q (Questions) or mixed, create separate entries
+            else:
+                results = []
+                
+                for form_index, form in enumerate(data["forms"]):
+                    processed_data = data.copy()  # Start with base data
+                    
+                    # Map form fields to top-level fields
+                    if "rewrite_text" in form:
+                        processed_data["rewritten_question"] = [form["rewrite_text"]]  # Convert to array
+                    if "longAnswer_text" in form:
+                        processed_data["long_answer"] = form["longAnswer_text"]
+                    if "classify" in form:
+                        processed_data["question_type"] = form["classify"]
+                    
+                    # Handle short_answer_list from forms
+                    if "short_answer_list" in form:
+                        form_answers = form["short_answer_list"]
+                        if isinstance(form_answers, list):
+                            flattened = []
+                            for item in form_answers:
+                                if isinstance(item, dict) and 'claim' in item:
+                                    flattened.append({"claim": item['claim'], "weight": str(item.get('weight', 1))})
+                                else:
+                                    flattened.append({"claim": str(item), "weight": "1"})
+                            processed_data["short_answer_list"] = flattened
+                    
+                    # Handle supporting docs from forms
+                    if "supporting_docs" in form:
+                        # Map paragraph to supporting_paragraph
+                        supporting_docs = []
+                        for doc in form["supporting_docs"]:
+                            supporting_docs.append({
+                                "link": doc.get("link", ""),
+                                "supporting_paragraph": doc.get("paragraph", "")
+                            })
+                        processed_data["supporting_docs"] = supporting_docs
+                    
+                    # Add form metadata
+                    processed_data["form_index"] = form_index
+                    processed_data["form_id"] = form.get("formId", f"form-{form_index}")
+                    processed_data["form_name"] = form.get("formName", f"Form {form_index + 1}")
+                    processed_data["form_type"] = form_types[form_index]
+                    
+                    results.append(processed_data)
+                
+                return results
+        
+        # Handle single form or legacy format
+        processed_data = data.copy()
+        
+        # Convert rewritten_question from string to array if needed
+        if "rewritten_question" in processed_data and isinstance(processed_data["rewritten_question"], str):
+            processed_data["rewritten_question"] = [processed_data["rewritten_question"]]
+        
+        # Handle supporting_docs field name mapping if needed
+        if "supporting_docs" in processed_data:
+            supporting_docs = []
+            for doc in processed_data["supporting_docs"]:
+                if isinstance(doc, dict):
+                    supporting_docs.append({
+                        "link": doc.get("link", ""),
+                        "supporting_paragraph": doc.get("paragraph", doc.get("supporting_paragraph", ""))
+                    })
+                else:
+                    supporting_docs.append(doc)
+            processed_data["supporting_docs"] = supporting_docs
+        
+        # Handle short_answer_list format conversion
+        if "short_answer_list" in processed_data and isinstance(processed_data["short_answer_list"], list):
+            short_answers = processed_data["short_answer_list"]
+            if len(short_answers) > 0 and isinstance(short_answers[0], str):
+                # Convert string format to dict format
+                converted = []
+                for item in short_answers:
+                    if "(weight:" in str(item):
+                        parts = str(item).rsplit(" (weight:", 1)
+                        claim = parts[0].strip()
+                        weight = parts[1].rstrip(")").strip() if len(parts) > 1 else "1"
+                    else:
+                        claim = str(item).strip()
+                        weight = "1"
+                    converted.append({"claim": claim, "weight": weight})
+                processed_data["short_answer_list"] = converted
+        
+        return [processed_data]  # Return array with single object
+
+    # GET ALL DISCUSSIONS
     discussions = discussions_service.get_discussions(db, status=None, limit=100000, offset=0)
     
     result = []
     for discussion in discussions:
+        # Get annotations for each task
         task1_annotations = annotations_service.get_annotations(db, discussion_id=discussion.id, task_id=1)
         task2_annotations = annotations_service.get_annotations(db, discussion_id=discussion.id, task_id=2)
+        task3_annotations = annotations_service.get_annotations(db, discussion_id=discussion.id, task_id=3)
 
-        # Updated to use new consensus service method for fetching all annotations for a task
-        # Assuming the old get_consensus was for a "master" consensus, which is now handled differently
-        # For the report, we might want all individual consensus annotations or a specific one.
-        # This part needs clarification on what "task1_consensus" means now.
-        # If it means all consensus annotations for task 1:
-        task1_consensus_annotations = consensus_service.get_all_consensus_annotations_for_task(db,
-                                                                                               discussion_id=discussion.id,
-                                                                                               task_id=1)
-        task2_consensus_annotations = consensus_service.get_all_consensus_annotations_for_task(db,
-                                                                                               discussion_id=discussion.id,
-                                                                                               task_id=2)
+        # Get consensus for each task
+        task1_consensus = consensus_service.get_consensus_annotation_by_discussion_and_task(db, discussion.id, 1)
+        task2_consensus = consensus_service.get_consensus_annotation_by_discussion_and_task(db, discussion.id, 2)
+        task3_consensus = consensus_service.get_consensus_annotation_by_discussion_and_task(db, discussion.id, 3)
 
-        # The logic for combined_consensus_data needs to be adapted based on how you want to aggregate
-        # from potentially multiple consensus_annotations. For simplicity, this example won't aggregate deeply here.
-        # This report logic will likely need significant rework based on the new consensus model.
-        # For now, let's assume we take the first consensus annotation if available, or handle absence.
+        # Extract consensus data separately for each task
+        task1_consensus_data = task1_consensus.data if task1_consensus else {}
+        task2_consensus_data = task2_consensus.data if task2_consensus else {}
+        task3_consensus_data = task3_consensus.data if task3_consensus else {}
 
-        combined_consensus_data = {}
-        if task1_consensus_annotations:
-            # Example: use data from the first consensus annotation for task 1
-            combined_consensus_data.update(task1_consensus_annotations[0].data)
-        if task2_consensus_annotations:
-            # Example: use data from the first consensus annotation for task 2
-            combined_consensus_data.update(task2_consensus_annotations[0].data)
-
-        task3_annotations = []
-        task3_consensus_annotations = []  # Changed from task3_consensus
-        task3_consensus_data = {}
-
-        meets_criteria = (
-                combined_consensus_data.get("relevance", False) and
-                combined_consensus_data.get("learning_value", False) and  # Assuming learning_value is the key
-                combined_consensus_data.get("clarity", False)
-        )
-
-        if meets_criteria:
-            task3_annotations = annotations_service.get_annotations(db, discussion_id=discussion.id, task_id=3)
-            task3_consensus_annotations = consensus_service.get_all_consensus_annotations_for_task(db,
-                                                                                                   discussion_id=discussion.id,
-                                                                                                   task_id=3)
-            if task3_consensus_annotations:  # Use data from the first one for the report
-                task3_consensus_data = task3_consensus_annotations[0].data
-
+        # Extract basic discussion info
         code = ""
-        lang = "python"
-        question = ""
-        answer = ""
-        category = ""
-        knowledge = ""
+        lang = discussion.repository_language or "python"
+        question = discussion.question or ""
+        answer = discussion.answer or ""
+        category = discussion.category or ""
+        knowledge = discussion.knowledge or ""
 
+        # Try to extract code from annotations if not in discussion
         try:
-            for annotation in task1_annotations + task2_annotations:
+            for annotation in task1_annotations + task2_annotations + task3_annotations:
                 if annotation.data.get("code"):
                     code = annotation.data.get("code", "")
                     break
-            lang = discussion.repository_language
-            question = discussion.question
-            answer = discussion.answer
-            category = discussion.category
-            knowledge = discussion.knowledge
         except Exception as e:
-            print(f"Error extracting data for discussion {discussion.id}: {str(e)}")
+            print(f"Error extracting code for discussion {discussion.id}: {str(e)}")
 
-        entry = {
-            "url": discussion.url,
-            "code": code,
-            "lang": lang,
-            "answer": answer,
-            "category": category,
-            "question": question,
-            "createdAt": discussion.created_at,
-            "knowledge": knowledge,
-            "annotations_tasks_1_and_2": [
-                        {
-                            "annotator": int(annotation.user_id),
-                            "relevance": annotation.data.get("relevance", False),
-                            "learning_value": annotation.data.get("learning", False),  # Map learning to learning_value
-                            "clarity": annotation.data.get("clarity", False),
-                            "image_grounded": annotation.data.get("grounded", False),
-                            "address_all_aspects": annotation.data.get("aspects", False),
-                            "justification_for_addressing_all_aspects": annotation.data.get("aspects_text", ""),
-                            "with_explanation": annotation.data.get("explanation", False),
-                            "code_executable": annotation.data.get("execution") == "Executable",
-                            "code_download_link": annotation.data.get("codeDownloadUrl", "")
-                        }
-                        for annotation in task1_annotations + task2_annotations
-            ],
+        # Task 3 consensus - now returns array of processed data
+        task3_consensus_results = _process_task3_consensus_data(task3_consensus_data)
 
-            "agreed_annotation_tasks_1_and_2": {
-                "relevance": combined_consensus_data.get("relevance", False),
-                "learning_value": combined_consensus_data.get("learning", False),  # FIXED: learning not learning_value
-                "clarity": combined_consensus_data.get("clarity", False),
-                "image_grounded": combined_consensus_data.get("grounded", False),  # FIXED: grounded not image_grounded
-                "address_all_aspects": combined_consensus_data.get("aspects", False),  # FIXED: aspects not address_all_aspects
-                "justification_for_addressing_all_aspects": combined_consensus_data.get("aspects_text", ""),  # FIXED: aspects_text
-                "with_explanation": combined_consensus_data.get("explanation", False),  # FIXED: explanation not with_explanation
-                "code_executable": combined_consensus_data.get("execution") == "Executable",  # FIXED: execution string to boolean
-                "code_download_link": combined_consensus_data.get("codeDownloadUrl", "")  # FIXED: codeDownloadUrl not code_download_link
-            },
-            "annotations_task_3": [
-                {
-                    "user_id": annotation.user_id,
-                    "timestamp": annotation.timestamp.isoformat() if hasattr(annotation,
-                                                                             'timestamp') and annotation.timestamp else datetime.now(
-                        timezone.utc).isoformat(),
-                    **annotation.data
-                }
-                for annotation in task3_annotations
-            ] if meets_criteria else [],
-            "agreed_annotation_task_3": task3_consensus_data if meets_criteria else {}
-        }
+        # Create entries - duplicate entire discussion for Type Q, single entry for Type A
+        for form_index, form_result in enumerate(task3_consensus_results):
+            # Create a unique ID based on form type
+            base_id = discussion.id
+            if form_result.get("form_type") == "Q" and len(task3_consensus_results) > 1:
+                # Type Q: Different questions - create unique IDs for each form
+                unique_id = f"{base_id}_{form_index}"
+            else:
+                # Type A: Same question, multiple answers - keep same ID
+                # Or single form - keep original ID
+                unique_id = str(base_id)
 
-        if meets_criteria:
+            # Build the main entry (complete discussion duplication for Type Q)
+            entry = {
+                "id": unique_id,
+                "url": discussion.url,
+                "code": code,
+                "lang": lang,
+                "answer": answer,
+                "category": category,
+                "question": question,
+                "createdAt": discussion.created_at,
+                "knowledge": knowledge,
+                
+                # Task 1 annotations (same for all forms)
+                "annotations_task_1": [
+                    {
+                        "annotator": int(annotation.user_id),
+                        "relevance": annotation.data.get("relevance", False),
+                        "learning_value": annotation.data.get("learning", False),
+                        "clarity": annotation.data.get("clarity", False),
+                        **({"image_grounded": annotation.data.get("grounded", False)} if annotation.data.get("grounded", "") != "N/A" else {}),
+                    }
+                    for annotation in task1_annotations
+                ],
+                
+                # Task 2 annotations (same for all forms)
+                "annotations_task_2": [
+                    {
+                        "annotator": int(annotation.user_id),
+                        "address_all_aspects": annotation.data.get("aspects", False),
+                        "justification_for_addressing_all_aspects": annotation.data.get("execution_text", ""),
+                        "with_explanation": annotation.data.get("explanation", False),
+                        "code_executable": annotation.data.get("execution") in ["Executable", "N/A"],
+                        "code_download_link": annotation.data.get("codeDownloadUrl", "")
+                    }
+                    for annotation in task2_annotations
+                ],
+                
+                # Task 3 annotations (same for all forms)
+                "annotations_task_3": [
+                    {
+                        "annotator": int(annotation.user_id),
+                        "timestamp": annotation.timestamp.isoformat() if hasattr(annotation, 'timestamp') and annotation.timestamp else datetime.now(timezone.utc).isoformat(),
+                        **_process_task3_annotation_data(annotation.data)
+                    }
+                    for annotation in task3_annotations
+                ],
+                
+                # Task 1 consensus (same for all forms)
+                "agreed_annotation_task_1": {
+                    "relevance": task1_consensus_data.get("relevance", False),
+                    "learning_value": task1_consensus_data.get("learning", False),
+                    "clarity": task1_consensus_data.get("clarity", False),
+                   **({"image_grounded": task1_consensus_data.get("grounded", False)} if annotation.data.get("grounded", "") != "N/A"else {}),
+                },
+                
+                # Task 2 consensus (same for all forms)
+                "agreed_annotation_task_2": {
+                    "address_all_aspects": task2_consensus_data.get("aspects", False),
+                    "justification_for_addressing_all_aspects": task2_consensus_data.get("aspects_text", ""),
+                    "with_explanation": task2_consensus_data.get("explanation", False),
+                    "code_executable": task2_consensus_data.get("execution") in ["Executable", "N/A"],
+                    "code_download_link": task2_consensus_data.get("codeDownloadUrl", "")
+                },
+                
+                # Task 3 consensus (specific to this form)
+                "agreed_annotation_task_3": form_result
+            }
+
+            # Add required fields with defaults if missing for Task 3
             task3_required_fields = {
-                "rewritten_question": [""],
                 "question_type": "Reasoning",
-                "short_answer_list": [""],
+                "short_answer_list": [],
                 "long_answer": "",
-                "supporting_docs": [{"link": ""}]
+                "rewritten_question": [],
+                "supporting_docs": []
             }
             for field, default_value in task3_required_fields.items():
                 if field not in entry["agreed_annotation_task_3"]:
                     entry["agreed_annotation_task_3"][field] = default_value
-        result.append(entry)
+
+            # Add form metadata to the entry if multiple forms exist
+            if len(task3_consensus_results) > 1:
+                entry["form_metadata"] = {
+                    "form_index": form_result.get("form_index", 0),
+                    "form_id": form_result.get("form_id", ""),
+                    "form_name": form_result.get("form_name", ""),
+                    "total_forms": len(task3_consensus_results),
+                    "form_type": form_result.get("form_type", "Q")
+                }
+
+            result.append(entry)
 
     if format.lower() == "csv":
         pass
+        
     return result
-# Authentication endpoints
-@app.get("/api/auth/authorized-users", response_model=List[schemas.AuthorizedUser], tags=["Auth"])
+
 def get_authorized_users_list(
         current_user: schemas.AuthorizedUser = Depends(jwt_auth_service.get_admin),
         db: Session = Depends(get_db)
