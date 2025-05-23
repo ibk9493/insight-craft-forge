@@ -120,9 +120,10 @@ export function useTaskSubtasks() {
       title: 'Prepare Short Answer List',
       status: 'pending' as SubTaskStatus,
       options: ['Completed', 'Not Needed'],
-      description: 'Break down into atomic, concise claims (one per line)',
+      description: 'Break down into atomic, concise claims with weights (1-3 priority)',
       textInput: true,
       textValues: [''], // Initialize with one empty entry
+      weights: [1], // Initialize with default weight
       multiline: true,
       placeholder: 'Enter a short answer claim'
     },
@@ -147,18 +148,19 @@ export function useTaskSubtasks() {
       title: 'Provide Supporting Docs',
       status: 'pending' as SubTaskStatus,
       options: ['Provided', 'Not Needed'],
-      description: 'Add supporting documentation with links and paragraphs',
-      structuredInput: true, // Using structured input instead of multiline
-      supportingDocs: [{ link: '', paragraph: '' }], // Initialize with one empty set
+      description: 'Add supporting documentation with links (must start with "downloads/") and paragraphs',
+      structuredInput: true,
+      supportingDocs: [{ link: '', paragraph: '' }] // Initialize with one empty set
+    },
+    {
+      id: 'doc_download_link',
+      title: 'Document Download Link (Optional)',
+      status: 'pending' as SubTaskStatus,
+      options: ['Needed', 'Not Needed'],
+      description: 'Provide download link for external documentation if supporting docs are not directly from code',
+      textInput: true,
+      textValue: ''
     }
-    // ,
-    // {
-    //   id: 'consensus',
-    //   title: 'Consensus by 5 annotators',
-    //   status: 'pending' as SubTaskStatus,
-    //   options: ['Agreement', 'No Agreement'],
-    //   description: 'System-determined consensus based on annotator submissions'
-    // }
   ]);
 
   // Task 3 additional sections (for multiple forms)

@@ -7,6 +7,8 @@ import { useAnnotationLoader } from './annotations/useAnnotationLoader';
 import { useAnnotationSaver } from './annotations/useAnnotationSaver';
 import { AnnotationHandlersProps, isPodLead } from './annotations/useAnnotationTypes';
 
+// Update the useAnnotationHandlers hook to handle the new return format:
+
 export function useAnnotationHandlers({
   task1SubTasks,
   task2SubTasks,
@@ -21,7 +23,9 @@ export function useAnnotationHandlers({
   getAnnotationsForTask,
   getConsensusAnnotation,
   updateStepCompletionStatus,
-  overrideAnnotation
+  overrideAnnotation,
+  task3Forms = [],
+  consensusTask3Forms = []
 }: AnnotationHandlersProps) {
   // Use the annotation loader hook
   const {
@@ -57,17 +61,19 @@ export function useAnnotationHandlers({
     getAnnotationsForTask,
     getConsensusAnnotation,
     updateStepCompletionStatus,
-    overrideAnnotation
+    overrideAnnotation,
+    task3Forms,
+    consensusTask3Forms
   });
 
-  // Wrapper for loadUserAnnotation to use current user by default
-  const loadUserAnnotation = useCallback((discussionId: string, taskId: number): SubTask[] | null => {
-    if (!user) return null;
+  // Updated wrapper for loadUserAnnotation to use current user by default
+  const loadUserAnnotation = useCallback((discussionId: string, taskId: number): { tasks: SubTask[] | null, forms?: Array<{ id: string; name: string; subTasks: SubTask[] }> } => {
+    if (!user) return { tasks: null };
     return _loadUserAnnotation(discussionId, taskId, user.id);
   }, [_loadUserAnnotation, user]);
 
   // Load specific annotator's annotation (for pod leads to view/edit)
-  const loadAnnotatorAnnotation = useCallback((discussionId: string, annotatorId: string, taskId: number): SubTask[] | null => {
+  const loadAnnotatorAnnotation = useCallback((discussionId: string, annotatorId: string, taskId: number): { tasks: SubTask[] | null, forms?: Array<{ id: string; name: string; subTasks: SubTask[] }> } => {
     return _loadUserAnnotation(discussionId, taskId, annotatorId);
   }, [_loadUserAnnotation]);
 
@@ -83,6 +89,3 @@ export function useAnnotationHandlers({
     loading
   };
 }
-
-// Re-export isPodLead helper for convenience
-export { isPodLead };

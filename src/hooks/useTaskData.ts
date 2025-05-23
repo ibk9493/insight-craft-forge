@@ -22,6 +22,7 @@ const cloneSubtasks = (subtasks: SubTask[]): SubTask[] => {
     textInput: task.textInput,
     textValue: '',
     textValues: task.multiline ? [''] : undefined,
+    weights: task.weights ? [1] : undefined, // Add weights support
     supportingDocs: task.structuredInput ? [{ link: '', paragraph: '' }] : undefined,
     multiline: task.multiline,
     structuredInput: task.structuredInput,
@@ -32,7 +33,7 @@ const cloneSubtasks = (subtasks: SubTask[]): SubTask[] => {
 
 export function useTaskData() {
   const { calculateConsensus } = useAnnotationData();
-  
+
   // Task 1 subtasks
   const [task1SubTasks, setTask1SubTasks] = useState<SubTask[]>([
     {
@@ -75,7 +76,7 @@ export function useTaskData() {
       description: 'System-determined consensus based on annotator submissions'
     }
   ]);
-  
+
   // Task 2 subtasks
   const [task2SubTasks, setTask2SubTasks] = useState<SubTask[]>([
     {
@@ -118,7 +119,7 @@ export function useTaskData() {
       description: 'System-determined consensus based on annotator submissions'
     }
   ]);
-  
+
   // Task 3 subtasks with improved support for multi-line answers and structured data
   const [task3SubTasks, setTask3SubTasks] = useState<SubTask[]>([
     {
@@ -138,6 +139,7 @@ export function useTaskData() {
       description: 'Break down into atomic, concise claims (one per line)',
       textInput: true,
       textValues: [''], // Initialize with one empty entry
+      weights: [1], // Initialize with weight 1 for the first entry
       multiline: true,
       placeholder: 'Enter a short answer claim'
     },
@@ -215,7 +217,7 @@ export function useTaskData() {
   const [task1Annotations, setTask1Annotations] = useState<Array<Record<string, any>>>([]);
   const [task2Annotations, setTask2Annotations] = useState<Array<Record<string, any>>>([]);
   const [task3Annotations, setTask3Annotations] = useState<Array<Record<string, any>>>([]);
-  
+
   // Progress steps
   const [steps, setSteps] = useState([
     { id: 1, title: 'Input URL', completed: false },
@@ -230,9 +232,9 @@ export function useTaskData() {
     try {
       // Clone the base subtasks but remove the consensus task
       const newSectionTasks = cloneSubtasks(
-        task3SubTasks.filter(task => task.id !== 'consensus')
+          task3SubTasks.filter(task => task.id !== 'consensus')
       );
-      
+
       setTask3Sections([...task3Sections, newSectionTasks]);
       toast.success('Added new form section');
     } catch (error) {
@@ -247,11 +249,11 @@ export function useTaskData() {
       if (sectionIndex < 0 || sectionIndex >= task3Sections.length) {
         return;
       }
-      
+
       const updatedSections = [...task3Sections];
       updatedSections.splice(sectionIndex, 1);
       setTask3Sections(updatedSections);
-      
+
       toast.success('Removed form section');
     } catch (error) {
       console.error("Error removing task section:", error);
@@ -260,13 +262,14 @@ export function useTaskData() {
   }, [task3Sections]);
 
   const handleSubTaskChange = useCallback((
-    taskSet: string, 
-    taskId: string, 
-    selectedOption?: string, 
-    textValue?: string, 
-    textValues?: string[],
-    supportingDocs?: SupportingDoc[],
-    sectionIndex?: number
+      taskSet: string,
+      taskId: string,
+      selectedOption?: string,
+      textValue?: string,
+      textValues?: string[],
+      supportingDocs?: SupportingDoc[],
+      sectionIndex?: number,
+      weights?: number[] // Add weights parameter
   ) => {
     let updated: SubTask[] = [];
 
@@ -282,71 +285,81 @@ export function useTaskData() {
           console.error(`Invalid section index: ${sectionIndex}`);
           return;
         }
-        
+
         const updatedSections = [...task3Sections];
-        updatedSections[sectionIndex] = updatedSections[sectionIndex].map(task => 
-          task.id === taskId 
-            ? { 
-                ...task, 
-                selectedOption, 
-                textValue: textValue !== undefined ? textValue : task.textValue,
-                textValues: textValues !== undefined ? textValues : task.textValues,
-                supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
-                status: selectedOption ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
-              } 
-            : task
+        updatedSections[sectionIndex] = updatedSections[sectionIndex].map(task =>
+            task.id === taskId
+                ? {
+                  ...task,
+                  selectedOption,
+                  textValue: textValue !== undefined ? textValue : task.textValue,
+                  textValues: textValues !== undefined ? textValues : task.textValues,
+                  weights: weights !== undefined ? weights : task.weights,
+                  supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
+                  status: selectedOption ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
+                }
+                : task
         );
-        
+
         setTask3Sections(updatedSections);
         return;
       }
-      
+
       // Handle updates to main tasks
-      if (taskSet === 'task1') {
-        updated = task1SubTasks.map(task => 
-          task.id === taskId 
-            ? { 
-                ...task, 
-                selectedOption, 
-                textValue: textValue !== undefined ? textValue : task.textValue,
-                textValues: textValues !== undefined ? textValues : task.textValues,
-                supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
-                status: selectedOption ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
-              } 
-            : task
+      if (taskSet === 'task1' || taskSet === 'consensus1') {
+        const currentTasks = taskSet === 'consensus1' ? [...task1SubTasks] : task1SubTasks;
+        updated = currentTasks.map(task =>
+            task.id === taskId
+                ? {
+                  ...task,
+                  selectedOption,
+                  textValue: textValue !== undefined ? textValue : task.textValue,
+                  textValues: textValues !== undefined ? textValues : task.textValues,
+                  weights: weights !== undefined ? weights : task.weights,
+                  supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
+                  status: selectedOption ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
+                }
+                : task
         );
         setTask1SubTasks(updated);
-      } else if (taskSet === 'task2') {
-        updated = task2SubTasks.map(task => 
-          task.id === taskId 
-            ? { 
-                ...task, 
-                selectedOption, 
-                textValue: textValue !== undefined ? textValue : task.textValue,
-                textValues: textValues !== undefined ? textValues : task.textValues,
-                supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
-                status: selectedOption ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
-              } 
-            : task
+      } else if (taskSet === 'task2' || taskSet === 'consensus2') {
+        const currentTasks = taskSet === 'consensus2' ? [...task2SubTasks] : task2SubTasks;
+        updated = currentTasks.map(task =>
+            task.id === taskId
+                ? {
+                  ...task,
+                  selectedOption,
+                  textValue: textValue !== undefined ? textValue : task.textValue,
+                  textValues: textValues !== undefined ? textValues : task.textValues,
+                  weights: weights !== undefined ? weights : task.weights,
+                  supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
+                  status: selectedOption ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
+                }
+                : task
         );
         setTask2SubTasks(updated);
-      } else if (taskSet === 'task3') {
-        updated = task3SubTasks.map(task => 
-          task.id === taskId 
-            ? { 
-                ...task, 
-                selectedOption, 
-                textValue: textValue !== undefined ? textValue : task.textValue,
-                textValues: textValues !== undefined ? textValues : task.textValues,
-                supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
-                status: selectedOption ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
-              } 
-            : task
+      } else if (taskSet === 'task3' || taskSet === 'consensus3') {
+        const currentTasks = taskSet === 'consensus3' ? [...task3SubTasks] : task3SubTasks;
+        updated = currentTasks.map(task =>
+            task.id === taskId
+                ? {
+                  ...task,
+                  selectedOption,
+                  textValue: textValue !== undefined ? textValue : task.textValue,
+                  textValues: textValues !== undefined ? textValues : task.textValues,
+                  weights: weights !== undefined ? weights : task.weights,
+                  supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
+                  status: selectedOption ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
+                }
+                : task
         );
         setTask3SubTasks(updated);
       }
 
-      checkForSubtaskLogic(taskSet, taskId, selectedOption);
+      // Only check logic for non-consensus taskSets
+      if (!taskSet.includes('consensus')) {
+        checkForSubtaskLogic(taskSet, taskId, selectedOption);
+      }
     } catch (error) {
       console.error("Error in handleSubTaskChange:", error);
       toast.error("Failed to update task. Please try again.");
@@ -386,17 +399,17 @@ export function useTaskData() {
   const hasReachedMaxAnnotators = useCallback((taskSet: string): boolean => {
     try {
       const requiredAnnotators = taskSet === 'task3' ? 5 : 3;
-      
+
       if (taskSet === 'task1') {
         return task1Annotators >= requiredAnnotators;
-      } 
+      }
       else if (taskSet === 'task2') {
         return task2Annotators >= requiredAnnotators;
       }
       else if (taskSet === 'task3') {
         return task3Annotators >= requiredAnnotators;
       }
-      
+
       return false;
     } catch (error) {
       console.error("Error in hasReachedMaxAnnotators:", error);
@@ -412,9 +425,9 @@ export function useTaskData() {
         toast.error(`This task already has the maximum number of annotators (${taskSet === 'task3' ? 5 : 3}). Please choose another task.`);
         return false;
       }
-      
+
       let currentAnnotation: Record<string, any> = {};
-      
+
       if (taskSet === 'task1') {
         task1SubTasks.forEach(task => {
           if (task.id !== 'consensus' && task.selectedOption) {
@@ -426,16 +439,16 @@ export function useTaskData() {
           }
         });
         setTask1Annotations([...task1Annotations, currentAnnotation]);
-        
+
         // If we have 3 annotators, determine consensus
         if (task1Annotators + 1 >= 3 && discussionId) {
           await determineConsensus(taskSet, discussionId);
         } else {
           setTask1Annotators(prev => prev + 1);
         }
-        
+
         return true;
-      } 
+      }
       else if (taskSet === 'task2') {
         task2SubTasks.forEach(task => {
           if (task.id !== 'consensus' && task.selectedOption) {
@@ -447,84 +460,96 @@ export function useTaskData() {
           }
         });
         setTask2Annotations([...task2Annotations, currentAnnotation]);
-        
+
         // If we have 3 annotators, determine consensus
         if (task2Annotators + 1 >= 3 && discussionId) {
           await determineConsensus(taskSet, discussionId);
         } else {
           setTask2Annotators(prev => prev + 1);
         }
-        
+
         return true;
       }
       else if (taskSet === 'task3') {
         // Main form
         const mainFormData: Record<string, any> = {};
-        
+
         task3SubTasks.forEach(task => {
           if (task.id !== 'consensus') {
             if (task.selectedOption) {
               mainFormData[task.id] = task.selectedOption;
             }
-            
+
             // Handle different types of inputs
             if (task.textInput && task.textValue) {
               mainFormData[`${task.id}_text`] = task.textValue;
             }
-            
-            if (task.multiline && task.textValues && task.textValues.length > 0) {
+
+            // Special handling for shortAnswer with weights
+            if (task.id === 'shortAnswer' && task.textValues && task.textValues.length > 0) {
+              mainFormData[`${task.id}_values`] = task.textValues;
+              if (task.weights && task.weights.length > 0) {
+                mainFormData[`${task.id}_weights`] = task.weights;
+              }
+            } else if (task.multiline && task.textValues && task.textValues.length > 0) {
               mainFormData[`${task.id}_values`] = task.textValues;
             }
-            
+
             if (task.structuredInput && task.supportingDocs && task.supportingDocs.length > 0) {
               mainFormData[`${task.id}_docs`] = task.supportingDocs;
             }
           }
         });
-        
+
         // Add main form data to annotation
         currentAnnotation.mainForm = mainFormData;
-        
+
         // Additional sections
         if (task3Sections.length > 0) {
           currentAnnotation.additionalSections = task3Sections.map((sectionTasks, index) => {
             const sectionData: Record<string, any> = { sectionIndex: index };
-            
+
             sectionTasks.forEach(task => {
               if (task.selectedOption) {
                 sectionData[task.id] = task.selectedOption;
               }
-              
+
               // Handle different types of inputs
               if (task.textInput && task.textValue) {
                 sectionData[`${task.id}_text`] = task.textValue;
               }
-              
-              if (task.multiline && task.textValues && task.textValues.length > 0) {
+
+              // Special handling for shortAnswer with weights
+              if (task.id === 'shortAnswer' && task.textValues && task.textValues.length > 0) {
+                sectionData[`${task.id}_values`] = task.textValues;
+                if (task.weights && task.weights.length > 0) {
+                  sectionData[`${task.id}_weights`] = task.weights;
+                }
+              } else if (task.multiline && task.textValues && task.textValues.length > 0) {
                 sectionData[`${task.id}_values`] = task.textValues;
               }
-              
+
               if (task.structuredInput && task.supportingDocs && task.supportingDocs.length > 0) {
                 sectionData[`${task.id}_docs`] = task.supportingDocs;
               }
             });
-            
+
             return sectionData;
           });
         }
-        
+
         setTask3Annotations([...task3Annotations, currentAnnotation]);
-        
+
         // If we have 5 annotators, determine consensus
         if (task3Annotators + 1 >= 5 && discussionId) {
           await determineConsensus(taskSet, discussionId);
         } else {
           setTask3Annotators(prev => prev + 1);
         }
-        
+
         return true;
       }
-      
+
       return false;
     } catch (error) {
       console.error("Error in saveAnnotation:", error);
@@ -538,9 +563,9 @@ export function useTaskData() {
     try {
       const taskId = taskSet === 'task1' ? 1 : taskSet === 'task2' ? 2 : 3;
       const result = await calculateConsensus(discussionId, taskId);
-      
+
       updateConsensusTask(taskSet, result.result);
-      
+
       // Update annotator counts to reflect that consensus has been determined
       if (taskSet === 'task1') {
         setTask1Annotators(3); // Set to required number
@@ -551,7 +576,7 @@ export function useTaskData() {
       else if (taskSet === 'task3') {
         setTask3Annotators(5); // Set to required number
       }
-      
+
       return result.agreement;
     } catch (error) {
       console.error("Error determining consensus:", error);
@@ -564,24 +589,24 @@ export function useTaskData() {
   const updateConsensusTask = useCallback((taskSet: string, result: string) => {
     try {
       if (taskSet === 'task1') {
-        setTask1SubTasks(task1SubTasks.map(task => 
-          task.id === 'consensus' 
-            ? { ...task, selectedOption: result, status: 'completed' as SubTaskStatus } 
-            : task
+        setTask1SubTasks(task1SubTasks.map(task =>
+            task.id === 'consensus'
+                ? { ...task, selectedOption: result, status: 'completed' as SubTaskStatus }
+                : task
         ));
       }
       else if (taskSet === 'task2') {
-        setTask2SubTasks(task2SubTasks.map(task => 
-          task.id === 'consensus' 
-            ? { ...task, selectedOption: result, status: 'completed' as SubTaskStatus } 
-            : task
+        setTask2SubTasks(task2SubTasks.map(task =>
+            task.id === 'consensus'
+                ? { ...task, selectedOption: result, status: 'completed' as SubTaskStatus }
+                : task
         ));
       }
       else if (taskSet === 'task3') {
-        setTask3SubTasks(task3SubTasks.map(task => 
-          task.id === 'consensus' 
-            ? { ...task, selectedOption: result, status: 'completed' as SubTaskStatus } 
-            : task
+        setTask3SubTasks(task3SubTasks.map(task =>
+            task.id === 'consensus'
+                ? { ...task, selectedOption: result, status: 'completed' as SubTaskStatus }
+                : task
         ));
       }
     } catch (error) {
@@ -590,7 +615,7 @@ export function useTaskData() {
     }
   }, [task1SubTasks, task2SubTasks, task3SubTasks]);
 
-  const getTask1Progress = useCallback(() => {
+  const getTask1Progress = useCallback((isConsensus: boolean = false) => {
     try {
       const completed = task1SubTasks.filter(t => t.status === 'completed' || t.status === 'na').length;
       if (completed === task1SubTasks.length) return 'completed';
@@ -602,7 +627,7 @@ export function useTaskData() {
     }
   }, [task1SubTasks]);
 
-  const getTask2Progress = useCallback(() => {
+  const getTask2Progress = useCallback((isConsensus: boolean = false) => {
     try {
       const completed = task2SubTasks.filter(t => t.status === 'completed' || t.status === 'na').length;
       if (completed === task2SubTasks.length) return 'completed';
@@ -614,26 +639,26 @@ export function useTaskData() {
     }
   }, [task2SubTasks]);
 
-  const getTask3Progress = useCallback(() => {
+  const getTask3Progress = useCallback((isConsensus: boolean = false) => {
     try {
       const mainCompleted = task3SubTasks.filter(t => t.status === 'completed' || t.status === 'na').length;
       const mainTotal = task3SubTasks.length;
-      
+
       // Check all additional sections
       let sectionsCompleted = 0;
       let sectionsTotal = 0;
-      
+
       task3Sections.forEach(section => {
         const sectionCompleted = section.filter(t => t.status === 'completed' || t.status === 'na').length;
         const sectionTotal = section.length;
-        
+
         sectionsCompleted += sectionCompleted;
         sectionsTotal += sectionTotal;
       });
-      
+
       const totalCompleted = mainCompleted + sectionsCompleted;
       const totalTasks = mainTotal + sectionsTotal;
-      
+
       if (totalCompleted === totalTasks) return 'completed';
       if (totalCompleted > 0) return 'inProgress';
       return 'pending';
@@ -653,7 +678,7 @@ export function useTaskData() {
         status: 'pending' as SubTaskStatus,
         textValue: ''
       })));
-      
+
       // Reset task2
       setTask2SubTasks(prev => prev.map(task => ({
         ...task,
@@ -661,7 +686,7 @@ export function useTaskData() {
         status: 'pending' as SubTaskStatus,
         textValue: ''
       })));
-      
+
       // Reset task3
       setTask3SubTasks(prev => prev.map(task => {
         // Basic reset for all tasks
@@ -670,42 +695,46 @@ export function useTaskData() {
           selectedOption: undefined,
           status: 'pending' as SubTaskStatus,
         };
-        
+
         // Reset different types of inputs
         if ('textValue' in task) {
           resetTask.textValue = '';
         }
-        
+
         if ('textValues' in task) {
           resetTask.textValues = [''];
         }
-        
+
+        if ('weights' in task) {
+          resetTask.weights = [1];
+        }
+
         if ('supportingDocs' in task) {
           resetTask.supportingDocs = [{ link: '', paragraph: '' }];
         }
-        
+
         return resetTask;
       }));
-      
+
       // Clear all additional sections
       setTask3Sections([]);
-      
+
       // Reset annotations
       setTask1Annotations([]);
       setTask2Annotations([]);
       setTask3Annotations([]);
-      
+
       // Reset annotator counters
       setTask1Annotators(0);
       setTask2Annotators(0);
       setTask3Annotators(0);
-      
+
       // Reset steps
       setSteps(prev => prev.map(step => ({
         ...step,
         completed: step.id === 1 // Only the first step is completed
       })));
-      
+
       toast.success('Tasks reset successfully');
     } catch (error) {
       console.error("Error resetting tasks:", error);

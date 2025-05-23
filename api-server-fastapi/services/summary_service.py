@@ -10,7 +10,8 @@ def get_system_summary(db: Session):
     try:
         # Get discussion counts
         total_discussions = db.query(func.count(models.Discussion.id)).scalar() or 0
-        
+        trainer_breakdown = []
+
         # Get task completion counts
         # These will need to be updated when task status tracking is fully implemented
         task1_completed = 0  # Placeholder until task1_status column is added
@@ -52,26 +53,31 @@ def get_system_summary(db: Session):
             .group_by(models.Annotation.user_id)\
             .order_by(desc('count'))\
             .all()
-        
+
+        # Fetch all trainers once to avoid repeated queries
+        trainers = db.query(models.AuthorizedUser).all()
+        trainer_email_map = {str(trainer.id): trainer.email for trainer in trainers}
+
         for annotator in annotators:
             # Get task breakdown for this annotator
             task1_count = db.query(func.count(models.Annotation.id)).filter(
                 models.Annotation.user_id == annotator.user_id,
                 models.Annotation.task_id == 1
             ).scalar() or 0
-            
+
             task2_count = db.query(func.count(models.Annotation.id)).filter(
                 models.Annotation.user_id == annotator.user_id,
                 models.Annotation.task_id == 2
             ).scalar() or 0
-            
+
             task3_count = db.query(func.count(models.Annotation.id)).filter(
                 models.Annotation.user_id == annotator.user_id,
                 models.Annotation.task_id == 3
             ).scalar() or 0
-            
+
             trainer_breakdown.append({
                 "trainer_id": annotator.user_id,
+                "trainer_email": trainer_email_map.get(str(annotator.user_id), "N/A"),  # Include email here
                 "total_annotations": annotator.count,
                 "task1_count": task1_count,
                 "task2_count": task2_count,
