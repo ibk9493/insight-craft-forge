@@ -149,11 +149,18 @@ def get_all_discussions(
         pages=total_pages
     )
 
+
 @app.get("/api/discussions/{discussion_id}", response_model=schemas.Discussion)
 def get_discussion(discussion_id: str, db: Session = Depends(get_db)):
     return discussions_service.get_discussion_by_id(db, discussion_id)
 
-
+@app.get("/api/discussions", response_model=List[schemas.Discussion])
+def get_all_discussions_outdated(
+        status: Optional[str] = None,
+        db: Session = Depends(get_db)
+):
+    discussions = discussions_service.get_discussions(db, status)
+    return discussions
 # Annotations endpoints
 @app.post("/api/annotations", response_model=schemas.Annotation)
 def create_annotation(annotation: schemas.AnnotationCreate, db: Session = Depends(get_db)):
