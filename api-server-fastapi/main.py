@@ -339,7 +339,9 @@ async def get_summary_report(
     if format.lower() not in ["json", "csv"]:
         raise HTTPException(status_code=400, detail="Format must be 'json' or 'csv'")
 
-    discussions = discussions_service.get_discussions(db)
+    # GET ALL DISCUSSIONS - Use large limit to get everything for report
+    discussions = discussions_service.get_discussions(db, status=None, limit=100000, offset=0)
+    
     result = []
     for discussion in discussions:
         task1_annotations = annotations_service.get_annotations(db, discussion_id=discussion.id, task_id=1)
@@ -400,11 +402,11 @@ async def get_summary_report(
                 if annotation.data.get("code"):
                     code = annotation.data.get("code", "")
                     break
-            lang = discussion.repository_language or "python"
-            question = discussion.title
-            answer = task3_consensus_data.get("long_answer", "") if meets_criteria else ""
-            category = task3_consensus_data.get("question_type", "") if meets_criteria else ""
-            knowledge = "post-cutoff" if discussion.created_at and discussion.created_at > "2023-01-01" else "pre-cutoff"
+            lang = discussion.repository_language
+            question = discussion.question
+            answer = discussion.answer
+            category = discussion.category
+            knowledge = discussion.knowledge
         except Exception as e:
             print(f"Error extracting data for discussion {discussion.id}: {str(e)}")
 
@@ -418,26 +420,31 @@ async def get_summary_report(
             "createdAt": discussion.created_at,
             "knowledge": knowledge,
             "annotations_tasks_1_and_2": [
-                {
-                    "user_id": annotation.user_id,
-                    "timestamp": annotation.timestamp.isoformat() if hasattr(annotation,
-                                                                             'timestamp') and annotation.timestamp else datetime.now(
-                        timezone.utc).isoformat(),
-                    **annotation.data
-                }
-                for annotation in task1_annotations + task2_annotations
+                        {
+                            "annotator": int(annotation.user_id),
+                            "relevance": annotation.data.get("relevance", False),
+                            "learning_value": annotation.data.get("learning", False),  # Map learning to learning_value
+                            "clarity": annotation.data.get("clarity", False),
+                            "image_grounded": annotation.data.get("grounded", False),
+                            "address_all_aspects": annotation.data.get("aspects", False),
+                            "justification_for_addressing_all_aspects": annotation.data.get("aspects_text", ""),
+                            "with_explanation": annotation.data.get("explanation", False),
+                            "code_executable": annotation.data.get("execution") == "Executable",
+                            "code_download_link": annotation.data.get("codeDownloadUrl", "")
+                        }
+                        for annotation in task1_annotations + task2_annotations
             ],
+
             "agreed_annotation_tasks_1_and_2": {
                 "relevance": combined_consensus_data.get("relevance", False),
-                "learning_value": combined_consensus_data.get("learning_value", False),  # Assuming learning_value
+                "learning_value": combined_consensus_data.get("learning", False),  # FIXED: learning not learning_value
                 "clarity": combined_consensus_data.get("clarity", False),
-                "image_grounded": combined_consensus_data.get("image_grounded", False),
-                "address_all_aspects": combined_consensus_data.get("address_all_aspects", False),
-                "justification_for_addressing_all_aspects": combined_consensus_data.get(
-                    "justification_for_addressing_all_aspects", ""),
-                "with_explanation": combined_consensus_data.get("with_explanation", False),
-                "code_executable": combined_consensus_data.get("code_executable", False),
-                "code_download_link": combined_consensus_data.get("code_download_link", "")
+                "image_grounded": combined_consensus_data.get("grounded", False),  # FIXED: grounded not image_grounded
+                "address_all_aspects": combined_consensus_data.get("aspects", False),  # FIXED: aspects not address_all_aspects
+                "justification_for_addressing_all_aspects": combined_consensus_data.get("aspects_text", ""),  # FIXED: aspects_text
+                "with_explanation": combined_consensus_data.get("explanation", False),  # FIXED: explanation not with_explanation
+                "code_executable": combined_consensus_data.get("execution") == "Executable",  # FIXED: execution string to boolean
+                "code_download_link": combined_consensus_data.get("codeDownloadUrl", "")  # FIXED: codeDownloadUrl not code_download_link
             },
             "annotations_task_3": [
                 {
@@ -468,8 +475,6 @@ async def get_summary_report(
     if format.lower() == "csv":
         pass
     return result
-
-
 # Authentication endpoints
 @app.get("/api/auth/authorized-users", response_model=List[schemas.AuthorizedUser], tags=["Auth"])
 def get_authorized_users_list(
