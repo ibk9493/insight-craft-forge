@@ -39,7 +39,7 @@ interface FilterValues {
 }
 
 const Discussions = () => {
-  const { isAuthenticated, user, isPodLead } = useUser();
+  const { isAuthenticated, user, isPodLead,isAdmin } = useUser();
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useAppDispatch();
@@ -413,7 +413,7 @@ const Discussions = () => {
                           taskNumber === 2 ? userAnnotationStatus.task2 : 
                           userAnnotationStatus.task3;
     
-    if (isPodLead) {
+    if (isPodLead || isAdmin) {
       toast.info(`Opening task ${taskNumber} in pod lead mode`);
       navigate(`/dashboard?discussionId=${discussionId}&taskId=${taskNumber}&mode=podlead&timestamp=${Date.now()}`);
       return;
@@ -439,7 +439,7 @@ const Discussions = () => {
       navigate(`/dashboard?discussionId=${discussionId}&taskId=${taskNumber}&mode=new&timestamp=${Date.now()}`);
     }
     
-  }, [discussions, getUserAnnotationStatus, isPodLead, navigate, user]);
+  }, [discussions, getUserAnnotationStatus, isPodLead,isAdmin, navigate, user]);
 
   // Utility functions
   const getTaskStatusClass = useCallback((status: 'locked' | 'unlocked' | 'completed', userAnnotated?: boolean) => {
@@ -463,16 +463,16 @@ const Discussions = () => {
     
     const userAnnotated = task.userAnnotated === true;
     const requiredAnnotators = taskNumber === 3 ? 5 : 3;
-    const maxAnnotatorsReached = task.annotators >= requiredAnnotators && !isPodLead && !userAnnotated;
+    const maxAnnotatorsReached = task.annotators >= requiredAnnotators && !isPodLead &&  !isAdmin &&!userAnnotated;
     
-    const isEnabled = (task.status === 'unlocked' || task.status === 'completed' || isPodLead || userAnnotated) && !maxAnnotatorsReached;
+    const isEnabled = (task.status === 'unlocked' || task.status === 'completed' || isPodLead || isAdmin || userAnnotated) && !maxAnnotatorsReached;
     
     let text = '';
     if (maxAnnotatorsReached) {
       text = `Maximum Annotators Reached (${task.annotators}/${requiredAnnotators})`;
     } else if (userAnnotated) {
       text = `View Your Annotation (${task.annotators}/${requiredAnnotators})`;
-    } else if (isPodLead && task.status === 'completed') {
+    } else if ((isPodLead || isAdmin) && task.status === 'completed') {
       text = `Create Consensus (${task.annotators}/${requiredAnnotators})`;
     } else if (task.status === 'completed') {
       text = `View Results (${task.annotators}/${requiredAnnotators})`;
@@ -483,7 +483,7 @@ const Discussions = () => {
     }
         
     return { isEnabled, text };
-  }, [isPodLead]);
+  }, [isPodLead,isAdmin]);
 
   const openExternalLink = useCallback((url: string) => {
     window.open(url, '_blank', 'noopener,noreferrer');
@@ -715,7 +715,7 @@ const Discussions = () => {
                       <p className="text-xs text-gray-500 mb-4">
                         Evaluate question relevance, learning value, clarity, and image grounding.
                       </p>
-                      {discussion.tasks.task1.annotators >= 3 && !isPodLead && !discussion.tasks.task1.userAnnotated ? (
+                      {discussion.tasks.task1.annotators >= 3 && !(isPodLead || isAdmin) && !discussion.tasks.task1.userAnnotated ? (
                         <div className="flex items-center justify-center space-x-2 text-amber-600 text-xs py-2">
                           <AlertCircle className="h-4 w-4" />
                           <span>Maximum annotators reached (3/3)</span>
@@ -743,7 +743,7 @@ const Discussions = () => {
                       <p className="text-xs text-gray-500 mb-4">
                         Evaluate answer completeness, explanation, code execution.
                       </p>
-                      {discussion.tasks.task2.annotators >= 3 && !isPodLead && !discussion.tasks.task2.userAnnotated ? (
+                      {discussion.tasks.task2.annotators >= 3 && !(isPodLead || isAdmin) && !discussion.tasks.task2.userAnnotated ? (
                         <div className="flex items-center justify-center space-x-2 text-amber-600 text-xs py-2">
                           <AlertCircle className="h-4 w-4" />
                           <span>Maximum annotators reached (3/3)</span>
@@ -771,7 +771,7 @@ const Discussions = () => {
                       <p className="text-xs text-gray-500 mb-4">
                         Rewrite question & answer, classify, provide supporting docs.
                       </p>
-                      {discussion.tasks.task3.annotators >= 5 && !isPodLead && !discussion.tasks.task3.userAnnotated ? (
+                      {discussion.tasks.task3.annotators >= 5 && !(isPodLead || isAdmin) && !discussion.tasks.task3.userAnnotated ? (
                         <div className="flex items-center justify-center space-x-2 text-amber-600 text-xs py-2">
                           <AlertCircle className="h-4 w-4" />
                           <span>Maximum annotators reached (5/5)</span>

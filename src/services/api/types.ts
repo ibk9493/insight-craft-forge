@@ -211,4 +211,5 @@ export interface BulkActionResult {
   message: string;
   updatedCount: number;
   failedCount: number;
+  results:[];
 }

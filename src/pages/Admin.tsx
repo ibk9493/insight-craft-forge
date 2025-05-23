@@ -178,13 +178,13 @@ const Admin = () => {
               <Settings className="h-4 w-4" />
               <span>Task Management</span>
             </Tab>
-            {isAdmin && (
+            {(isAdmin || isPodLead) && (
               <Tab value="bulk-tasks" className="flex items-center gap-2">
                 <CheckSquare className="h-4 w-4" />
                 <span>Bulk Tasks</span>
               </Tab>
             )}
-            {isPodLead && (
+            {(isAdmin || isPodLead) && (
               <>
                 <Tab value="annotation-quality" className="flex items-center gap-2">
                   <Shield className="h-4 w-4" />
@@ -194,8 +194,11 @@ const Admin = () => {
                   <Users className="h-4 w-4" />
                   <span>Consensus Review</span>
                 </Tab>
+                
               </>
             )}
+
+            
             {isAdmin && (
               <>
                 <Tab value="upload-discussions" className="flex items-center gap-2">
@@ -254,7 +257,7 @@ const Admin = () => {
           </TabPanel>
 
           {/* Bulk Task Management Tab - Admin Only */}
-          {isAdmin && (
+          {(isAdmin || isPodLead) && (
             <TabPanel value="bulk-tasks">
               <div className="mb-4">
                 <h2 className="text-lg font-medium">Bulk Task Management</h2>
@@ -273,7 +276,7 @@ const Admin = () => {
           )}
 
           {/* Annotation Quality Tab - Pod Lead */}
-          {isPodLead && (
+          {(isAdmin || isPodLead) && (
             <TabPanel value="annotation-quality">
               <div className="mb-4">
                 <h2 className="text-lg font-medium">Annotation Quality</h2>
@@ -287,7 +290,7 @@ const Admin = () => {
           )}
           
           {/* Consensus Review Tab - Available to Pod Lead */}
-          {isPodLead && (
+          {(isAdmin || isPodLead) && (
             <TabPanel value="consensus-review">
               <div className="mb-4">
                 <h2 className="text-lg font-medium">Consensus Review</h2>
