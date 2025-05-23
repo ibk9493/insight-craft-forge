@@ -780,10 +780,6 @@ async def get_specific_consensus_annotation(
 
         if not consensus_annotation:
             logger.warning(f"No consensus annotation found for discussion='{discussion_id}', task={task_id}")
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Consensus annotation not found for discussion '{discussion_id}' and task {task_id}"
-            )
 
         logger.info(f"Found consensus annotation with id={consensus_annotation.id}")
         return consensus_annotation

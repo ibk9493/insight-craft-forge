@@ -263,39 +263,225 @@ useEffect(() => {
       toast.error('Selected annotation has no data to use.');
       return;
     }
-    let baseSubTasks: SubTask[] = [];
-    if (currentStep === TaskId.QUESTION_QUALITY) baseSubTasks = JSON.parse(JSON.stringify(task1SubTasks));
-    else if (currentStep === TaskId.ANSWER_QUALITY) baseSubTasks = JSON.parse(JSON.stringify(task2SubTasks));
-    else if (currentStep === TaskId.REWRITE) baseSubTasks = JSON.parse(JSON.stringify(task3SubTasks));
+  
+    if (currentStep === TaskId.QUESTION_QUALITY) {
+      // Task 1 - unchanged
+      const baseSubTasks = JSON.parse(JSON.stringify(task1SubTasks));
+      const mappedSubTasks = mapAnnotationToSubTasks(baseSubTasks, annotation);
+      setConsensusTask1(mappedSubTasks);
+    } 
+    else if (currentStep === TaskId.ANSWER_QUALITY) {
+      // Task 2 - unchanged  
+      const baseSubTasks = JSON.parse(JSON.stringify(task2SubTasks));
+      const mappedSubTasks = mapAnnotationToSubTasks(baseSubTasks, annotation);
+      setConsensusTask2(mappedSubTasks);
+    } 
+    else if (currentStep === TaskId.REWRITE) {
+      // Task 3 - NEW: Handle multiple forms structure
+      if (annotation.data.forms && Array.isArray(annotation.data.forms)) {
+        // Multi-form annotation - populate consensus forms
+        const consensusForms = annotation.data.forms.map((formData: any, index: number) => {
+          const baseSubTasks = JSON.parse(JSON.stringify(task3SubTasks));
+          
+          const mappedSubTasks = baseSubTasks.map((task: SubTask) => {
+            const savedValue = formData[task.id];
+            const savedTextValue = formData[`${task.id}_text`];
+            
+            // Handle short_answer_list with claim/weight structure
+            if (task.id === 'short_answer_list' && Array.isArray(savedValue)) {
+              const claims = savedValue.map((item: any) => 
+                typeof item === 'object' ? item.claim : item
+              );
+              const weights = savedValue.map((item: any) => 
+                typeof item === 'object' ? parseInt(item.weight) || 1 : 1
+              );
+              
+              return {
+                ...task,
+                selectedOption: 'Completed',
+                status: 'completed' as SubTaskStatus,
+                textValues: claims,
+                weights: weights
+              };
+            }
+            
+            // Handle supporting docs
+            else if (task.id === 'supporting_docs' && Array.isArray(savedValue)) {
+              return {
+                ...task,
+                selectedOption: 'Provided',
+                status: 'completed' as SubTaskStatus,
+                supportingDocs: savedValue.map((doc: any) => ({
+                  link: doc.link || '',
+                  paragraph: doc.paragraph || ''
+                }))
+              };
+            }
+            
+            // Handle doc_download_link
+            else if (task.id === 'doc_download_link') {
+              const linkText = savedTextValue;
+              const hasLink = linkText && typeof linkText === 'string' && linkText.trim() !== '';
+              
+              return {
+                ...task,
+                selectedOption: typeof savedValue === 'string' ? savedValue : (hasLink ? 'Needed' : 'Not Needed'),
+                status: 'completed' as SubTaskStatus,
+                textValue: linkText || '',
+                docDownloadLink: hasLink ? linkText : undefined,
+                enableDocDownload: hasLink
+              };
+            }
+            
+            // Handle regular fields
+            else if (savedValue !== undefined) {
+              let selectedOption = '';
+              
+              if (typeof savedValue === 'boolean') {
+                if (task.options && task.options.length > 0) {
+                  const trueOption = task.options.find(o => o.toLowerCase() === 'true' || o.toLowerCase() === 'yes');
+                  const falseOption = task.options.find(o => o.toLowerCase() === 'false' || o.toLowerCase() === 'no');
+                  if (savedValue === true && trueOption) selectedOption = trueOption;
+                  else if (savedValue === false && falseOption) selectedOption = falseOption;
+                } else {
+                  selectedOption = savedValue ? 'Yes' : 'No';
+                }
+              } else if (typeof savedValue === 'string') {
+                if (task.options && task.options.length > 0 && task.options.includes(savedValue)) {
+                  selectedOption = savedValue;
+                } else if (!task.options || task.options.length === 0) {
+                  selectedOption = savedValue;
+                }
+              }
+              
+              return {
+                ...task,
+                selectedOption,
+                status: 'completed' as SubTaskStatus,
+                textValue: typeof savedTextValue === 'string' ? savedTextValue : (task.textValue || '')
+              };
+            }
+            
+            return task;
+          });
+          
+          return {
+            id: formData.formId || `consensus-form-${index + 1}`,
+            name: formData.formName || `Form ${index + 1}`,
+            subTasks: mappedSubTasks
+          };
+        });
+        
+        setConsensusTask3Forms(consensusForms);
+        setActiveConsensusTask3Form(0); // Set to first form
+        
+        toast.success(`Populated ${consensusForms.length} consensus forms from selected annotation.`);
+      } 
+      else {
+        // Single form annotation - fallback to old behavior
+        const baseSubTasks = JSON.parse(JSON.stringify(task3SubTasks));
+        const mappedSubTasks = mapAnnotationToSubTasksForTask3(baseSubTasks, annotation);
+        setConsensusTask3(mappedSubTasks);
+        
+        toast.success('Consensus form populated with selected annotation.');
+      }
+    } 
     else {
       toast.error('Invalid task step for consensus.');
       return;
     }
-    const mappedSubTasks: SubTask[] = baseSubTasks.map(task => {
+    
+    setConsensusStars(null);
+    setConsensusComment('');
+    toast.success('Consensus populated with selected annotation. Please provide overall feedback.');
+  };
+  
+  // Helper function for Task 3 single form mapping
+  const mapAnnotationToSubTasksForTask3 = (baseSubTasks: SubTask[], annotation: Annotation): SubTask[] => {
+    return baseSubTasks.map(task => {
       const savedValue = annotation.data[task.id];
       const savedTextValue = annotation.data[`${task.id}_text`];
-    
-      if (task.id === 'short_answer_list' && Array.isArray(savedValue)) {
+      
+      // Handle short_answer_list with new format
+      if (task.id === 'short_answer_list') {
+        // Check for aggregated format first
+        if (Array.isArray(annotation.data.short_answer_list)) {
+          const shortAnswerData = annotation.data.short_answer_list;
+          
+          // Handle nested array format (multiple forms)
+          if (shortAnswerData.length > 0 && Array.isArray(shortAnswerData[0])) {
+            // Use first form's data
+            const firstFormData = shortAnswerData[0];
+            const claims = firstFormData.map((item: any) => 
+              typeof item === 'object' ? item.claim : item
+            );
+            const weights = firstFormData.map((item: any) => 
+              typeof item === 'object' ? parseInt(item.weight) || 1 : 1
+            );
+            
+            return {
+              ...task,
+              selectedOption: 'Completed',
+              status: 'completed' as SubTaskStatus,
+              textValues: claims,
+              weights: weights
+            };
+          }
+          // Handle single form format
+          else {
+            const claims = shortAnswerData.map((item: any) => 
+              typeof item === 'object' ? item.claim : item
+            );
+            const weights = shortAnswerData.map((item: any) => 
+              typeof item === 'object' ? parseInt(item.weight) || 1 : 1
+            );
+            
+            return {
+              ...task,
+              selectedOption: 'Completed',
+              status: 'completed' as SubTaskStatus,
+              textValues: claims,
+              weights: weights
+            };
+          }
+        }
+      }
+      
+      // Handle supporting docs from aggregated data
+      else if (task.id === 'supporting_docs') {
+        const docsData = annotation.data['supporting_docs_data'];
+        if (Array.isArray(docsData)) {
+          return {
+            ...task,
+            selectedOption: 'Provided',
+            status: 'completed' as SubTaskStatus,
+            supportingDocs: docsData.map((doc: any) => ({
+              link: doc.link || '',
+              paragraph: doc.paragraph || ''
+            }))
+          };
+        }
+      }
+      
+      // Handle doc_download_link from aggregated data
+      else if (task.id === 'doc_download_link') {
+        const linkValue = annotation.data['doc_download_link'] || annotation.data['doc_download_links']?.[0];
+        const hasLink = linkValue && typeof linkValue === 'string' && linkValue.trim() !== '';
+        
         return {
           ...task,
-          selectedOption: '',
+          selectedOption: hasLink ? 'Needed' : 'Not Needed',
           status: 'completed' as SubTaskStatus,
-          textValue: savedValue.join('\n')
+          textValue: linkValue || '',
+          docDownloadLink: hasLink ? linkValue : undefined,
+          enableDocDownload: hasLink
         };
-      } else if (task.id === 'supporting_docs' && Array.isArray(savedValue)) {
-        const formattedDocs = savedValue.map(doc =>
-          (typeof doc === 'object' && doc.link && doc.paragraph)
-            ? { link: doc.link, paragraph: doc.paragraph }
-            : doc
-        );
-        return {
-          ...task,
-          selectedOption: '',
-          status: 'completed' as SubTaskStatus,
-          textValue: JSON.stringify(formattedDocs, null, 2)
-        };
-      } else if (savedValue !== undefined) {
+      }
+      
+      // Handle other fields using aggregated data
+      else if (savedValue !== undefined) {
         let selectedOption = '';
+        
         if (typeof savedValue === 'boolean') {
           if (task.options && task.options.length > 0) {
             const trueOption = task.options.find(o => o.toLowerCase() === 'true' || o.toLowerCase() === 'yes');
@@ -306,12 +492,62 @@ useEffect(() => {
             selectedOption = savedValue ? 'Yes' : 'No';
           }
         } else if (typeof savedValue === 'string') {
-           if (task.options && task.options.length > 0 && task.options.includes(savedValue)) {
+          if (task.options && task.options.length > 0 && task.options.includes(savedValue)) {
             selectedOption = savedValue;
           } else if (!task.options || task.options.length === 0) {
             selectedOption = savedValue;
           }
         }
+        
+        // Handle aggregated text values
+        let textValue = savedTextValue;
+        if (!textValue) {
+          // Try to get from aggregated lists
+          if (task.id === 'rewrite' && annotation.data.rewrite_list?.[0]) {
+            textValue = annotation.data.rewrite_list[0];
+          } else if (task.id === 'longAnswer' && annotation.data.longAnswer_list?.[0]) {
+            textValue = annotation.data.longAnswer_list[0];
+          }
+        }
+        
+        return {
+          ...task,
+          selectedOption,
+          status: 'completed' as SubTaskStatus,
+          textValue: typeof textValue === 'string' ? textValue : (task.textValue || '')
+        };
+      }
+      
+      return task;
+    });
+  };
+  
+  // Helper function for Tasks 1 & 2 (unchanged)
+  const mapAnnotationToSubTasks = (baseSubTasks: SubTask[], annotation: Annotation): SubTask[] => {
+    return baseSubTasks.map(task => {
+      const savedValue = annotation.data[task.id];
+      const savedTextValue = annotation.data[`${task.id}_text`];
+      
+      if (savedValue !== undefined) {
+        let selectedOption = '';
+        
+        if (typeof savedValue === 'boolean') {
+          if (task.options && task.options.length > 0) {
+            const trueOption = task.options.find(o => o.toLowerCase() === 'true' || o.toLowerCase() === 'yes');
+            const falseOption = task.options.find(o => o.toLowerCase() === 'false' || o.toLowerCase() === 'no');
+            if (savedValue === true && trueOption) selectedOption = trueOption;
+            else if (savedValue === false && falseOption) selectedOption = falseOption;
+          } else {
+            selectedOption = savedValue ? 'Yes' : 'No';
+          }
+        } else if (typeof savedValue === 'string') {
+          if (task.options && task.options.length > 0 && task.options.includes(savedValue)) {
+            selectedOption = savedValue;
+          } else if (!task.options || task.options.length === 0) {
+            selectedOption = savedValue;
+          }
+        }
+        
         return {
           ...task,
           selectedOption,
@@ -319,28 +555,12 @@ useEffect(() => {
           textValue: typeof savedTextValue === 'string' ? savedTextValue : (task.textValue || '')
         };
       }
+      
       return task;
     });
-    switch (currentStep) {
-      case TaskId.QUESTION_QUALITY:
-        setConsensusTask1(mappedSubTasks);
-        break;
-      case TaskId.ANSWER_QUALITY:
-        setConsensusTask2(mappedSubTasks);
-        break;
-      case TaskId.REWRITE:
-        setConsensusTask3(mappedSubTasks);
-        break;
-      default:
-        toast.error('Cannot determine which consensus task to update.');
-        return;
-    }
-    setConsensusStars(null);
-    setConsensusComment('');
-    toast.success('Consensus form populated with selected annotation. Please provide overall feedback.');
   };
 // Simple duplication function
-const handleDuplicateForm = (type) => {
+const handleDuplicateForm = (type: string) => {
   if (!task3SubTasks) return;
   
   const newForm = {
@@ -352,7 +572,7 @@ const handleDuplicateForm = (type) => {
   
   if (type === 'Q') {
     // Clear questions in new form
-    newForm.subTasks = newForm.subTasks.map(task => {
+    newForm.subTasks = newForm.subTasks.map((task: { id: string; }) => {
       if (task.id.toLowerCase().includes('question')) {
         return { ...task, textValue: '', selectedOption: '', status: 'pending' };
       }
@@ -652,80 +872,234 @@ const handleDuplicateForm = (type) => {
     )}
   </>
 )}
-                {currentStep === TaskId.REWRITE && viewMode === 'consensus' && (isPodLead || isAdmin) && (
-                    <>
-                      <div className="mb-4">
-                        <div className="flex items-center justify-between mb-2"><h3 className="text-lg font-semibold">Task 3 Consensus Forms</h3></div>
-                        <div className="flex space-x-2 border-b">
-                          {consensusTask3Forms.map((form, index) => (
-                              <Button key={form.id} variant={activeConsensusTask3Form === index ? 'default' : 'ghost'} size="sm" className="rounded-b-none" onClick={() => setActiveConsensusTask3Form(index)}>{form.name}</Button>
-                          ))}
-                        </div>
-                      </div>
-                      {consensusTask3Forms[activeConsensusTask3Form] && (
-                          <TaskCard
-                              title={`Task 3: Rewrite Consensus - ${consensusTask3Forms[activeConsensusTask3Form].name}`}
-                              description="Create a consensus based on annotator assessments."
-                              subTasks={consensusTask3Forms[activeConsensusTask3Form].subTasks}
-                              status={getTask3Progress(true)}
-                              onSubTaskChange={(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights) => {
-                                const updatedForms = [...consensusTask3Forms];
-                                const currentForm = updatedForms[activeConsensusTask3Form];
-                                currentForm.subTasks = currentForm.subTasks.map(task => {
-                                  if (task.id === taskId) {
-                                    const isCompleted = computeCompleted(task, selectedOption, textValue, textValues, supportingDocs);
-                                    return { ...task, selectedOption, textValue: textValue !== undefined ? textValue : task.textValue, textValues: textValues !== undefined ? textValues : task.textValues, supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs, weights: weights !== undefined ? weights : task.weights, status: isCompleted ? 'completed' : 'pending' };
-                                  }
-                                  return task;
-                                });
-                                setConsensusTask3Forms(updatedForms);
-                              }}
-                              active
-                              customFieldRenderers={{
-                                shortAnswer: (task, onChange) => (
-                                    <div className="space-y-2">
-                                      {task.textValues?.map((value, index) => (
-                                          <div key={index} className="flex space-x-2">
-                                            <input type="text" value={value} onChange={e => {
-                                              const newValues = [...(task.textValues || [])]; newValues[index] = e.target.value; onChange(task.id, task.selectedOption, undefined, newValues);
-                                            }} placeholder={task.placeholder || 'Enter a short answer claim'} className="flex-1 px-3 py-2 border rounded-md" />
-                                            <select value={task.weights?.[index] || index + 1} onChange={e => {
-                                              const newWeights = [...(task.weights || task.textValues?.map((_, i) => i + 1) || [])]; newWeights[index] = parseInt(e.target.value); onChange(task.id, task.selectedOption, undefined, task.textValues, undefined, undefined, newWeights);
-                                            }} className="w-20 px-2 py-2 border rounded-md">
-                                              {task.textValues?.map((_, i) => <option key={i} value={i + 1}>{i + 1}</option>)}
-                                            </select>
-                                            <Button variant="ghost" size="sm" onClick={() => {
-                                              const newValues = task.textValues?.filter((_, i) => i !== index) || []; const newWeights = task.weights?.filter((_, i) => i !== index) || []; onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, newWeights);
-                                            }} disabled={task.textValues?.length === 1}>Remove</Button>
-                                          </div>
-                                      ))}
-                                      <Button variant="outline" size="sm" onClick={() => {
-                                        const newValues = [...(task.textValues || []), '']; const newWeights = [...(task.weights || []), newValues.length]; onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, newWeights);
-                                      }}>+ Add Short Answer</Button>
-                                    </div>
-                                )
-                              }}
-                          />
-                      )}
-                      <div className="mt-4 p-4 border rounded bg-gray-50">
-                        <h3 className="text-lg font-semibold mb-2">Overall Consensus Feedback</h3>
-                        <div className="mb-2">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Rating (1-5 stars):</label>
-                          <div className="flex space-x-1">
-                            {[1, 2, 3, 4, 5].map(star => (
-                                <Button key={star} variant={consensusStars === star ? 'default' : 'outline'} size="sm" onClick={() => setConsensusStars(star)}>{star}</Button>
-                            ))}
-                            {consensusStars && <Button variant="ghost" size="sm" onClick={() => setConsensusStars(null)}>Clear</Button>}
-                          </div>
-                        </div>
-                        <div>
-                          <label htmlFor="consensusCommentTask3" className="block text-sm font-medium text-gray-700 mb-1">Comment:</label>
-                          <Textarea id="consensusCommentTask3" value={consensusComment} onChange={e => setConsensusComment(e.target.value)} placeholder="Provide an overall comment for this consensus..." rows={3} />
-                        </div>
-                      </div>
-                      <AnnotatorView discussionId={discussionId || ''} currentStep={currentStep} getAnnotationsForTask={getAnnotationsForTask} onUseForConsensus={handleUseAnnotationForConsensus} getUserEmailById={getUserEmailById} />
-                    </>
-                )}
+{currentStep === TaskId.REWRITE && viewMode === 'consensus' && (isPodLead || isAdmin) && (
+  <>
+    <div className="mb-4">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-lg font-semibold">Task 3 Consensus Forms</h3>
+        <div className="flex space-x-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => handleDuplicateForm('Q')}
+          >
+            + Question Form
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => handleDuplicateForm('A')}
+          >
+            + Answer Form
+          </Button>
+        </div>
+      </div>
+      <div className="flex space-x-2 border-b">
+        {consensusTask3Forms.map((form, index) => (
+          <div key={form.id} className="relative">
+            <Button 
+              variant={activeConsensusTask3Form === index ? 'default' : 'ghost'} 
+              size="sm" 
+              className="rounded-b-none" 
+              onClick={() => setActiveConsensusTask3Form(index)}
+            >
+              {form.name}
+            </Button>
+            {index > 0 && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="absolute -top-2 -right-2 h-6 w-6 p-0 rounded-full" 
+                onClick={e => {
+                  e.stopPropagation();
+                  const updatedForms = consensusTask3Forms.filter((_, i) => i !== index);
+                  setConsensusTask3Forms(updatedForms);
+                  if (activeConsensusTask3Form >= updatedForms.length) {
+                    setActiveConsensusTask3Form(updatedForms.length - 1);
+                  }
+                }}
+              >
+                ×
+              </Button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+    
+    {consensusTask3Forms[activeConsensusTask3Form] && (
+      <TaskCard
+        title={`Task 3: Rewrite Consensus - ${consensusTask3Forms[activeConsensusTask3Form].name}`}
+        description="Create a consensus based on annotator assessments."
+        subTasks={consensusTask3Forms[activeConsensusTask3Form].subTasks}
+        // Calculate status based on the actual consensus form being displayed
+        status={(() => {
+          const currentForm = consensusTask3Forms[activeConsensusTask3Form];
+          if (!currentForm || !currentForm.subTasks) return 'pending';
+          
+          const completed = currentForm.subTasks.filter(t => 
+            t.status === 'completed' || t.status === 'na'
+          ).length;
+          const total = currentForm.subTasks.length;
+          
+          if (completed === total) return 'completed';
+          if (completed > 0) return 'inProgress';
+          return 'pending';
+        })()}
+        onSubTaskChange={(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights) => {
+          const updatedForms = [...consensusTask3Forms];
+          const currentForm = updatedForms[activeConsensusTask3Form];
+          
+          currentForm.subTasks = currentForm.subTasks.map(task => {
+            if (task.id === taskId) {
+              const isCompleted = computeCompleted(task, selectedOption, textValue, textValues, supportingDocs);
+              return { 
+                ...task, 
+                selectedOption, 
+                textValue: textValue !== undefined ? textValue : task.textValue, 
+                textValues: textValues !== undefined ? textValues : task.textValues, 
+                supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs, 
+                weights: weights !== undefined ? weights : task.weights, 
+                status: isCompleted ? 'completed' : 'pending' 
+              };
+            }
+            return task;
+          });
+          
+          setConsensusTask3Forms(updatedForms);
+        }}
+        active
+        customFieldRenderers={{
+          short_answer_list: (task, onChange) => (
+            <div className="space-y-3">
+              <div className="text-sm font-medium text-gray-700 mb-2">
+                Short Answer Claims (with priority weights 1-3)
+              </div>
+              {task.textValues?.map((claim, index) => (
+                <div key={index} className="flex space-x-3 items-start p-3 border rounded-md bg-gray-50">
+                  {/* Claim Input */}
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Claim #{index + 1}
+                    </label>
+                    <Textarea
+                      value={claim}
+                      onChange={e => {
+                        const newValues = [...(task.textValues || [])]; 
+                        newValues[index] = e.target.value; 
+                        onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, task.weights);
+                      }}
+                      placeholder="Enter a short answer claim"
+                      className="min-h-[80px] text-sm"
+                    />
+                  </div>
+                  
+                  {/* Weight Selection */}
+                  <div className="flex flex-col items-center min-w-[80px]">
+                    <label className="text-xs font-medium text-gray-600 mb-1">Weight</label>
+                    <select 
+                      value={task.weights?.[index] || 1} 
+                      onChange={e => {
+                        const currentWeights = task.weights || task.textValues?.map(() => 1) || [];
+                        const newWeights = [...currentWeights]; 
+                        newWeights[index] = parseInt(e.target.value); 
+                        onChange(task.id, task.selectedOption, undefined, task.textValues, undefined, undefined, newWeights);
+                      }} 
+                      className="w-16 px-2 py-2 border rounded-md text-center text-sm"
+                    >
+                      <option value={1}>1</option>
+                      <option value={2}>2</option>
+                      <option value={3}>3</option>
+                    </select>
+                    <span className="text-xs text-gray-500 mt-1">Priority</span>
+                  </div>
+                  
+                  {/* Remove Button */}
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => {
+                      const newValues = task.textValues?.filter((_, i) => i !== index) || []; 
+                      const newWeights = task.weights?.filter((_, i) => i !== index) || []; 
+                      onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, newWeights);
+                    }}
+                    disabled={task.textValues?.length === 1}
+                    className="mt-6"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+              
+              {/* Add New Claim Button */}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => {
+                  const newValues = [...(task.textValues || []), '']; 
+                  const newWeights = [...(task.weights || []), 1];
+                  onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, newWeights);
+                }}
+                className="w-full"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Short Answer Claim
+              </Button>
+            </div>
+          )
+        }}
+      />
+    )}
+    
+    <div className="mt-4 p-4 border rounded bg-gray-50">
+      <h3 className="text-lg font-semibold mb-2">Overall Consensus Feedback</h3>
+      <div className="mb-2">
+        <label className="block text-sm font-medium text-gray-700 mb-1">Rating (1-5 stars):</label>
+        <div className="flex space-x-1">
+          {[1, 2, 3, 4, 5].map(star => (
+            <Button 
+              key={star} 
+              variant={consensusStars === star ? 'default' : 'outline'} 
+              size="sm" 
+              onClick={() => setConsensusStars(star)}
+            >
+              {star}
+            </Button>
+          ))}
+          {consensusStars && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => setConsensusStars(null)}
+            >
+              Clear
+            </Button>
+          )}
+        </div>
+      </div>
+      <div>
+        <label htmlFor="consensusCommentTask3" className="block text-sm font-medium text-gray-700 mb-1">
+          Comment:
+        </label>
+        <Textarea 
+          id="consensusCommentTask3" 
+          value={consensusComment} 
+          onChange={e => setConsensusComment(e.target.value)} 
+          placeholder="Provide an overall comment for this consensus..." 
+          rows={3} 
+        />
+      </div>
+    </div>
+    
+    <AnnotatorView 
+      discussionId={discussionId || ''} 
+      currentStep={currentStep} 
+      getAnnotationsForTask={getAnnotationsForTask} 
+      onUseForConsensus={handleUseAnnotationForConsensus} 
+      getUserEmailById={getUserEmailById} 
+    />
+  </>
+)}
                 {currentStep === TaskId.SUMMARY && <Summary results={getSummaryData()} />}
               </>
           )}
