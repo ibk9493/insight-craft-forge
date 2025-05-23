@@ -190,6 +190,13 @@ class ConsensusAnnotationBase(BaseModel):
     task_id: int
     data: ConsensusAnnotationData
 
+class PaginatedDiscussionResponse(BaseModel):
+    items: List[Discussion]
+    total: int
+    page: int
+    per_page: int
+    pages: int
+    
 class ConsensusAnnotationCreate(ConsensusAnnotationBase):
     pass
 

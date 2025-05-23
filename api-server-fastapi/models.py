@@ -105,3 +105,4 @@ class AuthorizedUser(Base):
     email = Column(String, unique=True, nullable=False, index=True)
     role = Column(String, nullable=False)  # 'annotator', 'pod_lead', or 'admin'
     password_hash = Column(String, nullable=True)  # Add this line
+

@@ -51,19 +51,77 @@ def validate_discussion_data(discussion: schemas.GitHubDiscussion) -> None:
     
     # Add more validation rules as needed
 
-def get_discussions(db: Session, status: Optional[str] = None) -> List[schemas.Discussion]:
+# Add this function to get total count
+def get_discussions_count(db: Session, status: Optional[str] = None) -> int:
     """
-    Retrieve discussions from the database, optionally filtered by task status.
+    Get the total count of discussions, optionally filtered by task status.
     
     Parameters:
     - db: Database session
     - status: Optional filter for task status ('locked', 'unlocked', 'completed')
     
     Returns:
+    - Total count of discussions matching the filter
+    """
+    try:
+        logger.info(f"Counting discussions with status: {status}")
+        
+        if not status:
+            # Return total count of all discussions
+            count = db.query(models.Discussion).count()
+            logger.info(f"Total discussions count: {count}")
+            return count
+        
+        # For status-based filtering, we need to count discussions that match the criteria
+        valid_statuses = ['completed', 'unlocked', 'locked']
+        if status not in valid_statuses:
+            logger.warning(f"Invalid status filter: {status}")
+            return 0
+        
+        all_discussions = db.query(models.Discussion).all()
+        matching_count = 0
+        
+        for discussion in all_discussions:
+            task_assocs = db.query(models.discussion_task_association).filter(
+                models.discussion_task_association.c.discussion_id == discussion.id
+            ).all()
+            
+            if status == 'completed':
+                if all(task.status == 'completed' for task in task_assocs):
+                    matching_count += 1
+            elif status == 'unlocked':
+                if any(task.status == 'unlocked' for task in task_assocs):
+                    matching_count += 1
+            elif status == 'locked':
+                if all(task.status == 'locked' for task in task_assocs):
+                    matching_count += 1
+        
+        logger.info(f"Found {matching_count} discussions with status: {status}")
+        return matching_count
+        
+    except exc.SQLAlchemyError as e:
+        logger.error(f"Database error in get_discussions_count: {str(e)}")
+        raise DatabaseError(f"Failed to count discussions: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error counting discussions: {str(e)}")
+        return 0
+
+# Update the existing get_discussions function signature and add pagination support
+def get_discussions(db: Session, status: Optional[str] = None, limit: int = 10, offset: int = 0) -> List[schemas.Discussion]:
+    """
+    Retrieve discussions from the database, optionally filtered by task status, with pagination support.
+    
+    Parameters:
+    - db: Database session
+    - status: Optional filter for task status ('locked', 'unlocked', 'completed')
+    - limit: Maximum number of discussions to return
+    - offset: Number of discussions to skip
+    
+    Returns:
     - List of Discussion objects
     """
     try:
-        logger.info(f"Fetching discussions with status: {status}")
+        logger.info(f"Fetching discussions with status: {status}, limit: {limit}, offset: {offset}")
         query = db.query(models.Discussion)
         
         if status:
@@ -72,11 +130,11 @@ def get_discussions(db: Session, status: Optional[str] = None) -> List[schemas.D
                 logger.warning(f"Invalid status filter: {status}")
                 return []
                 
-            # Get discussions based on task status
+            # Get discussions based on task status with pagination
             if status == 'completed':
                 # All tasks should be completed
                 completed_discussions = []
-                all_discussions = query.all()
+                all_discussions = query.all()  # We still need all to filter by status
                 
                 for discussion in all_discussions:
                     task_assocs = db.query(models.discussion_task_association).filter(
@@ -87,9 +145,12 @@ def get_discussions(db: Session, status: Optional[str] = None) -> List[schemas.D
                     if all_completed:
                         completed_discussions.append(discussion)
                 
-                logger.info(f"Found {len(completed_discussions)} completed discussions")
+                # Apply pagination to the filtered results
+                paginated_discussions = completed_discussions[offset:offset + limit]
+                logger.info(f"Found {len(completed_discussions)} completed discussions, returning {len(paginated_discussions)} after pagination")
+                
                 discussions_with_tasks = []
-                for disc in completed_discussions:
+                for disc in paginated_discussions:
                     discussion = get_discussion_by_id(db, disc.id)
                     if discussion:
                         discussions_with_tasks.append(discussion)
@@ -109,9 +170,12 @@ def get_discussions(db: Session, status: Optional[str] = None) -> List[schemas.D
                     if has_unlocked:
                         unlocked_discussions.append(discussion)
                 
-                logger.info(f"Found {len(unlocked_discussions)} unlocked discussions")
+                # Apply pagination to the filtered results
+                paginated_discussions = unlocked_discussions[offset:offset + limit]
+                logger.info(f"Found {len(unlocked_discussions)} unlocked discussions, returning {len(paginated_discussions)} after pagination")
+                
                 discussions_with_tasks = []
-                for disc in unlocked_discussions:
+                for disc in paginated_discussions:
                     discussion = get_discussion_by_id(db, disc.id)
                     if discussion:
                         discussions_with_tasks.append(discussion)
@@ -131,21 +195,24 @@ def get_discussions(db: Session, status: Optional[str] = None) -> List[schemas.D
                     if all_locked:
                         locked_discussions.append(discussion)
                 
-                logger.info(f"Found {len(locked_discussions)} locked discussions")
+                # Apply pagination to the filtered results
+                paginated_discussions = locked_discussions[offset:offset + limit]
+                logger.info(f"Found {len(locked_discussions)} locked discussions, returning {len(paginated_discussions)} after pagination")
+                
                 discussions_with_tasks = []
-                for disc in locked_discussions:
+                for disc in paginated_discussions:
                     discussion = get_discussion_by_id(db, disc.id)
                     if discussion:
                         discussions_with_tasks.append(discussion)
                 return discussions_with_tasks
         
-        # If no status filter or unknown status, return all with tasks
-        all_discussions = query.all()
+        # If no status filter, apply pagination directly to the query
+        paginated_discussions = query.offset(offset).limit(limit).all()
         result = []
-        logger.info(f"Found {len(all_discussions)} total discussions")
+        logger.info(f"Found {len(paginated_discussions)} discussions after pagination")
         
         # Add tasks information to each discussion
-        for disc in all_discussions:
+        for disc in paginated_discussions:
             discussion_with_tasks = get_discussion_by_id(db, disc.id)
             if discussion_with_tasks:
                 result.append(discussion_with_tasks)
@@ -158,7 +225,7 @@ def get_discussions(db: Session, status: Optional[str] = None) -> List[schemas.D
         logger.error(f"Error fetching discussions: {str(e)}")
         # Return empty list when error occurs
         return []
-
+    
 def _get_discussions_with_status(db: Session, status_name: str, filter_func) -> List[schemas.Discussion]:
     """
     Helper function to get discussions filtered by a task status condition.

@@ -119,14 +119,35 @@ async def root():
 
 
 # Discussions endpoints
-@app.get("/api/discussions", response_model=List[schemas.Discussion])
+@app.get("/api/discussions", response_model=schemas.PaginatedDiscussionResponse)
 def get_all_discussions(
         status: Optional[str] = None,
+        page: int = Query(1, ge=1, description="Page number, starting from 1"),
+        per_page: int = Query(10, ge=1, le=100, description="Items per page (1-100)"),
         db: Session = Depends(get_db)
 ):
-    discussions = discussions_service.get_discussions(db, status)
-    return discussions
-
+    # Calculate offset
+    offset = (page - 1) * per_page
+    
+    # Get total count and paginated results
+    total_count = discussions_service.get_discussions_count(db, status)
+    discussions = discussions_service.get_discussions(
+        db, 
+        status=status, 
+        limit=per_page, 
+        offset=offset
+    )
+    
+    # Calculate total pages
+    total_pages = (total_count + per_page - 1) // per_page
+    
+    return schemas.PaginatedDiscussionResponse(
+        items=discussions,
+        total=total_count,
+        page=page,
+        per_page=per_page,
+        pages=total_pages
+    )
 
 @app.get("/api/discussions/{discussion_id}", response_model=schemas.Discussion)
 def get_discussion(discussion_id: str, db: Session = Depends(get_db)):

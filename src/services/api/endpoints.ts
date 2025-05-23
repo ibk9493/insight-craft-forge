@@ -6,13 +6,47 @@ import { Discussion, Annotation, TaskStatus, GitHubDiscussion, UploadResult,
 import { API_CONFIG } from '@/config';
 import { apiRequest, safeApiRequest, formatApiUrl, safeToString } from './helpers';
 
-// Define the fetchDiscussions function to be used in the redux slice
-export const fetchDiscussions = async (): Promise<Discussion[]> => {
-  return await safeApiRequest<Discussion[]>('/api/discussions', 'GET', undefined, undefined, []);
+// Add pagination types
+interface PaginatedDiscussionsResponse {
+  items: Discussion[];
+  total: number;
+  page: number;
+  per_page: number;
+  pages: number;
+}
+
+interface DiscussionQueryParams {
+  status?: string;
+  page?: number;
+  per_page?: number;
+}
+
+// Update the fetchDiscussions function to handle pagination
+export const fetchDiscussions = async (params: DiscussionQueryParams = {}): Promise<PaginatedDiscussionsResponse> => {
+  const queryParams = new URLSearchParams();
+  
+  if (params.status) queryParams.append('status', params.status);
+  if (params.page) queryParams.append('page', params.page.toString());
+  if (params.per_page) queryParams.append('per_page', params.per_page.toString());
+  
+  const url = `/api/discussions${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+  
+  return await safeApiRequest<PaginatedDiscussionsResponse>(
+    url, 
+    'GET', 
+    undefined, 
+    undefined, 
+    {
+      items: [],
+      total: 0,
+      page: 1,
+      per_page: 10,
+      pages: 0
+    }
+  );
 };
 
 // Helper function to format GitHub discussions for API compatibility
-// Update formatGitHubDiscussion in endpoints.ts
 const formatGitHubDiscussion = (discussion: GitHubDiscussion): any => {
   // Create a new object to map camelCase to snake_case for API compatibility
   const apiFormatted: any = {
@@ -52,22 +86,22 @@ const formatGitHubDiscussion = (discussion: GitHubDiscussion): any => {
   if (discussion.code) apiFormatted.code = discussion.code;
 
   // Convert metadata fields to snake_case
-  if (discussion.repositoryLanguage) {
-    apiFormatted.repository_language = discussion.repositoryLanguage;
+  if (discussion.repository_language) {
+    apiFormatted.repository_language = discussion.repository_language;
   } else if (discussion.lang) {
     apiFormatted.repository_language = discussion.lang;
   }
 
-  if (discussion.releaseTag) {
-    apiFormatted.release_tag = discussion.releaseTag;
+  if (discussion.release_tag) {
+    apiFormatted.release_tag = discussion.release_tag;
   }
 
-  if (discussion.releaseUrl) {
-    apiFormatted.release_url = discussion.releaseUrl;
+  if (discussion.release_url) {
+    apiFormatted.release_url = discussion.release_url;
   }
 
-  if (discussion.releaseDate) {
-    apiFormatted.release_date = discussion.releaseDate;
+  if (discussion.release_date) {
+    apiFormatted.release_date = discussion.release_date;
   }
 
   // Handle tasks if present
@@ -76,8 +110,8 @@ const formatGitHubDiscussion = (discussion: GitHubDiscussion): any => {
   }
 
   // Handle batch ID if present
-  if (discussion.batchId) {
-    apiFormatted.batch_id = discussion.batchId;
+  if (discussion.batch_id) {
+    apiFormatted.batch_id = discussion.batch_id;
   }
 
   return apiFormatted;
@@ -94,7 +128,6 @@ const extractRepositoryFromUrl = (url: string): string => {
     return 'unknown/repository';
   }
 };
-// Add this to your api.ts file to improve reliability
 
 // Configure request timeout
 const API_TIMEOUT = 10000; // 10 seconds
@@ -190,15 +223,86 @@ export const enhancedApiRequest = async <T>(
     throw error;
   }
 };
+
 export const api = {
-  // Discussion endpoints
+  // Discussion endpoints - updated with pagination support
   discussions: {
-    getAll: () => safeApiRequest<Discussion[]>('/api/discussions', 'GET', undefined, undefined, []),
+    // Updated to support pagination parameters
+    getAll: (params: DiscussionQueryParams = {}) => {
+      const queryParams = new URLSearchParams();
+      
+      if (params.status) queryParams.append('status', params.status);
+      if (params.page) queryParams.append('page', params.page.toString());
+      if (params.per_page) queryParams.append('per_page', params.per_page.toString());
+      
+      const url = `/api/discussions${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+      
+      return safeApiRequest<PaginatedDiscussionsResponse>(
+        url, 
+        'GET', 
+        undefined, 
+        undefined, 
+        {
+          items: [],
+          total: 0,
+          page: 1,
+          per_page: 10,
+          pages: 0
+        }
+      );
+    },
+    
+    // Legacy method for backward compatibility - returns all discussions without pagination
+    getAllLegacy: () => safeApiRequest<Discussion[]>('/api/discussions?per_page=1000', 'GET', undefined, undefined, []),
+    
     getById: (id: string) => safeApiRequest<Discussion>(`/api/discussions/${id}`, 'GET', undefined, undefined, {} as Discussion),
-    getByStatus: (status: TaskStatus) => 
-      safeApiRequest<Discussion[]>(`/api/discussions?status=${status}`, 'GET', undefined, undefined, []),
-    getByBatch: (batchId: number) => 
-      safeApiRequest<Discussion[]>(`/api/batches/${batchId}/discussions`, 'GET', undefined, undefined, []),
+    
+    getByStatus: (status: TaskStatus, params: Omit<DiscussionQueryParams, 'status'> = {}) => {
+      const queryParams = new URLSearchParams();
+      queryParams.append('status', status);
+      
+      if (params.page) queryParams.append('page', params.page.toString());
+      if (params.per_page) queryParams.append('per_page', params.per_page.toString());
+      
+      const url = `/api/discussions?${queryParams.toString()}`;
+      
+      return safeApiRequest<PaginatedDiscussionsResponse>(
+        url, 
+        'GET', 
+        undefined, 
+        undefined, 
+        {
+          items: [],
+          total: 0,
+          page: 1,
+          per_page: 10,
+          pages: 0
+        }
+      );
+    },
+    
+    getByBatch: (batchId: number, params: DiscussionQueryParams = {}) => {
+      const queryParams = new URLSearchParams();
+      
+      if (params.page) queryParams.append('page', params.page.toString());
+      if (params.per_page) queryParams.append('per_page', params.per_page.toString());
+      
+      const url = `/api/batches/${batchId}/discussions${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+      
+      return safeApiRequest<PaginatedDiscussionsResponse>(
+        url, 
+        'GET', 
+        undefined, 
+        undefined, 
+        {
+          items: [],
+          total: 0,
+          page: 1,
+          per_page: 10,
+          pages: 0
+        }
+      );
+    },
   },
 
   // Annotation endpoints
@@ -256,11 +360,8 @@ export const api = {
   // Consensus endpoints
   consensus: {
     get: (discussionId: string, taskId: number) => 
-      safeApiRequest<Annotation>(`/api/selected/consensus/${discussionId}/${taskId}`, 'GET', undefined, undefined, {} as Annotation),
+      safeApiRequest<Annotation>(`/api/consensus/${discussionId}/${taskId}`, 'GET', undefined, undefined, {} as Annotation),
     save: (consensus: Omit<Annotation, 'timestamp'>) => {
-      if (consensus.data.grounded == "N/A") {
-        consensus.data.grounded = "False"
-      }
       // The incoming 'consensus' object is already expected to have snake_case keys.
       const apiConsensus = {
         discussion_id: consensus.discussion_id,
@@ -475,9 +576,28 @@ export const api = {
       });
     },
 
-    getBatchDiscussions: (batchId: number) => {
+    getBatchDiscussions: (batchId: number, params: DiscussionQueryParams = {}) => {
+      const queryParams = new URLSearchParams();
+      
+      if (params.page) queryParams.append('page', params.page.toString());
+      if (params.per_page) queryParams.append('per_page', params.per_page.toString());
+      
+      const url = `/api/batches/${batchId}/discussions${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+      
       console.log(`[Batches] Getting discussions for batch ID: ${batchId}`);
-      return safeApiRequest<Discussion[]>(`/api/batches/${batchId}/discussions`, 'GET', undefined, undefined, []);
+      return safeApiRequest<PaginatedDiscussionsResponse>(
+        url, 
+        'GET', 
+        undefined, 
+        undefined, 
+        {
+          items: [],
+          total: 0,
+          page: 1,
+          per_page: 10,
+          pages: 0
+        }
+      );
     }
   },
   
@@ -580,7 +700,6 @@ export const api = {
       return safeApiRequest<{repository: string, count: number}[]>('/api/summary/repositories', 'GET', undefined, undefined, []);
     }
   },
-  // Add this to the api object within api.ts
 
 // User endpoints
 users: {
@@ -619,3 +738,6 @@ users: {
   }
 }
 };
+
+// Export the pagination types for use in other files
+export type { PaginatedDiscussionsResponse, DiscussionQueryParams };

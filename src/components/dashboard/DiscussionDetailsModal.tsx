@@ -136,17 +136,17 @@ const DiscussionDetailsModal: React.FC<DiscussionDetailsModalProps> = ({
                   <span>Open in GitHub</span>
                 </Button>
                 
-                {discussion.repositoryLanguage && (
+                {discussion.repository_language && (
                   <Badge variant="outline" className="flex items-center space-x-1.5">
                     <FileCode className="h-3 w-3" />
-                    <span>{discussion.repositoryLanguage}</span>
+                    <span>{discussion.repository_language}</span>
                   </Badge>
                 )}
                 
-                {discussion.releaseTag && (
+                {discussion.release_tag && (
                   <Badge variant="outline" className="flex items-center space-x-1.5">
                     <Hash className="h-3 w-3" />
-                    <span>{discussion.releaseTag}</span>
+                    <span>{discussion.release_tag}</span>
                   </Badge>
                 )}
               </div>
@@ -157,7 +157,7 @@ const DiscussionDetailsModal: React.FC<DiscussionDetailsModalProps> = ({
                     <Calendar className="h-4 w-4 text-primary" />
                     <span>Created</span>
                   </h3>
-                  <p className="text-sm">{formatDate(discussion.createdAt)}</p>
+                  <p className="text-sm">{formatDate(discussion.created_at)}</p>
                 </div>
                 
                 <div className="space-y-2">
@@ -242,36 +242,36 @@ const DiscussionDetailsModal: React.FC<DiscussionDetailsModalProps> = ({
                 <div className="space-y-2">
                   <h3 className="text-sm font-medium">Language</h3>
                   <div className="bg-muted p-3 rounded-md">
-                    <p className="text-sm">{discussion.repositoryLanguage || 'N/A'}</p>
+                    <p className="text-sm">{discussion.repository_language || 'N/A'}</p>
                   </div>
                 </div>
                 
                 <div className="space-y-2">
                   <h3 className="text-sm font-medium">Release Tag</h3>
                   <div className="bg-muted p-3 rounded-md">
-                    <p className="text-sm">{discussion.releaseTag || 'N/A'}</p>
+                    <p className="text-sm">{discussion.release_tag || 'N/A'}</p>
                   </div>
                 </div>
                 
                 <div className="space-y-2">
                   <h3 className="text-sm font-medium">Release Date</h3>
                   <div className="bg-muted p-3 rounded-md">
-                    <p className="text-sm">{formatDate(discussion.releaseDate)}</p>
+                    <p className="text-sm">{formatDate(discussion.release_date)}</p>
                   </div>
                 </div>
               </div>
               
-              {discussion.releaseUrl && (
+              {discussion.release_url && (
                 <div className="space-y-2">
                   <h3 className="text-sm font-medium">Release URL</h3>
                   <div className="bg-muted p-3 rounded-md">
                     <a 
-                      href={discussion.releaseUrl} 
+                      href={discussion.release_url} 
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-sm text-blue-500 hover:underline flex items-center space-x-1"
                     >
-                      <span>{discussion.releaseUrl}</span>
+                      <span>{discussion.release_url}</span>
                       <ExternalLink className="h-3 w-3" />
                     </a>
                   </div>

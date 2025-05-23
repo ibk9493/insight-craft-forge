@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useUser } from '@/contexts/UserContext';
+import { useAppSelector } from '@/hooks'; // Add this import
 import { api, Discussion, Annotation, ApiError, TaskStatus } from '@/services/api';
 import { toast } from 'sonner';
 import { TASK_CONFIG } from '@/config';
@@ -13,43 +14,15 @@ export interface UserAnnotationStatus {
 
 export function useAnnotationData() {
   const { user } = useUser();
-  const [discussions, setDiscussions] = useState<Discussion[]>([]);
+  // Get discussions from Redux instead of local state
+  const { discussions } = useAppSelector(state => state.discussions);
+  
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [consensusAnnotations, setConsensusAnnotations] = useState<Annotation[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false); // Changed to false since we're not fetching discussions
   const [error, setError] = useState<string | null>(null);
   const [annotationsLoaded, setAnnotationsLoaded] = useState<boolean>(false);
   const [searchParams] = useSearchParams();
-
-  // Fetch discussions
-  useEffect(() => {
-    const fetchDiscussions = async () => {
-      try {
-        setLoading(true);
-        const data = await api.discussions.getAll();
-        
-        if (data) {
-          console.log(`Fetched ${data.length} discussions`);
-          setDiscussions(data);
-        } else {
-          console.warn('No discussions data returned from API');
-          setDiscussions([]);
-        }
-        
-        setError(null);
-      } catch (err) {
-        const errorMessage = (err as ApiError).message || 'Failed to fetch discussions';
-        setError(errorMessage);
-        toast.error(errorMessage);
-        // Set empty array on error to prevent UI breaks
-        setDiscussions([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchDiscussions();
-  }, []);
 
   // Fetch annotations - improved error handling and logging
   useEffect(() => {
@@ -106,7 +79,7 @@ export function useAnnotationData() {
     }
     
     try {
-      // Get the specific discussion by ID
+      // Get the specific discussion by ID from Redux state
       const discussion = discussions.find(d => d.id === discussionId);
       
       if (!discussion) {
@@ -163,107 +136,107 @@ export function useAnnotationData() {
   }, [discussions]);
 
   // Get user's annotation for a specific discussion and task
-const getUserAnnotation = useCallback((discussionId: string, userId: string, taskId: number): Annotation | undefined => {
-  if (!discussionId || !userId) {
-    console.log('[useAnnotationData] getUserAnnotation: Aborted due to missing discussionId or userId. Provided:', { discussionId, userId });
-    return undefined;
-  }
-  
-  console.log('[useAnnotationData] getUserAnnotation: Attempting to find annotation with:', { discussionId, userId, taskId });
-  
-  // Find the specific discussion first
-  const discussion = discussions.find(d => d.id === discussionId);
-  
-  if (!discussion) {
-    console.log('[useAnnotationData] getUserAnnotation: Discussion not found:', discussionId);
-    return undefined;
-  }
-  
-  if (!discussion.annotations) {
-    console.log('[useAnnotationData] getUserAnnotation: Discussion has no annotations property:', discussionId);
-    return undefined;
-  }
-  
-  // Map task ID to the corresponding annotations array
-  let relevantAnnotations: any[] = [];
-  if (taskId === 1 && Array.isArray(discussion.annotations.task1_annotations)) {
-    relevantAnnotations = discussion.annotations.task1_annotations;
-    console.log('[useAnnotationData] getUserAnnotation: Found task1_annotations array with', relevantAnnotations.length, 'items');
-  } else if (taskId === 2 && Array.isArray(discussion.annotations.task2_annotations)) {
-    relevantAnnotations = discussion.annotations.task2_annotations;
-    console.log('[useAnnotationData] getUserAnnotation: Found task2_annotations array with', relevantAnnotations.length, 'items');
-  } else if (taskId === 3 && Array.isArray(discussion.annotations.task3_annotations)) {
-    relevantAnnotations = discussion.annotations.task3_annotations;
-    console.log('[useAnnotationData] getUserAnnotation: Found task3_annotations array with', relevantAnnotations.length, 'items');
-  } else {
-    console.log('[useAnnotationData] getUserAnnotation: No annotations array found for task', taskId);
-    return undefined;
-  }
-  
-  // Log the first few annotations for debugging
-  if (relevantAnnotations.length > 0) {
-    console.log('[useAnnotationData] getUserAnnotation: First few annotations in array:', 
-      relevantAnnotations.slice(0, 3).map(a => ({
-        discussion_id: a.discussion_id, 
-        user_id: a.user_id, 
-        task_id: a.task_id, 
-        dataKeys: Object.keys(a.data || {})
-      }))
-    );
-  }
-  
-  // Find the specific annotation for this user
-  const userIdStr = String(userId);
-  const foundAnnotation = relevantAnnotations.find(a => String(a.user_id) === userIdStr);
-  
-  if (!foundAnnotation) {
-    console.log('[useAnnotationData] getUserAnnotation: Annotation NOT FOUND for user:', userIdStr);
+  const getUserAnnotation = useCallback((discussionId: string, userId: string, taskId: number): Annotation | undefined => {
+    if (!discussionId || !userId) {
+      console.log('[useAnnotationData] getUserAnnotation: Aborted due to missing discussionId or userId. Provided:', { discussionId, userId });
+      return undefined;
+    }
     
-    // For debugging, log all user IDs in the relevant annotations array
+    console.log('[useAnnotationData] getUserAnnotation: Attempting to find annotation with:', { discussionId, userId, taskId });
+    
+    // Find the specific discussion first from Redux state
+    const discussion = discussions.find(d => d.id === discussionId);
+    
+    if (!discussion) {
+      console.log('[useAnnotationData] getUserAnnotation: Discussion not found:', discussionId);
+      return undefined;
+    }
+    
+    if (!discussion.annotations) {
+      console.log('[useAnnotationData] getUserAnnotation: Discussion has no annotations property:', discussionId);
+      return undefined;
+    }
+    
+    // Map task ID to the corresponding annotations array
+    let relevantAnnotations: any[] = [];
+    if (taskId === 1 && Array.isArray(discussion.annotations.task1_annotations)) {
+      relevantAnnotations = discussion.annotations.task1_annotations;
+      console.log('[useAnnotationData] getUserAnnotation: Found task1_annotations array with', relevantAnnotations.length, 'items');
+    } else if (taskId === 2 && Array.isArray(discussion.annotations.task2_annotations)) {
+      relevantAnnotations = discussion.annotations.task2_annotations;
+      console.log('[useAnnotationData] getUserAnnotation: Found task2_annotations array with', relevantAnnotations.length, 'items');
+    } else if (taskId === 3 && Array.isArray(discussion.annotations.task3_annotations)) {
+      relevantAnnotations = discussion.annotations.task3_annotations;
+      console.log('[useAnnotationData] getUserAnnotation: Found task3_annotations array with', relevantAnnotations.length, 'items');
+    } else {
+      console.log('[useAnnotationData] getUserAnnotation: No annotations array found for task', taskId);
+      return undefined;
+    }
+    
+    // Log the first few annotations for debugging
     if (relevantAnnotations.length > 0) {
-      console.log('[useAnnotationData] getUserAnnotation: Available user IDs in this task:', 
-        relevantAnnotations.map(a => String(a.user_id))
+      console.log('[useAnnotationData] getUserAnnotation: First few annotations in array:', 
+        relevantAnnotations.slice(0, 3).map(a => ({
+          discussion_id: a.discussion_id, 
+          user_id: a.user_id, 
+          task_id: a.task_id, 
+          dataKeys: Object.keys(a.data || {})
+        }))
       );
     }
     
-    // Check if the user has annotations for other tasks
-    let hasOtherTaskAnnotations = false;
+    // Find the specific annotation for this user
+    const userIdStr = String(userId);
+    const foundAnnotation = relevantAnnotations.find(a => String(a.user_id) === userIdStr);
     
-    if (taskId !== 1 && Array.isArray(discussion.annotations.task1_annotations)) {
-      const task1Anno = discussion.annotations.task1_annotations.find(a => String(a.user_id) === userIdStr);
-      if (task1Anno) {
-        console.log('[useAnnotationData] getUserAnnotation: User has an annotation for task 1');
-        hasOtherTaskAnnotations = true;
+    if (!foundAnnotation) {
+      console.log('[useAnnotationData] getUserAnnotation: Annotation NOT FOUND for user:', userIdStr);
+      
+      // For debugging, log all user IDs in the relevant annotations array
+      if (relevantAnnotations.length > 0) {
+        console.log('[useAnnotationData] getUserAnnotation: Available user IDs in this task:', 
+          relevantAnnotations.map(a => String(a.user_id))
+        );
       }
-    }
-    
-    if (taskId !== 2 && Array.isArray(discussion.annotations.task2_annotations)) {
-      const task2Anno = discussion.annotations.task2_annotations.find(a => String(a.user_id) === userIdStr);
-      if (task2Anno) {
-        console.log('[useAnnotationData] getUserAnnotation: User has an annotation for task 2');
-        hasOtherTaskAnnotations = true;
+      
+      // Check if the user has annotations for other tasks
+      let hasOtherTaskAnnotations = false;
+      
+      if (taskId !== 1 && Array.isArray(discussion.annotations.task1_annotations)) {
+        const task1Anno = discussion.annotations.task1_annotations.find(a => String(a.user_id) === userIdStr);
+        if (task1Anno) {
+          console.log('[useAnnotationData] getUserAnnotation: User has an annotation for task 1');
+          hasOtherTaskAnnotations = true;
+        }
       }
-    }
-    
-    if (taskId !== 3 && Array.isArray(discussion.annotations.task3_annotations)) {
-      const task3Anno = discussion.annotations.task3_annotations.find(a => String(a.user_id) === userIdStr);
-      if (task3Anno) {
-        console.log('[useAnnotationData] getUserAnnotation: User has an annotation for task 3');
-        hasOtherTaskAnnotations = true;
+      
+      if (taskId !== 2 && Array.isArray(discussion.annotations.task2_annotations)) {
+        const task2Anno = discussion.annotations.task2_annotations.find(a => String(a.user_id) === userIdStr);
+        if (task2Anno) {
+          console.log('[useAnnotationData] getUserAnnotation: User has an annotation for task 2');
+          hasOtherTaskAnnotations = true;
+        }
       }
+      
+      if (taskId !== 3 && Array.isArray(discussion.annotations.task3_annotations)) {
+        const task3Anno = discussion.annotations.task3_annotations.find(a => String(a.user_id) === userIdStr);
+        if (task3Anno) {
+          console.log('[useAnnotationData] getUserAnnotation: User has an annotation for task 3');
+          hasOtherTaskAnnotations = true;
+        }
+      }
+      
+      if (!hasOtherTaskAnnotations) {
+        console.log('[useAnnotationData] getUserAnnotation: User has no annotations for ANY task in this discussion');
+      }
+    } else {
+      console.log('[useAnnotationData] getUserAnnotation: Annotation FOUND:', JSON.stringify(foundAnnotation, null, 2));
     }
     
-    if (!hasOtherTaskAnnotations) {
-      console.log('[useAnnotationData] getUserAnnotation: User has no annotations for ANY task in this discussion');
-    }
-  } else {
-    console.log('[useAnnotationData] getUserAnnotation: Annotation FOUND:', JSON.stringify(foundAnnotation, null, 2));
-  }
-  
-  return foundAnnotation ? (foundAnnotation as Annotation) : undefined;
-}, [discussions]);
+    return foundAnnotation ? (foundAnnotation as Annotation) : undefined;
+  }, [discussions]);
 
-// Save an annotation with proper type signature to return a Promise
+  // Save an annotation with proper type signature to return a Promise
   const saveAnnotation = useCallback(async (annotation: Omit<Annotation, 'timestamp'>): Promise<boolean> => {
     try {
       if (!annotation.discussion_id || !annotation.user_id) { 
@@ -309,17 +282,8 @@ const getUserAnnotation = useCallback((discussionId: string, userId: string, tas
         }
       });
       
-      // Fetch updated discussion status
-      try {
-        const updatedDiscussion = await api.discussions.getById(annotation.discussion_id);
-        if (updatedDiscussion) {
-          setDiscussions(prev => 
-            prev.map(d => d.id === updatedDiscussion.id ? updatedDiscussion : d)
-          );
-        }
-      } catch (err) {
-        console.error('Failed to fetch updated discussion status:', err);
-      }
+      // Note: You might want to dispatch a Redux action here to update the discussion in Redux state
+      // instead of making a separate API call, since the main component uses Redux
       
       toast.success('Annotation saved successfully');
       return true;
@@ -412,7 +376,6 @@ const getUserAnnotation = useCallback((discussionId: string, userId: string, tas
   }, [annotations]);
 
   // Get consensus annotation for a specific discussion and task
-  // This will now fetch from the API directly.
   const getConsensusAnnotation = useCallback(async (discussionId: string, taskId: number): Promise<Annotation | undefined> => {
     if (!discussionId || taskId === undefined) {
       console.warn('[useAnnotationData] getConsensusAnnotation: Aborted due to missing discussionId or taskId.');
@@ -422,10 +385,7 @@ const getUserAnnotation = useCallback((discussionId: string, userId: string, tas
       setLoading(true);
       console.log(`[useAnnotationData] Fetching consensus for discussion: ${discussionId}, task: ${taskId}`);
       const consensus = await api.consensus.get(discussionId, taskId);
-      if (consensus && Object.keys(consensus).length > 0 && consensus.data) { // Check if it's a meaningful object and has data
-        // Optionally, update a local cache/state if you maintain one for consensus annotations
-        // For now, just returning the fetched one.
-        // Example: setConsensusAnnotations(prev => [...prev.filter(ca => !(ca.discussion_id === discussionId && ca.task_id === taskId)), consensus]);
+      if (consensus && Object.keys(consensus).length > 0 && consensus.data) {
         console.log(`[useAnnotationData] Fetched consensus successfully:`, consensus);
         return consensus;
       } else {
@@ -440,9 +400,9 @@ const getUserAnnotation = useCallback((discussionId: string, userId: string, tas
     } finally {
       setLoading(false);
     }
-  }, [setLoading]); // Removed api.consensus.get from dependencies, as api object itself is stable.
+  }, []);
 
-  // Filter discussions by their status
+  // Filter discussions by their status - now using Redux discussions
   const getDiscussionsByStatus = useCallback((status: TaskStatus) => {
     return discussions.filter(d => {
       if (!d || !d.tasks) return false;
@@ -464,7 +424,7 @@ const getUserAnnotation = useCallback((discussionId: string, userId: string, tas
   }, [discussions]);
 
   return {
-    discussions,
+    discussions, // Still return discussions for backward compatibility, but they come from Redux
     annotations,
     consensusAnnotations,
     loading,
