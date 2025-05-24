@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, CheckCircle, AlertCircle, HelpCircle, Plus, X, Copy } from 'lucide-react';
+import { ChevronDown, ChevronRight, CheckCircle, AlertCircle, HelpCircle, Plus, X, Copy, Download, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 
 export type SubTaskStatus = 'pending' | 'completed' | 'failed' | 'na';
 
@@ -30,7 +31,7 @@ export interface SubTask {
   requiresRemarks?: boolean;
   placeholder?: string;
   sections?: SubTask[][];
-  // NEW: Properties for doc download link
+  // Properties for doc download link
   enableDocDownload?: boolean;
   docDownloadLink?: string;
 }
@@ -48,7 +49,7 @@ interface TaskCardProps {
       supportingDocs?: SupportingDoc[],
       sectionIndex?: number,
       weights?: number[],
-      docDownloadLink?: string  // NEW
+      docDownloadLink?: string
   ) => void;
   onAddSection?: () => void;
   onRemoveSection?: (sectionIndex: number) => void;
@@ -65,10 +66,14 @@ interface TaskCardProps {
             textValues?: string[],
             supportingDocs?: SupportingDoc[],
             sectionIndex?: number,
-            weights?: number[]
+            weights?: number[],
+            docDownloadLink?: string
         ) => void
     ) => React.ReactNode;
   };
+  // New props to receive external data
+  currentDiscussion?: any;
+  onCodeUrlVerify?: (url: string) => boolean;
 }
 
 const TaskCard: React.FC<TaskCardProps> = ({
@@ -82,7 +87,9 @@ const TaskCard: React.FC<TaskCardProps> = ({
                                              sections = [],
                                              active = false,
                                              allowMultipleSections = false,
-                                             customFieldRenderers = {}
+                                             customFieldRenderers = {},
+                                             currentDiscussion,
+                                             onCodeUrlVerify
                                            }) => {
   const [expanded, setExpanded] = useState(active);
   const [multilineFields, setMultilineFields] = useState<Record<string, string[]>>({});
@@ -236,6 +243,12 @@ const TaskCard: React.FC<TaskCardProps> = ({
     onSubTaskChange(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex);
   };
 
+  // Validation function for GitHub URLs
+  const isValidGitHubUrl = (url: string | null | undefined): boolean => {
+    if (!url) return false;
+    return onCodeUrlVerify ? onCodeUrlVerify(url) : false;
+  };
+
   const progressPercentage = getProgressPercentage();
 
   const renderTaskForm = (tasks: SubTask[], sectionIndex?: number) => (
@@ -247,166 +260,280 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 <span className="ml-2 font-medium text-sm">{task.title}</span>
               </div>
               {task.description && <p className="text-gray-500 text-xs mb-2">{task.description}</p>}
-              {task.options && task.options.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {task.options.map(option => (
-                        <button
-                            key={option}
-                            onClick={() => {
-                              if (sectionIndex !== undefined) {
-                                handleSectionSubTaskChange(sectionIndex, task.id, option, task.textValue);
-                              } else {
-                                onSubTaskChange(task.id, option, task.textValue);
-                              }
-                            }}
-                            className={cn(
-                                'text-xs py-1 px-3 rounded-full',
-                                task.selectedOption === option ? 'bg-dashboard-blue text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            )}
-                        >
-                          {option}
-                        </button>
-                    ))}
-                  </div>
-              )}
-              {shouldShowRemarks(task) && !task.multiline && !task.structuredInput && (
-                  <div className="mt-3">
-                    <Textarea
-                        value={task.textValue || ''}
-                        onChange={e => {
-                          e.stopPropagation();
-                          if (sectionIndex !== undefined) {
-                            handleSectionSubTaskChange(sectionIndex, task.id, task.selectedOption, e.target.value);
-                          } else {
-                            onSubTaskChange(task.id, task.selectedOption, e.target.value);
-                          }
-                        }}
-                        onClick={e => e.stopPropagation()}
-                        onMouseDown={e => e.stopPropagation()}
-                        placeholder={task.placeholder || `Enter ${task.textInput ? task.title.toLowerCase() : 'remarks or justification'}`}
-                        className="min-h-[100px] text-sm w-full"
-                    />
-                  </div>
-              )}
-              {task.multiline && !task.structuredInput && (
-                  customFieldRenderers?.[task.id] ? (
-                      customFieldRenderers[task.id](task, (taskId, selectedOption, textValue, textValues, supportingDocs, sectionIdx, weights) => {
-                        if (weights) {
-                          onSubTaskChange(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIdx, weights);
-                        }
-                        onSubTaskChange(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIdx);
-                      })
-                  ) : (
-                      <div className="mt-3 space-y-3">
-                        {(multilineFields[task.id] || ['']).map((fieldValue, index) => (
-                            <div key={`${task.id}-field-${index}`} className="flex gap-2">
-                              <Textarea
-                                  value={fieldValue}
+
+              {/* Handle custom renderers first */}
+              {customFieldRenderers?.[task.id] ? (
+                  customFieldRenderers[task.id](task, (taskId, selectedOption, textValue, textValues, supportingDocs, sectionIdx, weights, docDownloadLink) => {
+                    if (sectionIndex !== undefined) {
+                      handleSectionSubTaskChange(sectionIndex, taskId, selectedOption, textValue, textValues, supportingDocs);
+                    } else {
+                      onSubTaskChange(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIdx, weights, docDownloadLink);
+                    }
+                  })
+              ) : (
+                  <>
+                    {/* Special handling for code_download_url field */}
+                    {task.id === 'code_download_url' && (
+                        <div className="mt-3 space-y-3">
+                          {/* URL Verification Options */}
+                          {task.options && task.options.length > 0 && (
+                              <div className="flex flex-wrap gap-2">
+                                {task.options.map(option => (
+                                    <button
+                                        key={option}
+                                        onClick={() => {
+                                          if (sectionIndex !== undefined) {
+                                            handleSectionSubTaskChange(sectionIndex, task.id, option, task.textValue);
+                                          } else {
+                                            onSubTaskChange(task.id, option, task.textValue, undefined, undefined, undefined, undefined, task.docDownloadLink);
+                                          }
+                                        }}
+                                        className={cn(
+                                            'text-xs py-1 px-3 rounded-full',
+                                            task.selectedOption === option ? 'bg-dashboard-blue text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        )}
+                                    >
+                                      {option}
+                                    </button>
+                                ))}
+                              </div>
+                          )}
+
+                          {/* URL Input Field with automatic repository release detection */}
+                          <div className="space-y-2">
+                            <div className="flex gap-2 items-center">
+                              <Input
+                                  value={task.textValue || ''}
                                   onChange={e => {
-                                    e.stopPropagation();
-                                    handleMultilineChange(task.id, index, e.target.value);
+                                    const newUrl = e.target.value;
+                                    if (sectionIndex !== undefined) {
+                                      handleSectionSubTaskChange(sectionIndex, task.id, task.selectedOption, newUrl);
+                                    } else {
+                                      onSubTaskChange(task.id, task.selectedOption, newUrl, undefined, undefined, undefined, undefined, newUrl);
+                                    }
                                   }}
                                   onClick={e => e.stopPropagation()}
                                   onMouseDown={e => e.stopPropagation()}
-                                  placeholder={task.placeholder || `Enter ${task.title.toLowerCase()} item ${index + 1}`}
-                                  className="min-h-[100px] text-sm flex-1"
+                                  placeholder={task.placeholder || "https://github.com/owner/repo/archive/refs/tags/version.tar.gz"}
+                                  className="flex-1"
                               />
-                              {multilineFields[task.id]?.length > 1 && (
-                                  <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={e => {
-                                        e.stopPropagation();
-                                        removeField(task.id, index);
-                                      }}
-                                      className="h-8 w-8 self-start"
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </Button>
+                              {/* URL Validation Indicator */}
+                              {task.textValue && (
+                                  isValidGitHubUrl(task.textValue) ?
+                                      <CheckCircle className="h-5 w-5 text-green-500" /> :
+                                      <XCircle className="h-5 w-5 text-red-500" />
                               )}
                             </div>
-                        ))}
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={e => {
-                              e.stopPropagation();
-                              addField(task.id);
-                            }}
-                            className="flex items-center mt-2"
-                        >
-                          <Plus className="h-4 w-4 mr-1" />
-                          <span>Add {task.title.toLowerCase()} item</span>
-                        </Button>
-                      </div>
-                  )
-              )}
-              {task.structuredInput && (
-                  <div className="mt-3 space-y-4">
-                    {(supportingDocFields[task.id] || [{ link: '', paragraph: '' }]).map((docField, index) => (
-                        <div key={`${task.id}-doc-${index}`} className="p-3 border rounded-md bg-gray-50">
-                          <div className="flex justify-between mb-2">
-                            <span className="text-xs font-medium text-gray-500">Supporting Document #{index + 1}</span>
-                            {supportingDocFields[task.id]?.length > 1 && (
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={e => {
-                                      e.stopPropagation();
-                                      removeSupportingDocField(task.id, index);
-                                    }}
-                                    className="h-6 w-6 -mt-1 -mr-1"
+
+                            {/* Show repository release info if available */}
+                            {currentDiscussion?.release_tag && (
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <span>Repository has release: {currentDiscussion.release_tag}</span>
+                                  {currentDiscussion.release_url && (
+                                      <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="text-xs"
+                                          onClick={() => {
+                                            if (sectionIndex !== undefined) {
+                                              handleSectionSubTaskChange(sectionIndex, task.id, task.selectedOption, currentDiscussion.release_url);
+                                            } else {
+                                              onSubTaskChange(task.id, task.selectedOption, currentDiscussion.release_url, undefined, undefined, undefined, undefined, currentDiscussion.release_url);
+                                            }
+                                          }}
+                                      >
+                                        Use release URL
+                                      </Button>
+                                  )}
+                                </div>
+                            )}
+
+                            {/* URL Validation Checkbox */}
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                  id={`url-verified-${task.id}`}
+                                  checked={isValidGitHubUrl(task.textValue)}
+                                  className="data-[state=checked]:bg-green-500"
+                                  disabled
+                              />
+                              <label htmlFor={`url-verified-${task.id}`} className="text-sm">
+                                {isValidGitHubUrl(task.textValue) ? 'URL Valid' : 'URL Invalid'}
+                              </label>
+                            </div>
+
+                            {/* Download Button */}
+                            {task.textValue && isValidGitHubUrl(task.textValue) && (
+                                <a
+                                    href={task.textValue}
+                                    download
+                                    className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded w-fit text-sm"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
                                 >
-                                  <X className="h-4 w-4" />
-                                </Button>
+                                  <Download className="h-4 w-4" />
+                                  <span>Download Code</span>
+                                </a>
                             )}
                           </div>
-                          <div className="mb-2">
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Link</label>
-                            <Input
-                                value={docField.link}
-                                onChange={e => {
-                                  e.stopPropagation();
-                                  handleSupportingDocChange(task.id, index, 'link', e.target.value);
-                                }}
-                                onClick={e => e.stopPropagation()}
-                                onMouseDown={e => e.stopPropagation()}
-                                placeholder="https://example.com/docs/file.html"
-                                className="text-sm w-full"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Supporting Paragraph</label>
-                            <Textarea
-                                value={docField.paragraph}
-                                onChange={e => {
-                                  e.stopPropagation();
-                                  handleSupportingDocChange(task.id, index, 'paragraph', e.target.value);
-                                }}
-                                onClick={e => e.stopPropagation()}
-                                onMouseDown={e => e.stopPropagation()}
-                                placeholder="The relevant section of documentation"
-                                className="min-h-[80px] text-sm w-full"
-                            />
-                          </div>
                         </div>
-                    ))}
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={e => {
-                          e.stopPropagation();
-                          addSupportingDocField(task.id);
-                        }}
-                        className="flex items-center"
-                    >
-                      <Plus className="h-4 w-4 mr-1" />
-                      <span>Add supporting document</span>
-                    </Button>
-                  </div>
+                    )}
+
+                    {/* Regular field rendering for non-code_download_url fields */}
+                    {task.id !== 'code_download_url' && (
+                        <>
+                          {task.options && task.options.length > 0 && (
+                              <div className="flex flex-wrap gap-2 mt-2">
+                                {task.options.map(option => (
+                                    <button
+                                        key={option}
+                                        onClick={() => {
+                                          if (sectionIndex !== undefined) {
+                                            handleSectionSubTaskChange(sectionIndex, task.id, option, task.textValue);
+                                          } else {
+                                            onSubTaskChange(task.id, option, task.textValue);
+                                          }
+                                        }}
+                                        className={cn(
+                                            'text-xs py-1 px-3 rounded-full',
+                                            task.selectedOption === option ? 'bg-dashboard-blue text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        )}
+                                    >
+                                      {option}
+                                    </button>
+                                ))}
+                              </div>
+                          )}
+                          {shouldShowRemarks(task) && !task.multiline && !task.structuredInput && (
+                              <div className="mt-3">
+                                <Textarea
+                                    value={task.textValue || ''}
+                                    onChange={e => {
+                                      e.stopPropagation();
+                                      if (sectionIndex !== undefined) {
+                                        handleSectionSubTaskChange(sectionIndex, task.id, task.selectedOption, e.target.value);
+                                      } else {
+                                        onSubTaskChange(task.id, task.selectedOption, e.target.value);
+                                      }
+                                    }}
+                                    onClick={e => e.stopPropagation()}
+                                    onMouseDown={e => e.stopPropagation()}
+                                    placeholder={task.placeholder || `Enter ${task.textInput ? task.title.toLowerCase() : 'remarks or justification'}`}
+                                    className="min-h-[100px] text-sm w-full"
+                                />
+                              </div>
+                          )}
+                          {task.multiline && !task.structuredInput && (
+                              <div className="mt-3 space-y-3">
+                                {(multilineFields[task.id] || ['']).map((fieldValue, index) => (
+                                    <div key={`${task.id}-field-${index}`} className="flex gap-2">
+                                      <Textarea
+                                          value={fieldValue}
+                                          onChange={e => {
+                                            e.stopPropagation();
+                                            handleMultilineChange(task.id, index, e.target.value);
+                                          }}
+                                          onClick={e => e.stopPropagation()}
+                                          onMouseDown={e => e.stopPropagation()}
+                                          placeholder={task.placeholder || `Enter ${task.title.toLowerCase()} item ${index + 1}`}
+                                          className="min-h-[100px] text-sm flex-1"
+                                      />
+                                      {multilineFields[task.id]?.length > 1 && (
+                                          <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              onClick={e => {
+                                                e.stopPropagation();
+                                                removeField(task.id, index);
+                                              }}
+                                              className="h-8 w-8 self-start"
+                                          >
+                                            <X className="h-4 w-4" />
+                                          </Button>
+                                      )}
+                                    </div>
+                                ))}
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      addField(task.id);
+                                    }}
+                                    className="flex items-center mt-2"
+                                >
+                                  <Plus className="h-4 w-4 mr-1" />
+                                  <span>Add {task.title.toLowerCase()} item</span>
+                                </Button>
+                              </div>
+                          )}
+                          {task.structuredInput && (
+                              <div className="mt-3 space-y-4">
+                                {(supportingDocFields[task.id] || [{ link: '', paragraph: '' }]).map((docField, index) => (
+                                    <div key={`${task.id}-doc-${index}`} className="p-3 border rounded-md bg-gray-50">
+                                      <div className="flex justify-between mb-2">
+                                        <span className="text-xs font-medium text-gray-500">Supporting Document #{index + 1}</span>
+                                        {supportingDocFields[task.id]?.length > 1 && (
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={e => {
+                                                  e.stopPropagation();
+                                                  removeSupportingDocField(task.id, index);
+                                                }}
+                                                className="h-6 w-6 -mt-1 -mr-1"
+                                            >
+                                              <X className="h-4 w-4" />
+                                            </Button>
+                                        )}
+                                      </div>
+                                      <div className="mb-2">
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">Link</label>
+                                        <Input
+                                            value={docField.link}
+                                            onChange={e => {
+                                              e.stopPropagation();
+                                              handleSupportingDocChange(task.id, index, 'link', e.target.value);
+                                            }}
+                                            onClick={e => e.stopPropagation()}
+                                            onMouseDown={e => e.stopPropagation()}
+                                            placeholder="https://example.com/docs/file.html"
+                                            className="text-sm w-full"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">Supporting Paragraph</label>
+                                        <Textarea
+                                            value={docField.paragraph}
+                                            onChange={e => {
+                                              e.stopPropagation();
+                                              handleSupportingDocChange(task.id, index, 'paragraph', e.target.value);
+                                            }}
+                                            onClick={e => e.stopPropagation()}
+                                            onMouseDown={e => e.stopPropagation()}
+                                            placeholder="The relevant section of documentation"
+                                            className="min-h-[80px] text-sm w-full"
+                                        />
+                                      </div>
+                                    </div>
+                                ))}
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      addSupportingDocField(task.id);
+                                    }}
+                                    className="flex items-center"
+                                >
+                                  <Plus className="h-4 w-4 mr-1" />
+                                  <span>Add supporting document</span>
+                                </Button>
+                              </div>
+                          )}
+                        </>
+                    )}
+                  </>
               )}
-
-
             </div>
         ))}
       </div>

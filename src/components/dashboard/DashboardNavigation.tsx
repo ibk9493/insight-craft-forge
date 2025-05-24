@@ -26,36 +26,28 @@ interface DashboardNavigationProps {
 }
 
 const DashboardNavigation = ({
-  viewMode,
-  currentStep,
-  canProceed,
-  onBackToGrid,
-  onSave,
-  isConsensus,
-  screenshotUrl,
-  onScreenshotUrlChange,
-  codeDownloadUrl,
-  discussionId,
-  onCodeUrlChange,
-  onCodeUrlVerify,
-  currentDiscussion
-}: DashboardNavigationProps) => {
+                               viewMode,
+                               currentStep,
+                               canProceed,
+                               onBackToGrid,
+                               onSave,
+                               isConsensus,
+                               screenshotUrl,
+                               onScreenshotUrlChange,
+                               codeDownloadUrl,
+                               discussionId,
+                               onCodeUrlChange,
+                               onCodeUrlVerify,
+                               currentDiscussion
+                             }: DashboardNavigationProps) => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const [useAutomaticUrl, setUseAutomaticUrl] = useState<boolean>(true);
-  
-  // Handle screenshot URL input change
-  const handleScreenshotUrlInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (onScreenshotUrlChange) {
-      onScreenshotUrlChange(e.target.value);
-    }
-  };
 
   // Navigate back to discussions list
   const handleBackToDiscussions = () => {
     navigate('/discussions');
   };
-  
+
   // Navigate to dashboard home
   const handleGoToDashboard = () => {
     navigate('/dashboard');
@@ -68,187 +60,70 @@ const DashboardNavigation = ({
     }
   };
 
-  // Handle code URL input change
-  const handleCodeUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (onCodeUrlChange) {
-      onCodeUrlChange(e.target.value);
-      // When manually editing, disable automatic URL
-      setUseAutomaticUrl(false);
-    }
-  };
-  
-  // Use repository release URL if available
-  useEffect(() => {
-    if (useAutomaticUrl && currentDiscussion?.release_url && onCodeUrlChange) {
-      onCodeUrlChange(currentDiscussion.release_url);
-    }
-  }, [currentDiscussion, useAutomaticUrl, onCodeUrlChange]);
-  
-  // Toggle between automatic and manual URLs
-  const toggleUrlMode = () => {
-    setUseAutomaticUrl(!useAutomaticUrl);
-    if (!useAutomaticUrl && currentDiscussion?.release_url && onCodeUrlChange) {
-      // Switching back to automatic - use the repository release URL
-      onCodeUrlChange(currentDiscussion.release_url);
-    }
-  };
-  
-  // Validate if URL is correct GitHub URL format
-  const isValidGitHubUrl = (url: string | null | undefined): boolean => {
-    if (!url) return false;
-    return onCodeUrlVerify ? onCodeUrlVerify(url) : false;
-  };
-
   return (
-    <div className="flex flex-col space-y-4 mt-6">
-      <div className="flex justify-between items-center">
-        {viewMode !== 'grid' && (
-          <div className="flex gap-2 flex-wrap">
-            <Button
-              onClick={onBackToGrid}
-              variant="outline"
-              className="flex items-center gap-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>View All Tasks</span>
-            </Button>
-            
-            {discussionId && (
+      <div className="flex flex-col space-y-4 mt-6">
+        <div className="flex justify-between items-center">
+          {viewMode !== 'grid' && (
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                    onClick={onBackToGrid}
+                    variant="outline"
+                    className="flex items-center gap-2"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  <span>View All Tasks</span>
+                </Button>
+
+                {discussionId && (
+                    <Button
+                        onClick={handleBackToDiscussions}
+                        variant="outline"
+                        className="flex items-center gap-2"
+                    >
+                      <ListFilter className="h-4 w-4" />
+                      <span>Back to Discussions</span>
+                    </Button>
+                )}
+
+                <Button
+                    onClick={handleGoToDashboard}
+                    variant="outline"
+                    className="flex items-center gap-2"
+                >
+                  <Home className="h-4 w-4" />
+                  <span>Dashboard Home</span>
+                </Button>
+
+                {/* Add Discussion Details Modal button */}
+                {currentDiscussion && (
+                    <Button
+                        variant="outline"
+                        className="flex items-center gap-2"
+                        onClick={handleViewDiscussionDetails}
+                    >
+                      <Eye className="h-4 w-4" />
+                      <span>View Discussion</span>
+                    </Button>
+                )}
+              </div>
+          )}
+        </div>
+
+        {/* REMOVED: Screenshot and Code URL fields - these are now handled in TaskCard for Task 2 */}
+
+        {viewMode !== 'grid' && currentStep < 4 && currentStep > 0 && (
+            <div className="flex justify-end mt-2">
               <Button
-                onClick={handleBackToDiscussions}
-                variant="outline"
-                className="flex items-center gap-2"
+                  onClick={onSave}
+                  disabled={!canProceed}
+                  className="flex items-center gap-2 bg-dashboard-blue hover:bg-blue-600"
               >
-                <ListFilter className="h-4 w-4" />
-                <span>Back to Discussions</span>
+                <span>Save {isConsensus ? 'Consensus' : 'Annotation'}</span>
+                <ArrowLeft className="h-4 w-4" />
               </Button>
-            )}
-            
-            <Button
-              onClick={handleGoToDashboard}
-              variant="outline"
-              className="flex items-center gap-2"
-            >
-              <Home className="h-4 w-4" />
-              <span>Dashboard Home</span>
-            </Button>
-            
-            {/* Add Discussion Details Modal button */}
-            {currentDiscussion && (
-              <Button
-                variant="outline"
-                className="flex items-center gap-2"
-                onClick={handleViewDiscussionDetails}
-              >
-                <Eye className="h-4 w-4" />
-                <span>View Discussion</span>
-              </Button>
-            )}
-          </div>
+            </div>
         )}
       </div>
-
-      {viewMode !== 'grid' && currentStep === 2 && (
-        <div className="flex flex-col gap-4 mt-2">
-          {/* Screenshot Google Drive URL input field */}
-          <div className="flex flex-col space-y-2 w-full">
-            <label htmlFor="screenshot-url" className="text-sm font-medium text-gray-700 mb-1 block">Screenshot Google Drive URL</label>
-            <Input
-              id="screenshot-url"
-              type="text"
-              value={screenshotUrl || ''}
-              onChange={handleScreenshotUrlInputChange}
-              placeholder="Enter Google Drive URL for the screenshot"
-              className="flex-1"
-            />
-          </div>
-          
-          {/* Code download URL input field with validation */}
-          <div className="flex flex-col space-y-2 w-full">
-            <div className="flex items-center gap-2 justify-between">
-              <div className="flex-1">
-                <label htmlFor="code-url" className="text-sm font-medium text-gray-700 mb-1 block">Code Download URL</label>
-                <div className="flex gap-2 items-center">
-                  <Input
-                    id="code-url"
-                    type="text"
-                    value={codeDownloadUrl || ''}
-                    onChange={handleCodeUrlChange}
-                    placeholder="https://github.com/owner/repo/archive/refs/tags/version.tar.gz"
-                    className="flex-1"
-                    disabled={useAutomaticUrl && !!currentDiscussion?.release_url}
-                  />
-                  {codeDownloadUrl && (
-                    isValidGitHubUrl(codeDownloadUrl) ? 
-                      <CheckCircle className="h-5 w-5 text-green-500" /> : 
-                      <XCircle className="h-5 w-5 text-red-500" />
-                  )}
-                </div>
-              </div>
-            </div>
-            
-            {/* Show repository release info if available */}
-            {currentDiscussion?.release_tag && (
-              <div className="flex items-center gap-2 text-sm">
-                <Tag className="h-4 w-4 text-blue-500" />
-                <span>
-                  {useAutomaticUrl ? 
-                    `Using release: ${currentDiscussion.release_tag}` : 
-                    `Repository has release: ${currentDiscussion.release_tag}`
-                  }
-                </span>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  className="text-xs"
-                  onClick={toggleUrlMode}
-                >
-                  {useAutomaticUrl ? 'Use custom URL' : 'Use release URL'}
-                </Button>
-              </div>
-            )}
-            
-            <div className="flex items-center gap-2">
-              <Checkbox 
-                id="url-verified" 
-                checked={isValidGitHubUrl(codeDownloadUrl)}
-                className="data-[state=checked]:bg-green-500"
-                disabled
-              />
-              <label htmlFor="url-verified" className="text-sm">
-                {isValidGitHubUrl(codeDownloadUrl) ? 'URL Valid' : 'URL Invalid'}
-              </label>
-            </div>
-            
-            {codeDownloadUrl && isValidGitHubUrl(codeDownloadUrl) && (
-              <a
-                href={codeDownloadUrl}
-                download
-                className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded w-fit"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Download className="h-4 w-4" />
-                <span>Download Code</span>
-              </a>
-            )}
-          </div>
-        </div>
-      )}
-      
-      {viewMode !== 'grid' && currentStep < 4 && currentStep > 0 && (
-        <div className="flex justify-end mt-2">
-          <Button
-            onClick={onSave}
-            disabled={!canProceed}
-            className="flex items-center gap-2 bg-dashboard-blue hover:bg-blue-600"
-          >
-            <span>Save {isConsensus ? 'Consensus' : 'Annotation'}</span>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
-    </div>
   );
 };
 

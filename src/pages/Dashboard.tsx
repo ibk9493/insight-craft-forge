@@ -182,61 +182,137 @@ const Dashboard = () => {
 
 // Update the useEffect in Dashboard component that loads annotations:
 
-useEffect(() => {
-  setConsensusStars(null);
-  setConsensusComment('');
-  if (discussionId && user && currentStep > 0 && currentStep <= 3 && annotationsLoaded) {
-    if (viewMode === 'detail') {
-      const loadResult = loadUserAnnotation(discussionId, currentStep);
-      
-      if (loadResult.tasks) {
-        switch (currentStep) {
-          case TaskId.QUESTION_QUALITY:
-            setTask1SubTasks(loadResult.tasks);
-            break;
-          case TaskId.ANSWER_QUALITY:
-            setTask2SubTasks(loadResult.tasks);
-            break;
-          case TaskId.REWRITE:
-            // Handle Task 3 with multiple forms
-            if (loadResult.forms && loadResult.forms.length > 0) {
-              console.log('Loading Task 3 forms:', loadResult.forms);
-              setTask3Forms(loadResult.forms);
-              setActiveTask3Form(0); // Set to first form
-            } else {
-              // Fallback to single form
-              setTask3SubTasks(loadResult.tasks);
-            }
-            break;
-        }
-      }
-    } else if (viewMode === 'consensus' && (isPodLead || isAdmin)) {
-      const loadConsensus = async () => {
-        const consensusViewData = await prepareConsensusView(discussionId, currentStep);
-        if (consensusViewData && consensusViewData.tasks) {
+  useEffect(() => {
+    setConsensusStars(null);
+    setConsensusComment('');
+    if (discussionId && user && currentStep > 0 && currentStep <= 3 && annotationsLoaded) {
+      if (viewMode === 'detail') {
+        const loadResult = loadUserAnnotation(discussionId, currentStep);
+
+        if (loadResult.tasks) {
           switch (currentStep) {
             case TaskId.QUESTION_QUALITY:
-              setConsensusTask1(consensusViewData.tasks);
+              setTask1SubTasks(loadResult.tasks);
               break;
             case TaskId.ANSWER_QUALITY:
-              setConsensusTask2(consensusViewData.tasks);
+              setTask2SubTasks(loadResult.tasks);
+
+              // NEW: Sync external state with API field names
+              const screenshotTask = loadResult.tasks.find(t => t.id === 'screenshot_url');
+              if (screenshotTask && screenshotTask.textValue && handleScreenshotUrlChange) {
+                handleScreenshotUrlChange(screenshotTask.textValue);
+              }
+
+              const codeTask = loadResult.tasks.find(t => t.id === 'code_download_url');
+              if (codeTask && codeTask.textValue && handleCodeUrlChange) {
+                handleCodeUrlChange(codeTask.textValue);
+              }
               break;
             case TaskId.REWRITE:
-              // TODO: Handle consensus forms loading similarly
-              setConsensusTask3(consensusViewData.tasks);
+              // Handle Task 3 with multiple forms (existing code)
+              if (loadResult.forms && loadResult.forms.length > 0) {
+                console.log('Loading Task 3 forms:', loadResult.forms);
+                setTask3Forms(loadResult.forms);
+                setActiveTask3Form(0);
+              } else {
+                setTask3SubTasks(loadResult.tasks);
+              }
               break;
           }
-          setConsensusStars(consensusViewData.stars ?? null);
-          setConsensusComment(consensusViewData.comment ?? '');
         } else {
-          setConsensusStars(null);
-          setConsensusComment('');
+          // If no loadResult.tasks, check if we need to manually load from raw annotation data
+          const userAnnotation = getUserAnnotation(discussionId, currentStep);
+          if (userAnnotation && currentStep === TaskId.ANSWER_QUALITY) {
+            // Handle Task 2 special case where API returns different field names
+            const mappedSubTasks = task2SubTasks.map(task => {
+              if (task.id === 'screenshot_url') {
+                const screenshotValue = userAnnotation.data['screenshot'];
+                if (screenshotValue) {
+                  handleScreenshotUrlChange && handleScreenshotUrlChange(screenshotValue);
+                  return {
+                    ...task,
+                    selectedOption: 'Provided',
+                    textValue: screenshotValue,
+                    status: 'completed' as SubTaskStatus
+                  };
+                }
+              } else if (task.id === 'code_download_url') {
+                const codeValue = userAnnotation.data['codeDownloadUrl'];
+                if (codeValue) {
+                  handleCodeUrlChange && handleCodeUrlChange(codeValue);
+                  return {
+                    ...task,
+                    selectedOption: 'Verified manually',
+                    textValue: codeValue,
+                    docDownloadLink: codeValue,
+                    enableDocDownload: true,
+                    status: 'completed' as SubTaskStatus
+                  };
+                }
+              } else {
+                // Handle regular fields
+                const savedValue = userAnnotation.data[task.id];
+                const savedTextValue = userAnnotation.data[`${task.id}_text`];
+
+                if (savedValue !== undefined) {
+                  let selectedOption = '';
+
+                  if (typeof savedValue === 'boolean') {
+                    selectedOption = savedValue ? 'Yes' : 'No';
+                  } else if (typeof savedValue === 'string') {
+                    selectedOption = savedValue;
+                  }
+
+                  return {
+                    ...task,
+                    selectedOption,
+                    textValue: savedTextValue || '',
+                    status: 'completed' as SubTaskStatus
+                  };
+                }
+              }
+              return task;
+            });
+            setTask2SubTasks(mappedSubTasks);
+          }
         }
-      };
-      loadConsensus();
+      } else if (viewMode === 'consensus' && (isPodLead || isAdmin)) {
+        const loadConsensus = async () => {
+          const consensusViewData = await prepareConsensusView(discussionId, currentStep);
+          if (consensusViewData && consensusViewData.tasks) {
+            switch (currentStep) {
+              case TaskId.QUESTION_QUALITY:
+                setConsensusTask1(consensusViewData.tasks);
+                break;
+              case TaskId.ANSWER_QUALITY:
+                setConsensusTask2(consensusViewData.tasks);
+
+                // NEW: Sync external state for consensus mode too
+                const screenshotTask = consensusViewData.tasks.find(t => t.id === 'screenshot_url');
+                if (screenshotTask && screenshotTask.textValue && handleScreenshotUrlChange) {
+                  handleScreenshotUrlChange(screenshotTask.textValue);
+                }
+
+                const codeTask = consensusViewData.tasks.find(t => t.id === 'code_download_url');
+                if (codeTask && codeTask.textValue && handleCodeUrlChange) {
+                  handleCodeUrlChange(codeTask.textValue);
+                }
+                break;
+              case TaskId.REWRITE:
+                setConsensusTask3(consensusViewData.tasks);
+                break;
+            }
+            setConsensusStars(consensusViewData.stars ?? null);
+            setConsensusComment(consensusViewData.comment ?? '');
+          } else {
+            setConsensusStars(null);
+            setConsensusComment('');
+          }
+        };
+        loadConsensus();
+      }
     }
-  }
-}, [discussionId, currentStep, viewMode, user, isPodLead, isAdmin, annotationsLoaded]);
+  }, [discussionId, currentStep, viewMode, user, isPodLead, isAdmin, annotationsLoaded, getUserAnnotation, task2SubTasks]);
   const getSummaryData = () => ({ task1Results: {}, task2Results: {}, task3Results: {} });
 
   const onSaveClick = async () => {
@@ -253,6 +329,115 @@ useEffect(() => {
         currentStep === TaskId.REWRITE ? consensusTask3Forms : undefined
     );
   };
+  const prepareTask2AnnotationData = (subTasks: SubTask[]) => {
+    const annotationData: Record<string, any> = {};
+
+    subTasks.forEach(task => {
+      // Handle regular fields
+      if (task.id !== 'screenshot_url' && task.id !== 'code_download_url') {
+        if (task.selectedOption) {
+          // Convert string options back to boolean for boolean fields
+          if (task.options && task.options.includes('Yes') && task.options.includes('No')) {
+            annotationData[task.id] = task.selectedOption === 'Yes';
+          } else {
+            annotationData[task.id] = task.selectedOption;
+          }
+        }
+
+        // Include text values
+        if (task.textValue) {
+          annotationData[`${task.id}_text`] = task.textValue;
+        }
+      }
+      // Handle special fields with API-specific naming
+      else if (task.id === 'screenshot_url') {
+        if (task.textValue) {
+          annotationData['screenshot'] = task.textValue;
+        }
+      }
+      else if (task.id === 'code_download_url') {
+        if (task.textValue) {
+          annotationData['codeDownloadUrl'] = task.textValue;
+        }
+      }
+    });
+
+    return annotationData;
+  };
+  useEffect(() => {
+    // Force refresh Task 2 subtasks to include new fields
+    if (currentStep === TaskId.ANSWER_QUALITY) {
+      const updatedTask2 = [
+        {
+          id: 'aspects',
+          title: 'Addresses All Aspects',
+          status: 'pending' as SubTaskStatus,
+          options: ['Yes', 'No'],
+          description: 'Check if the answer addresses all aspects of the question'
+        },
+        {
+          id: 'explanation',
+          title: 'Explanation Provided',
+          status: 'pending' as SubTaskStatus,
+          options: ['Yes', 'No'],
+          description: 'Check if the answer provides an explanation',
+          requiresRemarks: true
+        },
+        {
+          id: 'execution',
+          title: 'Manual Code Execution Check',
+          status: 'pending' as SubTaskStatus,
+          options: ['Executable', 'Not Executable', 'N/A'],
+          description: 'Check if the provided code is executable',
+          requiresRemarks: true
+        },
+        {
+          id: 'download',
+          title: 'Provide Code Download Link',
+          status: 'pending' as SubTaskStatus,
+          options: ['Provided', 'Not Provided', 'N/A'],
+          description: 'Check if a code download link is provided',
+          requiresRemarks: true
+        },
+        // NEW: Screenshot URL field
+        {
+          id: 'screenshot_url',
+          title: 'Screenshot Google Drive URL',
+          status: 'pending' as SubTaskStatus,
+          options: ['Provided', 'Not Needed'],
+          description: 'Provide Google Drive URL for the screenshot',
+          textInput: true,
+          textValue: screenshotUrl || '',
+          placeholder: 'Enter Google Drive URL for the screenshot'
+        },
+        // NEW: Code download URL field with verification
+        {
+          id: 'code_download_url',
+          title: 'Code Download URL',
+          status: 'pending' as SubTaskStatus,
+          options: ['Verified manually', 'Not verified'],
+          description: 'Provide and verify the code download URL',
+          textInput: true,
+          textValue: codeDownloadUrl || '',
+          placeholder: 'https://github.com/owner/repo/archive/refs/tags/version.tar.gz',
+          enableDocDownload: false,
+          docDownloadLink: ''
+        }
+      ];
+
+      // Only update if the current task2SubTasks doesn't have the new fields
+      const hasNewFields = task2SubTasks.some(t => t.id === 'screenshot_url' || t.id === 'code_download_url');
+      if (!hasNewFields) {
+        console.log('Adding new fields to Task 2');
+        setTask2SubTasks(updatedTask2);
+
+        // Also update consensus tasks
+        if (viewMode === 'consensus') {
+          setConsensusTask2(updatedTask2);
+        }
+      }
+    }
+  }, [currentStep, task2SubTasks.length, screenshotUrl, codeDownloadUrl]);
 
   const handleViewDiscussion = () => {
     if (currentDiscussion) dispatch(openModal(currentDiscussion));
@@ -263,39 +448,103 @@ useEffect(() => {
       toast.error('Selected annotation has no data to use.');
       return;
     }
-  
+
     if (currentStep === TaskId.QUESTION_QUALITY) {
       // Task 1 - unchanged
       const baseSubTasks = JSON.parse(JSON.stringify(task1SubTasks));
       const mappedSubTasks = mapAnnotationToSubTasks(baseSubTasks, annotation);
       setConsensusTask1(mappedSubTasks);
-    } 
+    }
     else if (currentStep === TaskId.ANSWER_QUALITY) {
-      // Task 2 - unchanged  
+      // Task 2 - UPDATED to handle special field mappings
       const baseSubTasks = JSON.parse(JSON.stringify(task2SubTasks));
-      const mappedSubTasks = mapAnnotationToSubTasks(baseSubTasks, annotation);
+      const mappedSubTasks = baseSubTasks.map(task => {
+        const savedValue = annotation.data[task.id];
+        const savedTextValue = annotation.data[`${task.id}_text`];
+
+        // Handle special Task 2 field mappings
+        let actualTextValue = savedTextValue;
+        let actualSelectedOption = savedValue;
+
+        if (task.id === 'screenshot_url') {
+          actualTextValue = annotation.data['screenshot'] || '';
+          actualSelectedOption = actualTextValue ? 'Provided' : 'Not Needed';
+        } else if (task.id === 'code_download_url') {
+          actualTextValue = annotation.data['codeDownloadUrl'] || '';
+          actualSelectedOption = actualTextValue ? 'Verified manually' : 'Not verified';
+        }
+
+        if (actualSelectedOption !== undefined || actualTextValue) {
+          let selectedOption = '';
+
+          if (typeof actualSelectedOption === 'boolean') {
+            if (task.options && task.options.length > 0) {
+              const trueOption = task.options.find(o => o.toLowerCase() === 'true' || o.toLowerCase() === 'yes');
+              const falseOption = task.options.find(o => o.toLowerCase() === 'false' || o.toLowerCase() === 'no');
+              if (actualSelectedOption === true && trueOption) selectedOption = trueOption;
+              else if (actualSelectedOption === false && falseOption) selectedOption = falseOption;
+            } else {
+              selectedOption = actualSelectedOption ? 'Yes' : 'No';
+            }
+          } else if (typeof actualSelectedOption === 'string') {
+            if (task.options && task.options.includes(actualSelectedOption)) {
+              selectedOption = actualSelectedOption;
+            } else {
+              selectedOption = actualSelectedOption;
+            }
+          }
+
+          let updatedTask = {
+            ...task,
+            selectedOption: selectedOption || actualSelectedOption,
+            status: 'completed' as SubTaskStatus,
+            textValue: typeof actualTextValue === 'string' ? actualTextValue : (task.textValue || '')
+          };
+
+          if (task.id === 'code_download_url') {
+            updatedTask.docDownloadLink = actualTextValue || '';
+            updatedTask.enableDocDownload = !!(actualTextValue && actualTextValue.trim());
+          }
+
+          return updatedTask;
+        }
+
+        return task;
+      });
+
       setConsensusTask2(mappedSubTasks);
-    } 
+
+      // Also sync the external state for screenshot and code URLs
+      const screenshotUrl = annotation.data['screenshot'];
+      const codeUrl = annotation.data['codeDownloadUrl'];
+
+      if (screenshotUrl && handleScreenshotUrlChange) {
+        handleScreenshotUrlChange(screenshotUrl);
+      }
+      if (codeUrl && handleCodeUrlChange) {
+        handleCodeUrlChange(codeUrl);
+      }
+    }
     else if (currentStep === TaskId.REWRITE) {
       // Task 3 - NEW: Handle multiple forms structure
       if (annotation.data.forms && Array.isArray(annotation.data.forms)) {
         // Multi-form annotation - populate consensus forms
         const consensusForms = annotation.data.forms.map((formData: any, index: number) => {
           const baseSubTasks = JSON.parse(JSON.stringify(task3SubTasks));
-          
+
           const mappedSubTasks = baseSubTasks.map((task: SubTask) => {
             const savedValue = formData[task.id];
             const savedTextValue = formData[`${task.id}_text`];
-            
+
             // Handle short_answer_list with claim/weight structure
             if (task.id === 'short_answer_list' && Array.isArray(savedValue)) {
-              const claims = savedValue.map((item: any) => 
-                typeof item === 'object' ? item.claim : item
+              const claims = savedValue.map((item: any) =>
+                  typeof item === 'object' ? item.claim : item
               );
-              const weights = savedValue.map((item: any) => 
-                typeof item === 'object' ? parseInt(item.weight) || 1 : 1
+              const weights = savedValue.map((item: any) =>
+                  typeof item === 'object' ? parseInt(item.weight) || 1 : 1
               );
-              
+
               return {
                 ...task,
                 selectedOption: 'Completed',
@@ -304,7 +553,7 @@ useEffect(() => {
                 weights: weights
               };
             }
-            
+
             // Handle supporting docs
             else if (task.id === 'supporting_docs' && Array.isArray(savedValue)) {
               return {
@@ -317,12 +566,12 @@ useEffect(() => {
                 }))
               };
             }
-            
+
             // Handle doc_download_link
             else if (task.id === 'doc_download_link') {
               const linkText = savedTextValue;
               const hasLink = linkText && typeof linkText === 'string' && linkText.trim() !== '';
-              
+
               return {
                 ...task,
                 selectedOption: typeof savedValue === 'string' ? savedValue : (hasLink ? 'Needed' : 'Not Needed'),
@@ -332,11 +581,11 @@ useEffect(() => {
                 enableDocDownload: hasLink
               };
             }
-            
+
             // Handle regular fields
             else if (savedValue !== undefined) {
               let selectedOption = '';
-              
+
               if (typeof savedValue === 'boolean') {
                 if (task.options && task.options.length > 0) {
                   const trueOption = task.options.find(o => o.toLowerCase() === 'true' || o.toLowerCase() === 'yes');
@@ -353,7 +602,7 @@ useEffect(() => {
                   selectedOption = savedValue;
                 }
               }
-              
+
               return {
                 ...task,
                 selectedOption,
@@ -361,36 +610,32 @@ useEffect(() => {
                 textValue: typeof savedTextValue === 'string' ? savedTextValue : (task.textValue || '')
               };
             }
-            
+
             return task;
           });
-          
+
           return {
             id: formData.formId || `consensus-form-${index + 1}`,
             name: formData.formName || `Form ${index + 1}`,
             subTasks: mappedSubTasks
           };
         });
-        
+
         setConsensusTask3Forms(consensusForms);
         setActiveConsensusTask3Form(0); // Set to first form
-        
+
         toast.success(`Populated ${consensusForms.length} consensus forms from selected annotation.`);
-      } 
+      }
       else {
         // Single form annotation - fallback to old behavior
         const baseSubTasks = JSON.parse(JSON.stringify(task3SubTasks));
         const mappedSubTasks = mapAnnotationToSubTasksForTask3(baseSubTasks, annotation);
         setConsensusTask3(mappedSubTasks);
-        
+
         toast.success('Consensus form populated with selected annotation.');
       }
-    } 
-    else {
-      toast.error('Invalid task step for consensus.');
-      return;
     }
-    
+
     setConsensusStars(null);
     setConsensusComment('');
     toast.success('Consensus populated with selected annotation. Please provide overall feedback.');
@@ -527,35 +772,57 @@ useEffect(() => {
     return baseSubTasks.map(task => {
       const savedValue = annotation.data[task.id];
       const savedTextValue = annotation.data[`${task.id}_text`];
-      
-      if (savedValue !== undefined) {
+
+      // Handle special Task 2 field mappings from API
+      let actualTextValue = savedTextValue;
+      let actualSelectedOption = savedValue;
+
+      // Map API field names to our task structure
+      if (task.id === 'screenshot_url') {
+        actualTextValue = annotation.data['screenshot'] || '';
+        actualSelectedOption = annotation.data['screenshot_status'] || (actualTextValue ? 'Provided' : 'Not Needed');
+      } else if (task.id === 'code_download_url') {
+        actualTextValue = annotation.data['codeDownloadUrl'] || '';
+        actualSelectedOption = annotation.data['codeDownloadUrl_status'] || (actualTextValue ? 'Verified manually' : 'Not verified');
+      }
+
+      if (actualSelectedOption !== undefined || actualTextValue !== undefined) {
         let selectedOption = '';
-        
-        if (typeof savedValue === 'boolean') {
+
+        if (typeof actualSelectedOption === 'boolean') {
           if (task.options && task.options.length > 0) {
             const trueOption = task.options.find(o => o.toLowerCase() === 'true' || o.toLowerCase() === 'yes');
             const falseOption = task.options.find(o => o.toLowerCase() === 'false' || o.toLowerCase() === 'no');
-            if (savedValue === true && trueOption) selectedOption = trueOption;
-            else if (savedValue === false && falseOption) selectedOption = falseOption;
+            if (actualSelectedOption === true && trueOption) selectedOption = trueOption;
+            else if (actualSelectedOption === false && falseOption) selectedOption = falseOption;
           } else {
-            selectedOption = savedValue ? 'Yes' : 'No';
+            selectedOption = actualSelectedOption ? 'Yes' : 'No';
           }
-        } else if (typeof savedValue === 'string') {
-          if (task.options && task.options.length > 0 && task.options.includes(savedValue)) {
-            selectedOption = savedValue;
+        } else if (typeof actualSelectedOption === 'string') {
+          if (task.options && task.options.length > 0 && task.options.includes(actualSelectedOption)) {
+            selectedOption = actualSelectedOption;
           } else if (!task.options || task.options.length === 0) {
-            selectedOption = savedValue;
+            selectedOption = actualSelectedOption;
           }
         }
-        
-        return {
+
+        // Create the updated task
+        let updatedTask = {
           ...task,
-          selectedOption,
+          selectedOption: selectedOption || actualSelectedOption,
           status: 'completed' as SubTaskStatus,
-          textValue: typeof savedTextValue === 'string' ? savedTextValue : (task.textValue || '')
+          textValue: typeof actualTextValue === 'string' ? actualTextValue : (task.textValue || '')
         };
+
+        // Handle special properties for specific fields
+        if (task.id === 'code_download_url') {
+          updatedTask.docDownloadLink = actualTextValue || '';
+          updatedTask.enableDocDownload = !!(actualTextValue && actualTextValue.trim());
+        }
+
+        return updatedTask;
       }
-      
+
       return task;
     });
   };
@@ -652,11 +919,60 @@ const handleDuplicateForm = (type: string) => {
                     </>
                 )}
                 {currentStep === TaskId.ANSWER_QUALITY && viewMode === 'detail' && (
-                    <TaskCard title="Task 2: Answer Quality Assessment" description="Evaluate the quality of the answer based on comprehensiveness, explanation, code execution, and completeness." subTasks={task2SubTasks} status={getTask2Progress()} onSubTaskChange={(taskId, selectedOption, textValue) => handleSubTaskChange('task2', taskId, selectedOption, textValue)} active />
+                    <TaskCard
+                        title="Task 2: Answer Quality Assessment"
+                        description="Evaluate the quality of the answer based on comprehensiveness, explanation, code execution, and completeness."
+                        subTasks={task2SubTasks}
+                        status={getTask2Progress()}
+                        onSubTaskChange={(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink) => {
+                          // Handle screenshot_url and code_download_url fields
+                          if (taskId === 'screenshot_url') {
+                            if (textValue && handleScreenshotUrlChange) {
+                              handleScreenshotUrlChange(textValue);
+                            }
+                            handleSubTaskChange('task2', taskId, selectedOption, textValue);
+                          } else if (taskId === 'code_download_url') {
+                            if (textValue && handleCodeUrlChange) {
+                              handleCodeUrlChange(textValue);
+                            }
+                            handleSubTaskChange('task2', taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink);
+                          } else {
+                            handleSubTaskChange('task2', taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights);
+                          }
+                        }}
+                        active
+                        currentDiscussion={currentDiscussion}
+                        onCodeUrlVerify={validateGitHubCodeUrl}
+                    />
                 )}
+
                 {currentStep === TaskId.ANSWER_QUALITY && viewMode === 'consensus' && (isPodLead || isAdmin) && (
                     <>
-                      <TaskCard title="Task 2: Answer Quality Consensus" description="Create a consensus based on annotator assessments." subTasks={consensusTask2} status={getTask2Progress(true)} onSubTaskChange={(taskId, selectedOption, textValue) => handleSubTaskChange('consensus2', taskId, selectedOption, textValue)} active />
+                      <TaskCard
+                          title="Task 2: Answer Quality Consensus"
+                          description="Create a consensus based on annotator assessments."
+                          subTasks={consensusTask2}
+                          status={getTask2Progress(true)}
+                          onSubTaskChange={(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink) => {
+                            // Handle screenshot_url and code_download_url fields in consensus mode
+                            if (taskId === 'screenshot_url') {
+                              if (textValue && handleScreenshotUrlChange) {
+                                handleScreenshotUrlChange(textValue);
+                              }
+                              handleSubTaskChange('consensus2', taskId, selectedOption, textValue);
+                            } else if (taskId === 'code_download_url') {
+                              if (textValue && handleCodeUrlChange) {
+                                handleCodeUrlChange(textValue);
+                              }
+                              handleSubTaskChange('consensus2', taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink);
+                            } else {
+                              handleSubTaskChange('consensus2', taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights);
+                            }
+                          }}
+                          active
+                          currentDiscussion={currentDiscussion}
+                          onCodeUrlVerify={validateGitHubCodeUrl}
+                      />
                       <div className="mt-4 p-4 border rounded bg-gray-50">
                         <h3 className="text-lg font-semibold mb-2">Overall Consensus Feedback</h3>
                         <div className="mb-2">
@@ -675,7 +991,13 @@ const handleDuplicateForm = (type: string) => {
                           <Textarea id="consensusComment" value={consensusComment} onChange={e => setConsensusComment(e.target.value)} placeholder="Provide an overall comment for this consensus..." rows={3} />
                         </div>
                       </div>
-                      <AnnotatorView discussionId={discussionId || ''} currentStep={currentStep} getAnnotationsForTask={getAnnotationsForTask} onUseForConsensus={handleUseAnnotationForConsensus} getUserEmailById={getUserEmailById} />
+                      <AnnotatorView
+                          discussionId={discussionId || ''}
+                          currentStep={currentStep}
+                          getAnnotationsForTask={getAnnotationsForTask}
+                          onUseForConsensus={handleUseAnnotationForConsensus}
+                          getUserEmailById={getUserEmailById}
+                      />
                     </>
                 )}
 
@@ -1132,7 +1454,7 @@ const handleDuplicateForm = (type: string) => {
                   // For other tasks, use original logic
                   return canProceed(currentStep, viewMode);
                 })()} 
-                onBackToGrid={handleBackToGrid} 
+                onBackToGrid={handleBackToGrid}
                 onSave={onSaveClick} 
                 isConsensus={viewMode === 'consensus'} 
                 screenshotUrl={screenshotUrl} 

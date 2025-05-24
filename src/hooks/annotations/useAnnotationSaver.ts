@@ -28,54 +28,78 @@ export function useAnnotationSaver({
   // Convert tasks to data format
 // Update the convertTasksToData function in useAnnotationSaver
 
-const convertTasksToData = (tasks: SubTask[], data: Record<string, any>) => {
-  tasks.forEach(task => {
-    // Always save the status if a selection was made (original condition)
-    if (task.selectedOption) {
-      if (task.selectedOption === 'True' || task.selectedOption === 'False' ||
-          task.selectedOption === 'Yes' || task.selectedOption === 'No') {
-        data[task.id] = (task.selectedOption === 'True' || task.selectedOption === 'Yes');
-      } else {
-        data[task.id] = task.selectedOption; // e.g., data['rewrite'] = 'Completed'
+  const convertTasksToData = (tasks: SubTask[], data: Record<string, any>) => {
+    tasks.forEach(task => {
+      // Handle screenshot_url field - save as 'screenshot' in API
+      if (task.id === 'screenshot_url') {
+        if (task.textValue && task.textValue.trim() !== '') {
+          data['screenshot'] = task.textValue.trim();
+          // ALSO save the selection option
+          data['screenshot_status'] = task.selectedOption || 'Provided';
+        } else if (task.selectedOption) {
+          data['screenshot_status'] = task.selectedOption;
+        }
+        return; // Skip normal processing for this field
       }
-    }
 
-    // Add text value if present (for single text inputs like rewrite_text)
-    if (task.textValue !== undefined) {
-      data[`${task.id}_text`] = task.textValue; // e.g., data['rewrite_text'] = "Some text"
-    }
+      // Handle code_download_url field - save as 'codeDownloadUrl' in API
+      if (task.id === 'code_download_url') {
+        if (task.textValue && task.textValue.trim() !== '') {
+          data['codeDownloadUrl'] = task.textValue.trim();
+          // ALSO save the selection option
+          data['codeDownloadUrl_status'] = task.selectedOption || 'Verified manually';
+        } else if (task.selectedOption) {
+          data['codeDownloadUrl_status'] = task.selectedOption;
+        }
+        return; // Skip normal processing for this field
+      }
 
-    // UPDATED: Handle short_answer_list with new claim/weight format
-    if (task.id === 'short_answer_list' && task.textValues && Array.isArray(task.textValues)) {
-      const claims = task.textValues
-        .filter(claim => claim.trim() !== '') // Remove empty claims
-        .map((claim, index) => ({
-          claim: claim.trim(),
-          weight: String(task.weights?.[index] || 1) // Convert to string as per your format
-        }));
-      
-      data[task.id] = claims; // Save as array of claim/weight objects
-    }
-    // Handle other multiline text inputs (NOT short_answer_list)
-    else if (task.multiline && task.textValues && Array.isArray(task.textValues) && task.id !== 'short_answer_list') {
-      // Example: task.id = "other_multiline_field"
-      // data["other_multiline_field_items"] = ["item1", "item2"]
-      data[`${task.id}_items`] = task.textValues;
-    }
+      // Always save the status if a selection was made (original condition)
+      if (task.selectedOption) {
+        if (task.selectedOption === 'True' || task.selectedOption === 'False' ||
+            task.selectedOption === 'Yes' || task.selectedOption === 'No') {
+          data[task.id] = (task.selectedOption === 'True' || task.selectedOption === 'Yes');
+        } else {
+          data[task.id] = task.selectedOption; // e.g., data['rewrite'] = 'Completed'
+        }
+      }
 
-    // Add supportingDocs if present
-    if (task.structuredInput && task.supportingDocs && Array.isArray(task.supportingDocs)) {
-      // Example: task.id = "supporting_docs"
-      // data["supporting_docs_data"] = [{link: "...", paragraph: "..."}]
-      data[`${task.id}_data`] = task.supportingDocs;
-    }
+      // Add text value if present (for single text inputs like rewrite_text)
+      if (task.textValue !== undefined && task.textValue.trim() !== '') {
+        data[`${task.id}_text`] = task.textValue; // e.g., data['rewrite_text'] = "Some text"
+      }
 
-    // ADDED: Handle doc_download_link
-    if (task.id === 'doc_download_link' && task.docDownloadLink && task.docDownloadLink.trim() !== '') {
-      data['doc_download_link'] = task.docDownloadLink.trim();
-    }
-  });
-};
+      // UPDATED: Handle short_answer_list with new claim/weight format
+      if (task.id === 'short_answer_list' && task.textValues && Array.isArray(task.textValues)) {
+        const claims = task.textValues
+            .filter(claim => claim.trim() !== '') // Remove empty claims
+            .map((claim, index) => ({
+              claim: claim.trim(),
+              weight: String(task.weights?.[index] || 1) // Convert to string as per your format
+            }));
+
+        data[task.id] = claims; // Save as array of claim/weight objects
+      }
+      // Handle other multiline text inputs (NOT short_answer_list)
+      else if (task.multiline && task.textValues && Array.isArray(task.textValues) && task.id !== 'short_answer_list') {
+        // Example: task.id = "other_multiline_field"
+        // data["other_multiline_field_items"] = ["item1", "item2"]
+        data[`${task.id}_items`] = task.textValues;
+      }
+
+      // Add supportingDocs if present
+      if (task.structuredInput && task.supportingDocs && Array.isArray(task.supportingDocs)) {
+        // Example: task.id = "supporting_docs"
+        // data["supporting_docs_data"] = [{link: "...", paragraph: "..."}]
+        data[`${task.id}_data`] = task.supportingDocs;
+      }
+
+      // ADDED: Handle doc_download_link
+      if (task.id === 'doc_download_link' && task.docDownloadLink && task.docDownloadLink.trim() !== '') {
+        data['doc_download_link'] = task.docDownloadLink.trim();
+      }
+    });
+  };
 
   // Save annotation or consensus
   const handleSaveAnnotation = async (

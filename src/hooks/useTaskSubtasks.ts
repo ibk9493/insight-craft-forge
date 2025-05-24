@@ -92,16 +92,31 @@ export function useTaskSubtasks() {
       options: ['Provided', 'Not Provided', 'N/A'],
       description: 'Check if a code download link is provided',
       requiresRemarks: true
+    },
+    // NEW: Screenshot URL field
+    {
+      id: 'screenshot_url',
+      title: 'Screenshot Google Drive URL',
+      status: 'pending' as SubTaskStatus,
+      options: ['Provided', 'Not Needed'],
+      description: 'Provide Google Drive URL for the screenshot',
+      textInput: true,
+      textValue: '',
+      placeholder: 'Enter Google Drive URL for the screenshot'
+    },
+    // NEW: Code download URL field with verification
+    {
+      id: 'code_download_url',
+      title: 'Code Download URL',
+      status: 'pending' as SubTaskStatus,
+      options: ['Verified manually', 'Not verified'],
+      description: 'Provide and verify the code download URL',
+      textInput: true,
+      textValue: '',
+      placeholder: 'https://github.com/owner/repo/archive/refs/tags/version.tar.gz',
+      enableDocDownload: false,
+      docDownloadLink: ''
     }
-    // ,
-    // {
-    //   id: 'consensus',
-    //   title: 'Consensus by 3 annotators',
-    //   status: 'pending' as SubTaskStatus,
-    //   options: ['Agreement', 'No Agreement'],
-    //   description: 'System-determined consensus based on annotator submissions',
-    //   requiresRemarks: true
-    // }
   ]);
   
   // Task 3 subtasks with improved support for multi-line answers and structured data
@@ -212,7 +227,8 @@ export function useTaskSubtasks() {
     textValue?: string, 
     textValues?: string[],
     supportingDocs?: SupportingDoc[],
-    sectionIndex?: number
+    sectionIndex?: number,
+    docDownloadLink?: string
   ) => {
     let updated: SubTask[] = [];
 
