@@ -196,7 +196,15 @@ class PaginatedDiscussionResponse(BaseModel):
     page: int
     per_page: int
     pages: int
-    
+
+class TrainerBreakdown(BaseModel):
+    trainer_id: int
+    trainer_email: str  # Add this field
+    total_annotations: int
+    task1_count: int
+    task2_count: int
+    task3_count: int
+
 class ConsensusAnnotationCreate(ConsensusAnnotationBase):
     pass
 

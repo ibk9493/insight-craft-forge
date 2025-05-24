@@ -330,6 +330,7 @@ const SystemReports: React.FC = () => {
                               <span>{trainer.trainer_id}</span>
                             </div>
                           </td>
+                          <td className="py-2 px-3 text-sm">{trainer.trainer_email}</td> 
                           <td className="py-2 px-3 text-sm font-medium">{trainer.total_annotations}</td>
                           <td className="py-2 px-3 text-sm">{trainer.task1_count}</td>
                           <td className="py-2 px-3 text-sm">{trainer.task2_count}</td>

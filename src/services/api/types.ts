@@ -136,6 +136,7 @@ export interface BatchBreakdown {
 
 export interface TrainerBreakdown {
   trainer_id: string;
+  trainer_email: string; 
   total_annotations: number;
   task1_count: number;
   task2_count: number;
