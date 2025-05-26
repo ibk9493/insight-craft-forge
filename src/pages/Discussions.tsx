@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Header from '@/components/layout/Header';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -36,6 +36,11 @@ interface FilterValues {
   fromDate: Date | undefined;
   toDate: Date | undefined;
   batchId: string;
+  taskStatuses: {
+    task1: string;
+    task2: string;
+    task3: string;
+  };
 }
 
 // Custom hook for debounced search
@@ -73,9 +78,15 @@ const Discussions = () => {
     releaseTag: [],
     fromDate: undefined,
     toDate: undefined,
-    batchId: ''
+    batchId: '',
+    taskStatuses: {
+      task1: 'all',
+      task2: 'all',
+      task3: 'all'
+    }
   });
   const [isMounted, setIsMounted] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
   
   // State for available filter options
   const [availableLanguages, setAvailableLanguages] = useState<string[]>([]);
@@ -84,26 +95,13 @@ const Discussions = () => {
 
   const debouncedSearchQuery = useDebounce(searchQuery, 500);
 
-  // CENTRALIZED FETCH PARAMS BUILDER - THIS ELIMINATES ALL DUPLICATION
-  const buildFetchParams = useCallback((overrides = {}) => {
-    console.log('🔍 DETAILED DEBUG in buildFetchParams:');
-    console.log('  filterValues.showMyAnnotations:', filterValues.showMyAnnotations);
-    console.log('  typeof showMyAnnotations:', typeof filterValues.showMyAnnotations);
-    console.log('  user object:', user);
-    console.log('  user?.id:', user?.id);
-    console.log('  typeof user?.id:', typeof user?.id);
-    
-    // Test the condition step by step
-    const step1 = filterValues.showMyAnnotations;
-    const step2 = user?.id;
-    const step3 = step1 && step2;
-    const step4 = step3 ? user.id.toString() : undefined;
-    console.log('🔍 DETAILED DEBUG in buildFetchParams:');
-    console.log('  step1:', step1);
-    console.log('  step2:', step2);
-    console.log('  step3:', step3);
-    console.log('  step4:', step4);
-    const params ={
+  // Refs to prevent unnecessary API calls
+  const lastFetchParamsRef = useRef<string>('');
+  const isUpdatingFromUrlRef = useRef(false);
+
+  // STABLE FETCH FUNCTION - Direct dispatch to avoid cascading effects
+  const fetchDiscussionsWithCurrentState = useCallback(() => {
+    const params = {
       status: filterValues.status === 'all' ? undefined : filterValues.status,
       search: debouncedSearchQuery.trim() || undefined,
       repository_language: filterValues.repositoryLanguage.length > 0 ? filterValues.repositoryLanguage.join(',') : undefined,
@@ -112,21 +110,25 @@ const Discussions = () => {
       to_date: filterValues.toDate ? filterValues.toDate.toISOString().split('T')[0] : undefined,
       batch_id: filterValues.batchId ? Number(filterValues.batchId) : undefined,
       user_id: filterValues.showMyAnnotations && user?.id ? user.id.toString() : undefined,
+      task1_status: filterValues.taskStatuses.task1 === 'all' ? undefined : filterValues.taskStatuses.task1,
+      task2_status: filterValues.taskStatuses.task2 === 'all' ? undefined : filterValues.taskStatuses.task2,
+      task3_status: filterValues.taskStatuses.task3 === 'all' ? undefined : filterValues.taskStatuses.task3,
       page: 1,
       per_page: pagination.per_page,
-      forceRefresh: true,
-      ...overrides // Allow overriding specific params
+      forceRefresh: true
     };
-  console.log('🔍 FINAL PARAMS TO API:', params);
-    return params
-  }, [filterValues, debouncedSearchQuery, user?.id, pagination.per_page]);
 
-  // SINGLE FETCH FUNCTION - USED EVERYWHERE
-  const fetchDiscussionsWithParams = useCallback((overrides = {}) => {
-    const params = buildFetchParams(overrides);
-    console.log('Fetching discussions with params:', params);
+    // Prevent duplicate API calls by comparing params
+    const paramsString = JSON.stringify(params);
+    if (lastFetchParamsRef.current === paramsString) {
+      console.log('🚫 Skipping duplicate API call with same params');
+      return;
+    }
+    
+    lastFetchParamsRef.current = paramsString;
+    console.log('📡 Making API call with params:', params);
     dispatch(fetchDiscussions(params));
-  }, [buildFetchParams, dispatch]);
+  }, [filterValues, debouncedSearchQuery, user?.id, pagination.per_page, dispatch]);
 
   // Fetch filter options
   const fetchFilterOptions = useCallback(async () => {
@@ -153,14 +155,18 @@ const Discussions = () => {
     }
   }, [isAuthenticated]);
 
-  // Initialize component - Only run once on mount
+  // SINGLE INITIALIZATION EFFECT
   useEffect(() => {
     if (!isAuthenticated) {
       navigate('/');
       return;
     }
 
-    // Parse URL parameters and set initial state
+    console.log('🚀 Initializing component from URL:', location.search);
+    setIsInitializing(true);
+    isUpdatingFromUrlRef.current = true;
+
+    // Parse URL parameters
     const params = new URLSearchParams(location.search);
     const statusFromParams = params.get('status');
     const search = params.get('search');
@@ -176,20 +182,30 @@ const Discussions = () => {
     const fromDateObj = fromParam ? new Date(fromParam) : undefined;
     const toDateObj = toParam ? new Date(toParam) : undefined;
     
-    // Set initial filter values
-    setFilterValues({
+    const task1Status = params.get('task1_status') || 'all';
+    const task2Status = params.get('task2_status') || 'all';
+    const task3Status = params.get('task3_status') || 'all';
+    
+    // Set states in batch
+    const newFilterValues = {
       status: statusFromParams || 'all',
       showMyAnnotations: myAnnotations,
       repositoryLanguage: lang,
       releaseTag: tag,
       fromDate: fromDateObj,
       toDate: toDateObj,
-      batchId: batch || ''
-    });
+      batchId: batch || '',
+      taskStatuses: {
+        task1: task1Status,
+        task2: task2Status,
+        task3: task3Status
+      }
+    };
     
-    if (search) setSearchQuery(search);
+    console.log('🔧 Setting filter values from URL:', newFilterValues);
+    setFilterValues(newFilterValues);
+    setSearchQuery(search || '');
     
-    // Update pagination params if they exist in URL
     if (pageParam || perPageParam) {
       dispatch(setPaginationParams({
         page: pageParam ? parseInt(pageParam) : undefined,
@@ -197,12 +213,14 @@ const Discussions = () => {
       }));
     }
     
-    // Fetch initial data
-    fetchBatchesData();
-    fetchFilterOptions();
+    // Fetch data only on first mount
+    if (!isMounted) {
+      fetchBatchesData();
+      fetchFilterOptions();
+    }
     
-    // Initial discussions fetch with URL params
-    const initialFetchParams = {
+    // Single API call for initialization
+    const initialParams = {
       status: (statusFromParams && statusFromParams !== 'all') ? statusFromParams : undefined,
       search: search || undefined,
       repository_language: lang.length > 0 ? lang.join(',') : undefined,
@@ -211,24 +229,222 @@ const Discussions = () => {
       to_date: toDateObj ? toDateObj.toISOString().split('T')[0] : undefined,
       batch_id: batch ? Number(batch) : undefined,
       user_id: myAnnotations && user?.id ? user.id.toString() : undefined,
+      task1_status: task1Status === 'all' ? undefined : task1Status,
+      task2_status: task2Status === 'all' ? undefined : task2Status,
+      task3_status: task3Status === 'all' ? undefined : task3Status,
       page: pageParam ? parseInt(pageParam) : 1,
       per_page: perPageParam ? parseInt(perPageParam) : 10,
       forceRefresh: false
     };
     
-    console.log('Initial fetch with params:', initialFetchParams);
-    dispatch(fetchDiscussions(initialFetchParams));
+    console.log('📡 Initial API call:', initialParams);
+    dispatch(fetchDiscussions(initialParams));
     
-    setIsMounted(true);
-  }, [isAuthenticated, location.search, user?.id, navigate, dispatch, fetchBatchesData, fetchFilterOptions]);
-
-  // Effect to handle debounced search - SIMPLIFIED
+    // Set flags
+    if (!isMounted) setIsMounted(true);
+    
+    // Allow filter changes after initialization - LONGER DELAY
+    setTimeout(() => {
+      console.log('✅ Initialization complete - enabling filter changes');
+      setIsInitializing(false);
+      isUpdatingFromUrlRef.current = false;
+    }, 500); // Increased to 500ms
+    
+  }, [isAuthenticated, location.search, location.pathname, location.key, user?.id, navigate, dispatch, isMounted, fetchBatchesData, fetchFilterOptions]);
+  // FILTER CHANGE EFFECT - Should run FIRST and handle API calls
   useEffect(() => {
-    if (!isMounted) return;
+    if (!isMounted || isInitializing || isUpdatingFromUrlRef.current) {
+      console.log('⏭️ Skipping filter effect - initializing or updating from URL');
+      return;
+    }
     
+    console.log('🔄 Filters changed, making API call');
     dispatch(setPaginationParams({ page: 1 }));
-    fetchDiscussionsWithParams();
-  }, [debouncedSearchQuery, filterValues, isMounted, dispatch, fetchDiscussionsWithParams]);
+    fetchDiscussionsWithCurrentState();
+  }, [debouncedSearchQuery, filterValues, isMounted, isInitializing]);
+
+  // URL SYNC EFFECT - Should run AFTER filter changes are processed
+  useEffect(() => {
+    if (!isMounted || isInitializing || isUpdatingFromUrlRef.current) {
+      console.log('⏭️ Skipping URL sync - initializing or updating from URL');
+      return;
+    }
+    
+    // Small delay to ensure filter effect runs first
+    const timeoutId = setTimeout(() => {
+      const params = new URLSearchParams();
+      
+      // Add all current filter values to URL
+      if (filterValues.status !== 'all') params.set('status', filterValues.status);
+      if (filterValues.showMyAnnotations && user?.id) params.set('user_id', user.id.toString());
+      if (filterValues.repositoryLanguage.length > 0) params.set('repository_language', filterValues.repositoryLanguage.join(','));
+      if (filterValues.releaseTag.length > 0) params.set('release_tag', filterValues.releaseTag.join(','));
+      if (filterValues.fromDate) params.set('from_date', filterValues.fromDate.toISOString().split('T')[0]);
+      if (filterValues.toDate) params.set('to_date', filterValues.toDate.toISOString().split('T')[0]);
+      if (filterValues.batchId) params.set('batch_id', filterValues.batchId);
+      if (filterValues.taskStatuses.task1 !== 'all') params.set('task1_status', filterValues.taskStatuses.task1);
+      if (filterValues.taskStatuses.task2 !== 'all') params.set('task2_status', filterValues.taskStatuses.task2);
+      if (filterValues.taskStatuses.task3 !== 'all') params.set('task3_status', filterValues.taskStatuses.task3);
+      if (debouncedSearchQuery) params.set('search', debouncedSearchQuery);
+      
+      // Add pagination
+      params.set('page', pagination.page.toString());
+      params.set('per_page', pagination.per_page.toString());
+      
+      // Update URL without triggering navigation
+      const newUrl = `/discussions?${params.toString()}`;
+      if (window.location.pathname + window.location.search !== newUrl) {
+        console.log('🔗 Updating URL with current filters');
+        window.history.replaceState(null, '', newUrl);
+      }
+    }, 100); // 100ms delay
+    
+    return () => clearTimeout(timeoutId);
+  }, [filterValues, debouncedSearchQuery, pagination, user?.id, isMounted, isInitializing]);
+// Add these two effects to your component (after your existing effects):
+
+// SINGLE effect to handle sessionStorage restore  
+useEffect(() => {
+  // Only run during initialization, not after
+  if (!isAuthenticated || isMounted) return;
+  
+  console.log('🔍 Checking for saved filters...');
+  
+  // Check if URL has meaningful filters (not just defaults)
+  const urlParams = new URLSearchParams(location.search);
+  const hasActiveUrlFilters = (
+    (urlParams.get('status') && urlParams.get('status') !== 'all') ||
+    urlParams.get('search') ||
+    urlParams.get('user_id') ||
+    urlParams.get('repository_language') ||
+    urlParams.get('release_tag') ||
+    urlParams.get('from_date') ||
+    urlParams.get('to_date') ||
+    urlParams.get('batch_id') ||
+    (urlParams.get('task1_status') && urlParams.get('task1_status') !== 'all') ||
+    (urlParams.get('task2_status') && urlParams.get('task2_status') !== 'all') ||
+    (urlParams.get('task3_status') && urlParams.get('task3_status') !== 'all')
+  );
+  
+  // Only restore from sessionStorage if URL has no active filters
+  if (!hasActiveUrlFilters) {
+    const savedFilters = sessionStorage.getItem('discussions-filters');
+    console.log('📦 Saved filters:', savedFilters);
+    
+    if (savedFilters) {
+      try {
+        const parsed = JSON.parse(savedFilters);
+        const isRecent = (Date.now() - parsed.timestamp) < (30 * 60 * 1000);
+        
+        if (isRecent && parsed.filterValues) {
+          console.log('🔄 Restoring filters from sessionStorage');
+          
+          // CRITICAL: Set BOTH flags to prevent other effects from running
+          isUpdatingFromUrlRef.current = true;
+          setIsInitializing(true); // ← ADD THIS LINE
+          
+          // Restore filters
+          setFilterValues(parsed.filterValues);
+          if (parsed.searchQuery) {
+            setSearchQuery(parsed.searchQuery);
+          }
+          
+          // Restore pagination if saved
+          if (parsed.pagination) {
+            dispatch(setPaginationParams({
+              page: parsed.pagination.page || 1,
+              per_page: parsed.pagination.per_page || 10
+            }));
+          }
+          
+          // Build URL with ALL restored filters
+          const params = new URLSearchParams();
+          if (parsed.filterValues.status !== 'all') params.set('status', parsed.filterValues.status);
+          if (parsed.filterValues.showMyAnnotations && user?.id) params.set('user_id', user.id.toString());
+          if (parsed.filterValues.repositoryLanguage?.length > 0) params.set('repository_language', parsed.filterValues.repositoryLanguage.join(','));
+          if (parsed.filterValues.releaseTag?.length > 0) params.set('release_tag', parsed.filterValues.releaseTag.join(','));
+          if (parsed.filterValues.fromDate) params.set('from_date', parsed.filterValues.fromDate.toISOString().split('T')[0]);
+          if (parsed.filterValues.toDate) params.set('to_date', parsed.filterValues.toDate.toISOString().split('T')[0]);
+          if (parsed.filterValues.batchId) params.set('batch_id', parsed.filterValues.batchId);
+          if (parsed.filterValues.taskStatuses?.task1 !== 'all') params.set('task1_status', parsed.filterValues.taskStatuses.task1);
+          if (parsed.filterValues.taskStatuses?.task2 !== 'all') params.set('task2_status', parsed.filterValues.taskStatuses.task2);
+          if (parsed.filterValues.taskStatuses?.task3 !== 'all') params.set('task3_status', parsed.filterValues.taskStatuses.task3);
+          if (parsed.searchQuery) params.set('search', parsed.searchQuery);
+          
+          // Add pagination (restored or current)
+          const currentPage = parsed.pagination?.page || pagination.page || 1;
+          const currentPerPage = parsed.pagination?.per_page || pagination.per_page || 10;
+          params.set('page', currentPage.toString());
+          params.set('per_page', currentPerPage.toString());
+          
+          // Update URL
+          const newUrl = `/discussions?${params.toString()}`;
+          window.history.replaceState(null, '', newUrl);
+          
+          console.log('🔗 Updated URL with restored filters and pagination:', newUrl);
+          
+          // Make the API call directly here to avoid duplicate calls
+          dispatch(fetchDiscussions({
+            status: parsed.filterValues.status === 'all' ? undefined : parsed.filterValues.status,
+            search: parsed.searchQuery?.trim() || undefined,
+            repository_language: parsed.filterValues.repositoryLanguage?.length > 0 ? parsed.filterValues.repositoryLanguage.join(',') : undefined,
+            release_tag: parsed.filterValues.releaseTag?.length > 0 ? parsed.filterValues.releaseTag.join(',') : undefined,
+            from_date: parsed.filterValues.fromDate ? parsed.filterValues.fromDate.toISOString().split('T')[0] : undefined,
+            to_date: parsed.filterValues.toDate ? parsed.filterValues.toDate.toISOString().split('T')[0] : undefined,
+            batch_id: parsed.filterValues.batchId ? Number(parsed.filterValues.batchId) : undefined,
+            user_id: parsed.filterValues.showMyAnnotations && user?.id ? user.id.toString() : undefined,
+            task1_status: parsed.filterValues.taskStatuses?.task1 === 'all' ? undefined : parsed.filterValues.taskStatuses.task1,
+            task2_status: parsed.filterValues.taskStatuses?.task2 === 'all' ? undefined : parsed.filterValues.taskStatuses.task2,
+            task3_status: parsed.filterValues.taskStatuses?.task3 === 'all' ? undefined : parsed.filterValues.taskStatuses.task3,
+            page: currentPage,
+            per_page: currentPerPage,
+            forceRefresh: false
+          }));
+          
+          // Re-enable effects after a longer delay
+          setTimeout(() => {
+            setIsInitializing(false);
+            isUpdatingFromUrlRef.current = false;
+          }, 500); // ← LONGER DELAY
+        }
+      } catch (error) {
+        console.error('Failed to parse saved filters:', error);
+      }
+    }
+  }
+}, [isAuthenticated, location.search, user?.id, isMounted, pagination.page, pagination.per_page, dispatch]);
+
+
+// SAVE filters (including pagination)
+useEffect(() => {
+  if (!isMounted || isInitializing || isUpdatingFromUrlRef.current) return;
+  
+  const filtersToSave = {
+    filterValues,
+    searchQuery: debouncedSearchQuery,
+    pagination: {
+      page: pagination.page,
+      per_page: pagination.per_page
+    },
+    timestamp: Date.now()
+  };
+  
+  sessionStorage.setItem('discussions-filters', JSON.stringify(filtersToSave));
+  console.log('💾 Saved filters and pagination to sessionStorage');
+}, [filterValues, debouncedSearchQuery, pagination.page, pagination.per_page, isMounted, isInitializing]);
+
+
+
+const handleFilterChange = useCallback((newFilters: FilterValues) => {
+    if (isUpdatingFromUrlRef.current) {
+      console.log('⏭️ Ignoring filter change during URL update');
+      return;
+    }
+    
+    console.log('✅ Filter change received:', newFilters);
+    setFilterValues(newFilters);
+    dispatch(setPaginationParams({ page: 1 }));
+  }, [dispatch]);
 
   // Enhanced discussions with user annotation status
   const enhancedDiscussions = useMemo((): EnhancedDiscussion[] => {
@@ -275,41 +491,62 @@ const Discussions = () => {
     });
   }, [discussions, user, getUserAnnotationStatus]);
 
-  // CLEANED UP HANDLERS - ALL USE THE SAME FETCH FUNCTION
+  // OTHER HANDLERS - Direct dispatch to avoid cascading
   const handleSearchSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
     dispatch(setPaginationParams({ page: 1 }));
-    fetchDiscussionsWithParams();
-  }, [dispatch, fetchDiscussionsWithParams]);
-
-  const handleFilterChange = useCallback((newFilters: FilterValues) => {
-    console.log('[HANDLE FILTER CHANGE] Received newFilters:', newFilters);
-    setFilterValues(newFilters);
-    dispatch(setPaginationParams({ page: 1 }));
-    // fetchDiscussionsWithParams will be called by the useEffect when filterValues changes
-  }, [dispatch]);
+    fetchDiscussionsWithCurrentState();
+  }, [dispatch, fetchDiscussionsWithCurrentState]);
 
   const handlePageChange = useCallback((newPage: number) => {
     dispatch(setPaginationParams({ page: newPage }));
-    fetchDiscussionsWithParams({ page: newPage });
-  }, [dispatch, fetchDiscussionsWithParams]);
+    const params = {
+      status: filterValues.status === 'all' ? undefined : filterValues.status,
+      search: debouncedSearchQuery.trim() || undefined,
+      repository_language: filterValues.repositoryLanguage.length > 0 ? filterValues.repositoryLanguage.join(',') : undefined,
+      release_tag: filterValues.releaseTag.length > 0 ? filterValues.releaseTag.join(',') : undefined,
+      from_date: filterValues.fromDate ? filterValues.fromDate.toISOString().split('T')[0] : undefined,
+      to_date: filterValues.toDate ? filterValues.toDate.toISOString().split('T')[0] : undefined,
+      batch_id: filterValues.batchId ? Number(filterValues.batchId) : undefined,
+      user_id: filterValues.showMyAnnotations && user?.id ? user.id.toString() : undefined,
+      task1_status: filterValues.taskStatuses.task1 === 'all' ? undefined : filterValues.taskStatuses.task1,
+      task2_status: filterValues.taskStatuses.task2 === 'all' ? undefined : filterValues.taskStatuses.task2,
+      task3_status: filterValues.taskStatuses.task3 === 'all' ? undefined : filterValues.taskStatuses.task3,
+      page: newPage,
+      per_page: pagination.per_page,
+      forceRefresh: false
+    };
+    dispatch(fetchDiscussions(params));
+  }, [filterValues, debouncedSearchQuery, user?.id, pagination.per_page, dispatch]);
 
   const handlePerPageChange = useCallback((newPerPage: number) => {
     dispatch(setPaginationParams({ page: 1, per_page: newPerPage }));
-    fetchDiscussionsWithParams({ page: 1, per_page: newPerPage });
-  }, [dispatch, fetchDiscussionsWithParams]);
+    const params = {
+      status: filterValues.status === 'all' ? undefined : filterValues.status,
+      search: debouncedSearchQuery.trim() || undefined,
+      repository_language: filterValues.repositoryLanguage.length > 0 ? filterValues.repositoryLanguage.join(',') : undefined,
+      release_tag: filterValues.releaseTag.length > 0 ? filterValues.releaseTag.join(',') : undefined,
+      from_date: filterValues.fromDate ? filterValues.fromDate.toISOString().split('T')[0] : undefined,
+      to_date: filterValues.toDate ? filterValues.toDate.toISOString().split('T')[0] : undefined,
+      batch_id: filterValues.batchId ? Number(filterValues.batchId) : undefined,
+      user_id: filterValues.showMyAnnotations && user?.id ? user.id.toString() : undefined,
+      task1_status: filterValues.taskStatuses.task1 === 'all' ? undefined : filterValues.taskStatuses.task1,
+      task2_status: filterValues.taskStatuses.task2 === 'all' ? undefined : filterValues.taskStatuses.task2,
+      task3_status: filterValues.taskStatuses.task3 === 'all' ? undefined : filterValues.taskStatuses.task3,
+      page: 1,
+      per_page: newPerPage,
+      forceRefresh: false
+    };
+    dispatch(fetchDiscussions(params));
+  }, [filterValues, debouncedSearchQuery, user?.id, dispatch]);
 
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
-    // Debounced search will be handled by useEffect
   }, []);
 
   const handleRetry = useCallback(() => {
-    fetchDiscussionsWithParams({ 
-      page: pagination.page,
-      per_page: pagination.per_page 
-    });
-  }, [fetchDiscussionsWithParams, pagination.page, pagination.per_page]);
+    fetchDiscussionsWithCurrentState();
+  }, [fetchDiscussionsWithCurrentState]);
 
   const handleClearFilters = useCallback(() => {
     setSearchQuery('');
@@ -320,20 +557,15 @@ const Discussions = () => {
       releaseTag: [],
       fromDate: undefined,
       toDate: undefined,
-      batchId: ''
+      batchId: '',
+      taskStatuses: {
+        task1: 'all',
+        task2: 'all',
+        task3: 'all'
+      }
     });
     dispatch(setPaginationParams({ page: 1 }));
-    
-    // Use direct dispatch for clear filters since we're clearing everything
     dispatch(fetchDiscussions({
-      status: undefined,
-      search: undefined,
-      repository_language: undefined,
-      release_tag: undefined,
-      from_date: undefined,
-      to_date: undefined,
-      batch_id: undefined,
-      user_id: undefined,
       page: 1,
       per_page: pagination.per_page,
       forceRefresh: true
@@ -472,9 +704,9 @@ const Discussions = () => {
 
   // Early returns for loading states
   if (!isAuthenticated) {
-    return null; // Will redirect in useEffect
+    return null;
   }
-
+  
   if (error) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col">

@@ -135,11 +135,21 @@ def get_all_discussions(
         to_date: Optional[str] = None,              # ISO date string
         batch_id: Optional[int] = None,
         user_id: Optional[str] = None,
+        task1_status: Optional[str] = None,         # ADD THIS
+        task2_status: Optional[str] = None,         # ADD THIS
+        task3_status: Optional[str] = None,         # ADD THIS
         page: int = Query(1, ge=1, description="Page number, starting from 1"),
         per_page: int = Query(10, ge=1, le=100, description="Items per page (1-100)"),
         db: Session = Depends(get_db)
 ):
     try:
+        # Build filter parameters
+ 
+        logger.info(f"ENDPOINT DEBUG - Received parameters:")
+        logger.info(f"  task1_status: {task1_status}")
+        logger.info(f"  task2_status: {task2_status}")
+        logger.info(f"  task3_status: {task3_status}")
+        
         # Build filter parameters
         filters = {
             'status': status,
@@ -149,9 +159,15 @@ def get_all_discussions(
             'from_date': from_date,
             'to_date': to_date,
             'batch_id': batch_id,
-            'user_id': user_id
+            'user_id': user_id,
+            'task1_status': task1_status,
+            'task2_status': task2_status,
+            'task3_status': task3_status
         }
         
+        # ADD THIS DEBUG LOGGING:
+        logger.info(f"ENDPOINT DEBUG - Built filters dict:")
+        logger.info(f"  {filters}")
         # Calculate offset
         offset = (page - 1) * per_page
         
@@ -178,7 +194,6 @@ def get_all_discussions(
     except Exception as e:
         logger.error(f"Error in get_all_discussions: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
-
 
 
 @app.get("/api/discussions/{discussion_id}", response_model=schemas.Discussion)

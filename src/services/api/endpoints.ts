@@ -31,6 +31,9 @@ interface EnhancedDiscussionQueryParams {
   page?: number;
   per_page?: number;
   user_id?: string;
+  task1_status?: string;
+  task2_status?: string;
+  task3_status?: string;
 }
 
 interface FilterOptionsResponse {
@@ -421,6 +424,9 @@ export const api = {
       if (params.page) queryParams.append('page', params.page.toString());
       if (params.per_page) queryParams.append('per_page', params.per_page.toString());
       if (params.user_id) queryParams.append('user_id', params.user_id); // ← ADD THIS LINE
+      if (params.task1_status) queryParams.append('task1_status', params.task1_status);
+      if (params.task2_status) queryParams.append('task2_status', params.task2_status);
+      if (params.task3_status) queryParams.append('task3_status', params.task3_status);
       const url = `/api/discussions${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
       
       return safeApiRequest<PaginatedDiscussionsResponse>(

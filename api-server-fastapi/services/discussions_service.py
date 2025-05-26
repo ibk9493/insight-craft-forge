@@ -349,8 +349,8 @@ def get_filter_options(db: Session) -> Dict:
         try:
             # First try to get from Batch model if it exists
             try:
-                if hasattr(models, 'Batch'):
-                    batches = db.query(models.Batch.id, models.Batch.name).all()
+                if hasattr(models, 'BatchUpload'):
+                    batches = db.query(models.BatchUpload.id, models.BatchUpload.name).all()
                     result['batches'] = [{'id': batch.id, 'name': batch.name} for batch in batches]
                     logger.info(f"Found {len(result['batches'])} batches from Batch model")
                 else:
@@ -447,6 +447,7 @@ def _apply_filters(query, filters: Dict, db: Session):
                 models.Discussion.batch_id.ilike(search_term)
             )
         )
+    
     if filters.get('user_id'):
         user_id = filters['user_id']
         
@@ -460,6 +461,7 @@ def _apply_filters(query, filters: Dict, db: Session):
         )
         
         logger.info(f"Filtered to discussions annotated by user {user_id}")
+    
     # Repository language filter
     if filters.get('repository_language'):
         query = query.filter(
@@ -491,6 +493,47 @@ def _apply_filters(query, filters: Dict, db: Session):
     if filters.get('batch_id'):
         query = query.filter(models.Discussion.batch_id == filters['batch_id'])
     
+    # FIXED TASK STATUS FILTERS - Use EXISTS instead of IN:
+    
+    # Task 1 status filter
+    if filters.get('task1_status') and filters['task1_status'] in ['locked', 'unlocked', 'completed']:
+        query = query.filter(
+            db.query(models.discussion_task_association).filter(
+                and_(
+                    models.discussion_task_association.c.discussion_id == models.Discussion.id,
+                    models.discussion_task_association.c.task_number == 1,
+                    models.discussion_task_association.c.status == filters['task1_status']
+                )
+            ).exists()
+        )
+    
+    # Task 2 status filter
+    if filters.get('task2_status') and filters['task2_status'] in ['locked', 'unlocked', 'completed']:
+        query = query.filter(
+            db.query(models.discussion_task_association).filter(
+                and_(
+                    models.discussion_task_association.c.discussion_id == models.Discussion.id,
+                    models.discussion_task_association.c.task_number == 2,
+                    models.discussion_task_association.c.status == filters['task2_status']
+                )
+            ).exists()
+        )
+    
+    # Task 3 status filter
+    if filters.get('task3_status') and filters['task3_status'] in ['locked', 'unlocked', 'completed']:
+        query = query.filter(
+            db.query(models.discussion_task_association).filter(
+                and_(
+                    models.discussion_task_association.c.discussion_id == models.Discussion.id,
+                    models.discussion_task_association.c.task_number == 3,
+                    models.discussion_task_association.c.status == filters['task3_status']
+                )
+            ).exists()
+        )
+    if any(filters.get(f'task{i}_status') for i in [1,2,3]):
+        logger.info(f"DEBUGGING: Applied task filters: {filters}")
+        logger.info(f"DEBUGGING: Final query SQL: {str(query)}")
+
     return query
 
 def get_discussions_count(db: Session, filters: Dict = None) -> int:
@@ -627,93 +670,133 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
                     discussion_id = generate_discussion_id(repository, disc.url)
                     logger.info(f"Generated discussion ID: {discussion_id}")
                 
-                # Check if discussion already exists
-                existing = db.query(models.Discussion).filter(models.Discussion.id == discussion_id).first()
-                if existing:
-                    errors.append(f"Discussion with ID {discussion_id} already exists")
-                    logger.warning(f"Discussion with ID {discussion_id} already exists")
-                    continue
-                
                 # Get title if not provided
                 title = disc.title
                 if not title:
                     title = fetch_discussion_title(disc.url)
                     logger.info(f"Generated discussion title: {title}")
                 
-                # Get repository language if possible
-                if disc.repository_language:
-                    language = disc.repository_language
-                else:
-                    language = None
+                # Get repository language if possible - handle both field names
+                language = getattr(disc, 'repository_language', None) or getattr(disc, 'lang', None)
                 
                 # Use batch_id from request or from the batch we created
                 discussion_batch_id = disc.batch_id or batch_id
                 
-                # Create new discussion with enhanced metadata
-                new_discussion = models.Discussion(
-                    id=discussion_id,
-                    title=title,
-                    url=disc.url,
-                    repository=repository,
-                    created_at=disc.created_at,
-                    repository_language=language,
-                    release_tag=disc.release_tag,
-                    release_url=disc.release_url,
-                    release_date=disc.release_date,
-                    batch_id=discussion_batch_id,
-                    question=getattr(disc, 'question', None),
-                    answer=getattr(disc, 'answer', None),
-                    category=getattr(disc, 'category', None),
-                    knowledge=getattr(disc, 'knowledge', None),
-                    code=getattr(disc, 'code', None)
-                )
-                db.add(new_discussion)
-                db.flush()  # Flush to get the ID
+                # Check if discussion already exists
+                existing = db.query(models.Discussion).filter(models.Discussion.id == discussion_id).first()
                 
-                # Add task associations
-                tasks = disc.tasks or {}
+                if existing:
+                    # UPDATE EXISTING DISCUSSION
+                    updated_fields = []
+                    
+                    if title and title != existing.title:
+                        existing.title = title
+                        updated_fields.append('title')
+                    if repository and repository != existing.repository:
+                        existing.repository = repository
+                        updated_fields.append('repository')
+                    if language and language != existing.repository_language:
+                        existing.repository_language = language
+                        updated_fields.append('repository_language')
+                    # Also check disc.repository_language if different from lang
+                    repo_lang = getattr(disc, 'repository_language', None)
+                    if repo_lang and repo_lang != existing.repository_language and repo_lang != language:
+                        existing.repository_language = repo_lang
+                        updated_fields.append('repository_language')
+                    if disc.release_tag and disc.release_tag != existing.release_tag:
+                        existing.release_tag = disc.release_tag
+                        updated_fields.append('release_tag')
+                    if disc.release_url and disc.release_url != existing.release_url:
+                        existing.release_url = disc.release_url
+                        updated_fields.append('release_url')
+                    if disc.release_date and disc.release_date != existing.release_date:
+                        existing.release_date = disc.release_date
+                        updated_fields.append('release_date')
+                    if disc.question and disc.question != existing.question:
+                        existing.question = disc.question
+                        updated_fields.append('question')
+                    if disc.answer and disc.answer != existing.answer:
+                        existing.answer = disc.answer
+                        updated_fields.append('answer')
+                    if disc.category and disc.category != existing.category:
+                        existing.category = disc.category
+                        updated_fields.append('category')
+                    if disc.knowledge and disc.knowledge != existing.knowledge:
+                        existing.knowledge = disc.knowledge
+                        updated_fields.append('knowledge')
+                    if disc.code and disc.code != existing.code:
+                        existing.code = disc.code
+                        updated_fields.append('code')
+                    if discussion_batch_id and discussion_batch_id != existing.batch_id:
+                        # Moving discussion to a different batch
+                        old_batch_id = existing.batch_id
+                        existing.batch_id = discussion_batch_id
+                        updated_fields.append('batch_id')
+                        
+                        # Update batch counts
+                        if old_batch_id:
+                            batch_service.decrement_discussion_count(db, old_batch_id)
+                        if discussion_batch_id:
+                            batch_service.increment_discussion_count(db, discussion_batch_id)
+
+                    if updated_fields:
+                        db.add(existing)
+                        discussions_added += 1
+                        logger.info(f"Updated discussion {discussion_id}, fields: {updated_fields}")
+                    else:
+                        logger.info(f"No changes detected for discussion {discussion_id}")
                 
-                db.execute(
-                    models.discussion_task_association.insert().values(
-                        discussion_id=new_discussion.id,
-                        task_number=1,
-                        status=tasks.get("task1", {}).get("status", "locked"),
-                        annotators=tasks.get("task1", {}).get("annotators", 0)
+                else:
+                    # CREATE NEW DISCUSSION
+                    new_discussion = models.Discussion(
+                        id=discussion_id,
+                        title=title,
+                        url=disc.url,
+                        repository=repository,
+                        created_at=getattr(disc, 'created_at', None) or getattr(disc, 'createdAt', None),
+                        repository_language=language,
+                        release_tag=disc.release_tag,
+                        release_url=disc.release_url,
+                        release_date=disc.release_date,
+                        batch_id=discussion_batch_id,
+                        question=getattr(disc, 'question', None),
+                        answer=getattr(disc, 'answer', None),
+                        category=getattr(disc, 'category', None),
+                        knowledge=getattr(disc, 'knowledge', None),
+                        code=getattr(disc, 'code', None)
                     )
-                )
+                    db.add(new_discussion)
+                    db.flush()  # Flush to get the ID
+                    
+                    # Add task associations for new discussion
+                    tasks = disc.tasks or {}
+                    
+                    for task_num in [1, 2, 3]:
+                        task_key = f"task{task_num}"
+                        db.execute(
+                            models.discussion_task_association.insert().values(
+                                discussion_id=new_discussion.id,
+                                task_number=task_num,
+                                status=tasks.get(task_key, {}).get("status", "locked"),
+                                annotators=tasks.get(task_key, {}).get("annotators", 0)
+                            )
+                        )
+                    
+                    # Update batch discussion count if we have a batch
+                    if discussion_batch_id:
+                        from services import batch_service
+                        batch_service.increment_discussion_count(db, discussion_batch_id)
+                    
+                    discussions_added += 1
+                    logger.info(f"Added new discussion: {discussion_id}")
                 
-                db.execute(
-                    models.discussion_task_association.insert().values(
-                        discussion_id=new_discussion.id,
-                        task_number=2,
-                        status=tasks.get("task2", {}).get("status", "locked"),
-                        annotators=tasks.get("task2", {}).get("annotators", 0)
-                    )
-                )
-                
-                db.execute(
-                    models.discussion_task_association.insert().values(
-                        discussion_id=new_discussion.id,
-                        task_number=3,
-                        status=tasks.get("task3", {}).get("status", "locked"),
-                        annotators=tasks.get("task3", {}).get("annotators", 0)
-                    )
-                )
-                
-                # Update batch discussion count if we have a batch
-                if discussion_batch_id:
-                    from services import batch_service
-                    batch_service.increment_discussion_count(db, discussion_batch_id)
-                
-                discussions_added += 1
-                logger.info(f"Added discussion: {discussion_id}")
             except Exception as e:
                 error_msg = f"Error processing discussion {getattr(disc, 'id', 'unknown')}: {str(e)}"
                 errors.append(error_msg)
                 logger.error(error_msg)
         
         db.commit()
-        logger.info(f"Successfully uploaded {discussions_added} discussions")
+        logger.info(f"Successfully processed {discussions_added} discussions")
         
         # Schedule background metadata fetching for discussions that need it
         try:
@@ -725,23 +808,24 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
                     discussion_id = generate_discussion_id(repository, disc.url)
                 
                 # Check if discussion needs metadata fetching
-                needs_metadata = (
-                    not disc.repository_language or 
-                    not disc.release_tag or 
-                    not disc.release_url or 
-                    not disc.release_date
-                )
+                missing_fields = {}
+                if not getattr(disc, 'repository_language', None) and not getattr(disc, 'lang', None):
+                    missing_fields['repository_language'] = None
+                if not getattr(disc, 'release_tag', None):
+                    missing_fields['release_tag'] = None
+                if not getattr(disc, 'release_url', None):
+                    missing_fields['release_url'] = None
+                if not getattr(disc, 'release_date', None):
+                    missing_fields['release_date'] = None
                 
-                if needs_metadata:
-                    discussions_for_metadata.append({
+                if missing_fields:
+                    metadata_entry = {
                         'id': discussion_id,
                         'url': disc.url,
-                        'repository_language': disc.repository_language,
-                        'release_tag': disc.release_tag,
-                        'release_url': disc.release_url,
-                        'release_date': disc.release_date,
-                        'created_at': disc.created_at
-                    })
+                        'created_at': getattr(disc, 'created_at', None) or getattr(disc, 'createdAt', None),
+                        'missing_fields': missing_fields
+                    }
+                    discussions_for_metadata.append(metadata_entry)
             
             if discussions_for_metadata:
                 logger.info(f"Scheduling background metadata fetch for {len(discussions_for_metadata)} discussions")
@@ -755,7 +839,7 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
         
         return schemas.UploadResult(
             success=True,
-            message=f"Successfully uploaded {discussions_added} discussions",
+            message=f"Successfully processed {discussions_added} discussions",
             discussions_added=discussions_added,
             batch_id=batch_id,
             errors=errors if errors else None
@@ -772,7 +856,6 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
             batch_id=batch_id,
             errors=[error_msg] + errors
         )
-
 def update_task_status(db: Session, discussion_id: str, task_id: int, status: str) -> schemas.TaskManagementResult:
     """
     Update the status of a specific task for a discussion.

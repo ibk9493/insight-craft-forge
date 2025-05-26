@@ -109,3 +109,12 @@ def update_batch(db: Session, batch_id: int, batch_data: schemas.BatchUploadCrea
     db.commit()
     db.refresh(db_batch)
     return db_batch
+
+def decrement_discussion_count(db: Session, batch_id: int):
+    """Decrement the discussion count for a batch"""
+    batch = db.query(models.BatchUpload).filter(models.BatchUpload.id == batch_id).first()
+    if batch and batch.discussion_count > 0:
+        batch.discussion_count -= 1
+        db.add(batch)
+        db.commit() 
+
