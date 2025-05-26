@@ -98,38 +98,85 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
   
-  // Load authorized users from API
-  const loadAuthorizedUsers = async () => {
-    // try {
-    //   // Use the API helper to get authorized users
-    //   const apiUsers = await api.auth.getAuthorizedUsers();
-    //
-    //   // Ensure we cast the roles to UserRole type
-    //   const typedUsers: AuthorizedUser[] = apiUsers.map((user) => ({
-    //     email: user.email,
-    //     role: user.role as UserRole
-    //   }));
-    //
-    //   setAuthorizedUsers(typedUsers);
-    //
-    //   // Cache in localStorage for offline use
-    //   localStorage.setItem(AUTH_CONFIG.STORAGE_KEYS.AUTHORIZED_USERS, JSON.stringify(typedUsers));
-    // } catch (error) {
-    //   console.error('Failed to load authorized users from API', error);
-    //
-    //   // Fall back to localStorage if API fails
-    //   const storedAuthorizedUsers = localStorage.getItem(AUTH_CONFIG.STORAGE_KEYS.AUTHORIZED_USERS);
-    //   if (storedAuthorizedUsers) {
-    //     try {
-    //       const parsedAuthorizedUsers = JSON.parse(storedAuthorizedUsers);
-    //       setAuthorizedUsers(parsedAuthorizedUsers);
-    //     } catch (error) {
-    //       console.error('Failed to parse authorized users from localStorage', error);
-    //       localStorage.removeItem(AUTH_CONFIG.STORAGE_KEYS.AUTHORIZED_USERS);
-    //     }
-    //   }
-    // }
-  };
+// Load authorized users from API - Bug-safe version
+const loadAuthorizedUsers = async () => {
+  // Safety check 1: Only admin users should load authorized users
+  if (!user || user.role !== 'admin') {
+    console.log('[UserContext] Not admin user, skipping authorized users load');
+    setAuthorizedUsers([]); // Clear any existing data
+    return;
+  }
+
+  try {
+    console.log('[UserContext] Loading authorized users from API...');
+    
+    // Use the API helper to get authorized users
+    const apiUsers = await api.auth.getAuthorizedUsers();
+    
+    // Safety check 2: Validate API response
+    if (!apiUsers) {
+      console.warn('[UserContext] API returned null/undefined');
+      return;
+    }
+    
+    if (!Array.isArray(apiUsers)) {
+      console.warn('[UserContext] API returned non-array:', typeof apiUsers);
+      return;
+    }
+    
+    console.log('[UserContext] API returned:', apiUsers.length, 'users');
+
+    // Safety check 3: Validate each user object
+    const typedUsers: AuthorizedUser[] = apiUsers
+      .filter(user => user && user.email && user.role) // Filter out invalid users
+      .map((user) => ({
+        email: user.email,
+        role: user.role as UserRole
+      }));
+
+    setAuthorizedUsers(typedUsers);
+    console.log('[UserContext] Successfully set', typedUsers.length, 'authorized users');
+
+    // Cache in localStorage for offline use
+    if (AUTH_CONFIG?.STORAGE_KEYS?.AUTHORIZED_USERS) {
+      localStorage.setItem(AUTH_CONFIG.STORAGE_KEYS.AUTHORIZED_USERS, JSON.stringify(typedUsers));
+    }
+    
+  } catch (error) {
+    console.error('[UserContext] Failed to load authorized users from API:', error);
+
+    // Safety check 4: Don't crash the app, gracefully handle errors
+    if (error?.response?.status === 403) {
+      console.warn('[UserContext] Access denied - user may not be admin');
+      setAuthorizedUsers([]); // Clear any existing data
+      return;
+    }
+
+    // Fall back to localStorage if API fails (but not for auth errors)
+    try {
+      const storageKey = AUTH_CONFIG?.STORAGE_KEYS?.AUTHORIZED_USERS;
+      if (!storageKey) {
+        console.warn('[UserContext] No storage key configured');
+        return;
+      }
+      
+      const storedAuthorizedUsers = localStorage.getItem(storageKey);
+      if (storedAuthorizedUsers) {
+        const parsedAuthorizedUsers = JSON.parse(storedAuthorizedUsers);
+        if (Array.isArray(parsedAuthorizedUsers)) {
+          setAuthorizedUsers(parsedAuthorizedUsers);
+          console.log('[UserContext] Loaded from localStorage:', parsedAuthorizedUsers.length, 'users');
+        }
+      }
+    } catch (parseError) {
+      console.error('[UserContext] Failed to parse localStorage data:', parseError);
+      // Clear corrupted data
+      if (AUTH_CONFIG?.STORAGE_KEYS?.AUTHORIZED_USERS) {
+        localStorage.removeItem(AUTH_CONFIG.STORAGE_KEYS.AUTHORIZED_USERS);
+      }
+    }
+  }
+};
 
   // Login function using the API helper
   const login = async (email: string, password: string): Promise<boolean> => {

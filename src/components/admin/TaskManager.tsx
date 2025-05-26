@@ -1,9 +1,7 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Card, 
   CardContent, 
-  CardFooter, 
   CardHeader, 
   CardTitle 
 } from '@/components/ui/card';
@@ -23,24 +21,99 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { api, Discussion, TaskStatus } from '@/services/api';
-import { Lock, LockOpen, Check } from 'lucide-react';
+import { 
+  Lock, 
+  LockOpen, 
+  Check, 
+  Search, 
+  RefreshCw, 
+  ChevronLeft, 
+  ChevronRight,
+  Settings,
+  AlertCircle
+} from 'lucide-react';
 
-interface TaskManagerProps {
-  discussions: Discussion[];
-  onTaskUpdated: (discussion: Discussion) => void;
-}
-
-const TaskManager: React.FC<TaskManagerProps> = ({ discussions, onTaskUpdated }) => {
+// No more props needed - TaskManager is fully independent!
+const TaskManager: React.FC = () => {
+  const [discussions, setDiscussions] = useState<Discussion[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
-  const [discussionsState, setDiscussionsState] = useState<Discussion[]>([]);
   
-  // Initialize local state with props
+  // Search and pagination state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(20);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalDiscussions, setTotalDiscussions] = useState(0);
+  
+  // Filter state
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  // Debounced search
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+  
   useEffect(() => {
-    setDiscussionsState(discussions);
-  }, [discussions]);
-  
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Fetch discussions with current filters/search/pagination
+  const fetchDiscussions = useCallback(async (resetPage = false) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const page = resetPage ? 1 : currentPage;
+      
+      const params = {
+        page,
+        per_page: perPage,
+        search: debouncedSearchQuery.trim() || undefined,
+        status: statusFilter === 'all' ? undefined : statusFilter,
+      };
+      
+      console.log('Fetching discussions for TaskManager:', params);
+      
+      const response = await api.discussions.getAll(params);
+      
+      setDiscussions(response.items || []);
+      setTotalPages(response.pages || 1);
+      setTotalDiscussions(response.total || 0);
+      
+      if (resetPage) {
+        setCurrentPage(1);
+      }
+      
+      console.log(`Loaded ${response.items?.length || 0} discussions (page ${page}/${response.pages || 1})`);
+      
+    } catch (error) {
+      console.error('Error fetching discussions:', error);
+      setError('Failed to load discussions');
+      toast.error('Failed to load discussions');
+    } finally {
+      setLoading(false);
+    }
+  }, [currentPage, perPage, debouncedSearchQuery, statusFilter]);
+
+  // Initial load and refresh when filters change
+  useEffect(() => {
+    fetchDiscussions(true); // Reset to page 1 when filters change
+  }, [debouncedSearchQuery, statusFilter, perPage]);
+
+  // Fetch when page changes (but don't reset page)
+  useEffect(() => {
+    if (currentPage > 1) {
+      fetchDiscussions(false);
+    }
+  }, [currentPage]);
+
   // Helper function to get status icon
   const getStatusIcon = (status: TaskStatus) => {
     switch (status) {
@@ -52,48 +125,31 @@ const TaskManager: React.FC<TaskManagerProps> = ({ discussions, onTaskUpdated })
         return <Check className="w-4 h-4 text-green-500" />;
     }
   };
-  
-  // Helper function to get status text color
-  const getStatusTextClass = (status: TaskStatus) => {
-    switch (status) {
-      case 'locked':
-        return "text-gray-500";
-      case 'unlocked':
-        return "text-blue-500";
-      case 'completed':
-        return "text-green-500";
-    }
-  };
-  
+
   // Function to update task status
   const updateTaskStatus = async (discussionId: string, taskId: number, status: TaskStatus) => {
     const updateKey = `${discussionId}-${taskId}`;
     setIsUpdating(updateKey);
     
     try {
-      // Log the data being sent for debugging
-      console.log('Sending task update request:', {
-        discussionId,
-        taskId,
-        status
-      });
+      console.log('🔄 Updating task status:', { discussionId, taskId, status });
       
       const result = await api.admin.updateTaskStatus(discussionId, taskId, status);
       
       if (result.success && result.discussion) {
         toast.success(result.message || 'Task status updated successfully');
         
-        // Update local state immediately
-        setDiscussionsState(prevDiscussions => 
+        // Update the local discussion in the current list
+        setDiscussions(prevDiscussions => 
           prevDiscussions.map(disc => 
             disc.id === discussionId ? result.discussion : disc
           )
         );
         
-        // Also notify parent component
-        onTaskUpdated(result.discussion);
+        console.log('Task status updated successfully');
       } else {
         toast.error(result.message || 'Failed to update task status');
+        console.error('Task update failed:', result.message);
       }
     } catch (error) {
       console.error('Error updating task status:', error);
@@ -103,11 +159,123 @@ const TaskManager: React.FC<TaskManagerProps> = ({ discussions, onTaskUpdated })
     }
   };
 
+  // Handle search form submission
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Search will be triggered by useEffect when debouncedSearchQuery changes
+  };
+
+  // Handle page navigation
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
+  };
+
+  // Handle per page change
+  const handlePerPageChange = (newPerPage: number) => {
+    setPerPage(newPerPage);
+    setCurrentPage(1); // Reset to first page
+  };
+
+  // Refresh data
+  const handleRefresh = () => {
+    fetchDiscussions();
+  };
+
+  if (error && !discussions.length) {
+    return (
+      <Card className="w-full shadow-md">
+        <CardContent className="pt-6">
+          <div className="text-center space-y-4">
+            <AlertCircle className="h-12 w-12 text-red-500 mx-auto" />
+            <h3 className="text-lg font-medium text-red-600">Error Loading Discussions</h3>
+            <p className="text-gray-600">{error}</p>
+            <Button onClick={handleRefresh}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className="w-full shadow-md">
       <CardHeader>
-        <CardTitle>Task Management</CardTitle>
+        <div className="flex flex-col space-y-4">
+          <div className="flex justify-between items-center">
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Task Management
+            </CardTitle>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleRefresh}
+              disabled={loading}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
+
+          {/* Search and Filters */}
+          <div className="flex flex-col sm:flex-row gap-4">
+            <form onSubmit={handleSearchSubmit} className="flex gap-2 flex-1">
+              <div className="relative flex-1">
+                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  type="text"
+                  placeholder="Search discussions by title or repository..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-8"
+                />
+              </div>
+              <Button type="submit" variant="outline" disabled={loading}>
+                Search
+              </Button>
+            </form>
+
+            <div className="flex gap-2">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="locked">Locked</SelectItem>
+                  <SelectItem value="unlocked">Unlocked</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={perPage.toString()} onValueChange={(value) => handlePerPageChange(Number(value))}>
+                <SelectTrigger className="w-[100px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="20">20</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Status Info */}
+          <div className="text-sm text-gray-500">
+            Showing {discussions.length} of {totalDiscussions} discussions 
+            {searchQuery && ` (filtered by "${searchQuery}")`}
+            {statusFilter !== 'all' && ` (${statusFilter} tasks only)`}
+            • Page {currentPage} of {totalPages}
+          </div>
+        </div>
       </CardHeader>
+
       <CardContent>
         <div className="overflow-x-auto">
           <Table>
@@ -122,17 +290,32 @@ const TaskManager: React.FC<TaskManagerProps> = ({ discussions, onTaskUpdated })
               </TableRow>
             </TableHeader>
             <TableBody>
-              {discussionsState.length === 0 ? (
+              {loading && discussions.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-8">
+                    <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />
+                    <p className="text-gray-500">Loading discussions...</p>
+                  </TableCell>
+                </TableRow>
+              ) : discussions.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-8 text-gray-500">
-                    No discussions available
+                    No discussions found
+                    {searchQuery && (
+                      <p className="mt-2 text-sm">
+                        Try adjusting your search term or filters
+                      </p>
+                    )}
                   </TableCell>
                 </TableRow>
               ) : (
-                discussionsState.map((discussion) => (
+                discussions.map((discussion) => (
                   <TableRow key={discussion.id}>
                     <TableCell className="font-medium max-w-[200px] truncate">
                       {discussion.title}
+                      {isUpdating?.includes(discussion.id) && (
+                        <RefreshCw className="inline w-3 h-3 ml-2 animate-spin text-blue-500" />
+                      )}
                     </TableCell>
                     <TableCell>{discussion.repository}</TableCell>
                     
@@ -147,7 +330,7 @@ const TaskManager: React.FC<TaskManagerProps> = ({ discussions, onTaskUpdated })
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="locked" className="flex items-center">
+                          <SelectItem value="locked">
                             <div className="flex items-center">
                               <Lock className="w-4 h-4 mr-2 text-gray-500" />
                               <span>Locked</span>
@@ -250,6 +433,72 @@ const TaskManager: React.FC<TaskManagerProps> = ({ discussions, onTaskUpdated })
             </TableBody>
           </Table>
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex justify-center items-center gap-2 mt-6">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(1)}
+              disabled={currentPage <= 1 || loading}
+            >
+              First
+            </Button>
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage <= 1 || loading}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </Button>
+            
+            <div className="flex items-center gap-1">
+              {/* Show page numbers around current page */}
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                const startPage = Math.max(1, currentPage - 2);
+                const pageNum = startPage + i;
+                
+                if (pageNum > totalPages) return null;
+                
+                return (
+                  <Button
+                    key={pageNum}
+                    variant={pageNum === currentPage ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handlePageChange(pageNum)}
+                    disabled={loading}
+                    className="w-10 h-8"
+                  >
+                    {pageNum}
+                  </Button>
+                );
+              })}
+            </div>
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage >= totalPages || loading}
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(totalPages)}
+              disabled={currentPage >= totalPages || loading}
+            >
+              Last
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -10,6 +10,8 @@ import logging
 from typing import List, Optional, Tuple, Dict, Any
 from contextlib import contextmanager
 from services.github_metadata_service import schedule_metadata_fetch
+from sqlalchemy import func, and_, or_
+from sqlalchemy.orm import joinedload
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -50,182 +52,7 @@ def validate_discussion_data(discussion: schemas.GitHubDiscussion) -> None:
         raise ValidationError("Discussion URL must start with https://")
     
     # Add more validation rules as needed
-
-# Add this function to get total count
-def get_discussions_count(db: Session, status: Optional[str] = None) -> int:
-    """
-    Get the total count of discussions, optionally filtered by task status.
-    
-    Parameters:
-    - db: Database session
-    - status: Optional filter for task status ('locked', 'unlocked', 'completed')
-    
-    Returns:
-    - Total count of discussions matching the filter
-    """
-    try:
-        logger.info(f"Counting discussions with status: {status}")
-        
-        if not status:
-            # Return total count of all discussions
-            count = db.query(models.Discussion).count()
-            logger.info(f"Total discussions count: {count}")
-            return count
-        
-        # For status-based filtering, we need to count discussions that match the criteria
-        valid_statuses = ['completed', 'unlocked', 'locked']
-        if status not in valid_statuses:
-            logger.warning(f"Invalid status filter: {status}")
-            return 0
-        
-        all_discussions = db.query(models.Discussion).all()
-        matching_count = 0
-        
-        for discussion in all_discussions:
-            task_assocs = db.query(models.discussion_task_association).filter(
-                models.discussion_task_association.c.discussion_id == discussion.id
-            ).all()
-            
-            if status == 'completed':
-                if all(task.status == 'completed' for task in task_assocs):
-                    matching_count += 1
-            elif status == 'unlocked':
-                if any(task.status == 'unlocked' for task in task_assocs):
-                    matching_count += 1
-            elif status == 'locked':
-                if all(task.status == 'locked' for task in task_assocs):
-                    matching_count += 1
-        
-        logger.info(f"Found {matching_count} discussions with status: {status}")
-        return matching_count
-        
-    except exc.SQLAlchemyError as e:
-        logger.error(f"Database error in get_discussions_count: {str(e)}")
-        raise DatabaseError(f"Failed to count discussions: {str(e)}")
-    except Exception as e:
-        logger.error(f"Error counting discussions: {str(e)}")
-        return 0
-
-# Update the existing get_discussions function signature and add pagination support
-def get_discussions(db: Session, status: Optional[str] = None, limit: int = 10, offset: int = 0) -> List[schemas.Discussion]:
-    """
-    Retrieve discussions from the database, optionally filtered by task status, with pagination support.
-    
-    Parameters:
-    - db: Database session
-    - status: Optional filter for task status ('locked', 'unlocked', 'completed')
-    - limit: Maximum number of discussions to return
-    - offset: Number of discussions to skip
-    
-    Returns:
-    - List of Discussion objects
-    """
-    try:
-        logger.info(f"Fetching discussions with status: {status}, limit: {limit}, offset: {offset}")
-        query = db.query(models.Discussion)
-        
-        if status:
-            valid_statuses = ['completed', 'unlocked', 'locked']
-            if status not in valid_statuses:
-                logger.warning(f"Invalid status filter: {status}")
-                return []
-                
-            # Get discussions based on task status with pagination
-            if status == 'completed':
-                # All tasks should be completed
-                completed_discussions = []
-                all_discussions = query.all()  # We still need all to filter by status
-                
-                for discussion in all_discussions:
-                    task_assocs = db.query(models.discussion_task_association).filter(
-                        models.discussion_task_association.c.discussion_id == discussion.id
-                    ).all()
-                    
-                    all_completed = all(task.status == 'completed' for task in task_assocs)
-                    if all_completed:
-                        completed_discussions.append(discussion)
-                
-                # Apply pagination to the filtered results
-                paginated_discussions = completed_discussions[offset:offset + limit]
-                logger.info(f"Found {len(completed_discussions)} completed discussions, returning {len(paginated_discussions)} after pagination")
-                
-                discussions_with_tasks = []
-                for disc in paginated_discussions:
-                    discussion = get_discussion_by_id(db, disc.id)
-                    if discussion:
-                        discussions_with_tasks.append(discussion)
-                return discussions_with_tasks
-                
-            elif status == 'unlocked':
-                # At least one task should be unlocked
-                unlocked_discussions = []
-                all_discussions = query.all()
-                
-                for discussion in all_discussions:
-                    task_assocs = db.query(models.discussion_task_association).filter(
-                        models.discussion_task_association.c.discussion_id == discussion.id
-                    ).all()
-                    
-                    has_unlocked = any(task.status == 'unlocked' for task in task_assocs)
-                    if has_unlocked:
-                        unlocked_discussions.append(discussion)
-                
-                # Apply pagination to the filtered results
-                paginated_discussions = unlocked_discussions[offset:offset + limit]
-                logger.info(f"Found {len(unlocked_discussions)} unlocked discussions, returning {len(paginated_discussions)} after pagination")
-                
-                discussions_with_tasks = []
-                for disc in paginated_discussions:
-                    discussion = get_discussion_by_id(db, disc.id)
-                    if discussion:
-                        discussions_with_tasks.append(discussion)
-                return discussions_with_tasks
-                
-            elif status == 'locked':
-                # All tasks should be locked
-                locked_discussions = []
-                all_discussions = query.all()
-                
-                for discussion in all_discussions:
-                    task_assocs = db.query(models.discussion_task_association).filter(
-                        models.discussion_task_association.c.discussion_id == discussion.id
-                    ).all()
-                    
-                    all_locked = all(task.status == 'locked' for task in task_assocs)
-                    if all_locked:
-                        locked_discussions.append(discussion)
-                
-                # Apply pagination to the filtered results
-                paginated_discussions = locked_discussions[offset:offset + limit]
-                logger.info(f"Found {len(locked_discussions)} locked discussions, returning {len(paginated_discussions)} after pagination")
-                
-                discussions_with_tasks = []
-                for disc in paginated_discussions:
-                    discussion = get_discussion_by_id(db, disc.id)
-                    if discussion:
-                        discussions_with_tasks.append(discussion)
-                return discussions_with_tasks
-        
-        # If no status filter, apply pagination directly to the query
-        paginated_discussions = query.offset(offset).limit(limit).all()
-        result = []
-        logger.info(f"Found {len(paginated_discussions)} discussions after pagination")
-        
-        # Add tasks information to each discussion
-        for disc in paginated_discussions:
-            discussion_with_tasks = get_discussion_by_id(db, disc.id)
-            if discussion_with_tasks:
-                result.append(discussion_with_tasks)
-        
-        return result
-    except exc.SQLAlchemyError as e:
-        logger.error(f"Database error in get_discussions: {str(e)}")
-        raise DatabaseError(f"Failed to retrieve discussions: {str(e)}")
-    except Exception as e:
-        logger.error(f"Error fetching discussions: {str(e)}")
-        # Return empty list when error occurs
-        return []
-    
+   
 def _get_discussions_with_status(db: Session, status_name: str, filter_func) -> List[schemas.Discussion]:
     """
     Helper function to get discussions filtered by a task status condition.
@@ -385,7 +212,313 @@ def get_discussion_by_id(db: Session, discussion_id: str) -> Optional[schemas.Di
         logger.error(f"Error fetching discussion {discussion_id}: {str(e)}")
         return None
     
+
+
+def get_discussions(db: Session, filters: Dict = None, limit: int = 10, offset: int = 0) -> List[schemas.Discussion]:
+    """
+    Retrieve discussions with enhanced filtering.
+    """
+    try:
+        if not filters:
+            filters = {}
+            
+        logger.info(f"Fetching discussions with filters: {filters}, limit: {limit}, offset: {offset}")
+        
+        # Start with base query (remove the joinedload for now)
+        query = db.query(models.Discussion)
+        
+        # Apply filters
+        query = _apply_filters(query, filters, db)
+        
+        # Apply pagination
+        discussions = query.offset(offset).limit(limit).all()
+        
+        # Convert to schemas using the existing get_discussion_by_id method
+        result = []
+        for db_discussion in discussions:
+            discussion_schema = get_discussion_by_id(db, db_discussion.id)
+            if discussion_schema:
+                result.append(discussion_schema)
+        
+        logger.info(f"Found {len(result)} discussions after filtering and pagination")
+        return result
+        
+    except exc.SQLAlchemyError as e:
+        logger.error(f"Database error in get_discussions: {str(e)}")
+        raise DatabaseError(f"Failed to retrieve discussions: {str(e)}")
+
+def _build_status_filter_query(db: Session, status: str):
+    """
+    Helper function to build the status filter subquery.
+    Returns a subquery of discussion IDs that match the status criteria.
+    """
+    if status == 'completed':
+        # Discussions where ALL tasks are completed
+        # Get discussions where all task associations have status 'completed'
+        discussions_with_incomplete = db.query(models.discussion_task_association.c.discussion_id).filter(
+            models.discussion_task_association.c.status != 'completed'
+        ).distinct()
+        
+        # Get all discussions that have task associations
+        discussions_with_tasks = db.query(models.discussion_task_association.c.discussion_id).distinct()
+        
+        # Return discussions that have tasks but none are incomplete
+        completed_discussions = db.query(models.discussion_task_association.c.discussion_id).filter(
+            models.discussion_task_association.c.discussion_id.in_(discussions_with_tasks),
+            ~models.discussion_task_association.c.discussion_id.in_(discussions_with_incomplete)
+        ).distinct()
+        
+        return completed_discussions
+        
+    elif status == 'unlocked':
+        # Discussions that have at least one unlocked task
+        unlocked_discussions = db.query(models.discussion_task_association.c.discussion_id).filter(
+            models.discussion_task_association.c.status == 'unlocked'
+        ).distinct()
+        
+        return unlocked_discussions
+        
+    elif status == 'locked':
+        # Discussions where ALL tasks are locked
+        discussions_with_non_locked = db.query(models.discussion_task_association.c.discussion_id).filter(
+            models.discussion_task_association.c.status != 'locked'
+        ).distinct()
+        
+        # Get all discussions that have task associations
+        discussions_with_tasks = db.query(models.discussion_task_association.c.discussion_id).distinct()
+        
+        # Return discussions that have tasks but none are non-locked
+        locked_discussions = db.query(models.discussion_task_association.c.discussion_id).filter(
+            models.discussion_task_association.c.discussion_id.in_(discussions_with_tasks),
+            ~models.discussion_task_association.c.discussion_id.in_(discussions_with_non_locked)
+        ).distinct()
+        
+        return locked_discussions
     
+    return None
+
+def get_filter_options(db: Session) -> Dict:
+    """
+    Get all available filter options from the database.
+    """
+    try:
+        logger.info("Starting to fetch filter options")
+        
+        # Initialize result with defaults
+        result = {
+            'repository_languages': [],
+            'release_tags': [],
+            'batches': [],
+            'date_range': {
+                'min_date': None,
+                'max_date': None
+            }
+        }
+        
+        # Get all unique repository languages
+        try:
+            languages_query = db.query(models.Discussion.repository_language).filter(
+                models.Discussion.repository_language.isnot(None),
+                models.Discussion.repository_language != ''
+            ).distinct()
+            
+            languages = languages_query.all()
+            result['repository_languages'] = sorted([lang[0] for lang in languages if lang[0] and lang[0].strip()])
+            logger.info(f"Found {len(result['repository_languages'])} unique languages")
+            
+        except Exception as e:
+            logger.error(f"Error fetching repository languages: {str(e)}")
+            result['repository_languages'] = []
+        
+        # Get all unique release tags
+        try:
+            tags_query = db.query(models.Discussion.release_tag).filter(
+                models.Discussion.release_tag.isnot(None),
+                models.Discussion.release_tag != ''
+            ).distinct()
+            
+            tags = tags_query.all()
+            result['release_tags'] = sorted([tag[0] for tag in tags if tag[0] and tag[0].strip()])
+            logger.info(f"Found {len(result['release_tags'])} unique release tags")
+            
+        except Exception as e:
+            logger.error(f"Error fetching release tags: {str(e)}")
+            result['release_tags'] = []
+        
+        # Get all batches - try multiple approaches
+        try:
+            # First try to get from Batch model if it exists
+            try:
+                if hasattr(models, 'Batch'):
+                    batches = db.query(models.Batch.id, models.Batch.name).all()
+                    result['batches'] = [{'id': batch.id, 'name': batch.name} for batch in batches]
+                    logger.info(f"Found {len(result['batches'])} batches from Batch model")
+                else:
+                    raise AttributeError("Batch model not found")
+            except (AttributeError, Exception) as batch_error:
+                logger.warning(f"Batch model access failed: {str(batch_error)}, trying fallback")
+                
+                # Fallback: get unique batch_ids from discussions
+                batch_ids_query = db.query(models.Discussion.batch_id).filter(
+                    models.Discussion.batch_id.isnot(None)
+                ).distinct()
+                
+                batch_ids = batch_ids_query.all()
+                result['batches'] = [
+                    {'id': int(batch_id[0]), 'name': f'Batch {batch_id[0]}'} 
+                    for batch_id in batch_ids 
+                    if batch_id[0] is not None
+                ]
+                logger.info(f"Found {len(result['batches'])} unique batch IDs from discussions")
+                
+        except Exception as e:
+            logger.error(f"Error fetching batches: {str(e)}")
+            result['batches'] = []
+        
+        # Get date range
+        try:
+            date_range_query = db.query(
+                func.min(models.Discussion.created_at),
+                func.max(models.Discussion.created_at)
+            )
+            
+            date_range = date_range_query.first()
+            
+            if date_range and date_range[0] and date_range[1]:
+                # Handle different date formats
+                min_date = date_range[0]
+                max_date = date_range[1]
+                
+                # Convert to ISO format strings
+                if hasattr(min_date, 'isoformat'):
+                    result['date_range']['min_date'] = min_date.isoformat()
+                else:
+                    result['date_range']['min_date'] = str(min_date)
+                    
+                if hasattr(max_date, 'isoformat'):
+                    result['date_range']['max_date'] = max_date.isoformat()
+                else:
+                    result['date_range']['max_date'] = str(max_date)
+                    
+                logger.info(f"Date range: {result['date_range']['min_date']} to {result['date_range']['max_date']}")
+            else:
+                logger.warning("No date range found in discussions")
+                
+        except Exception as e:
+            logger.error(f"Error fetching date range: {str(e)}")
+            result['date_range'] = {'min_date': None, 'max_date': None}
+        
+        logger.info(f"Filter options result: {result}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Critical error in get_filter_options: {str(e)}")
+        # Return a valid default structure even on complete failure
+        return {
+            'repository_languages': [],
+            'release_tags': [],
+            'batches': [],
+            'date_range': {
+                'min_date': None,
+                'max_date': None
+            }
+        }
+def _apply_filters(query, filters: Dict, db: Session):
+    """
+    Apply various filters to the discussion query.
+    """
+    # Status filter (uses the existing logic)
+    if filters.get('status') and filters['status'] in ['completed', 'unlocked', 'locked']:
+        filtered_ids_query = _build_status_filter_query(db, filters['status'])
+        if filtered_ids_query is not None:
+            query = query.filter(models.Discussion.id.in_(filtered_ids_query))
+    
+    # Search filter
+    if filters.get('search'):
+        search_term = f"%{filters['search']}%"
+        query = query.filter(
+            or_(
+                models.Discussion.title.ilike(search_term),
+                models.Discussion.repository.ilike(search_term),
+                models.Discussion.question.ilike(search_term),
+                models.Discussion.answer.ilike(search_term),
+                models.Discussion.id.ilike(search_term),
+                models.Discussion.url.ilike(search_term),
+                models.Discussion.batch_id.ilike(search_term)
+            )
+        )
+    if filters.get('user_id'):
+        user_id = filters['user_id']
+        
+        # Get discussion IDs where this user has annotations
+        user_annotated_discussions = db.query(models.Annotation.discussion_id).filter(
+            models.Annotation.user_id == user_id
+        ).distinct()
+        
+        query = query.filter(
+            models.Discussion.id.in_(user_annotated_discussions)
+        )
+        
+        logger.info(f"Filtered to discussions annotated by user {user_id}")
+    # Repository language filter
+    if filters.get('repository_language'):
+        query = query.filter(
+            models.Discussion.repository_language.in_(filters['repository_language'])
+        )
+    
+    # Release tag filter
+    if filters.get('release_tag'):
+        query = query.filter(
+            models.Discussion.release_tag.in_(filters['release_tag'])
+        )
+    
+    # Date range filters
+    if filters.get('from_date'):
+        try:
+            from_date = datetime.fromisoformat(filters['from_date'])
+            query = query.filter(models.Discussion.created_at >= from_date)
+        except ValueError:
+            logger.warning(f"Invalid from_date format: {filters['from_date']}")
+    
+    if filters.get('to_date'):
+        try:
+            to_date = datetime.fromisoformat(filters['to_date'])
+            query = query.filter(models.Discussion.created_at <= to_date)
+        except ValueError:
+            logger.warning(f"Invalid to_date format: {filters['to_date']}")
+    
+    # Batch filter
+    if filters.get('batch_id'):
+        query = query.filter(models.Discussion.batch_id == filters['batch_id'])
+    
+    return query
+
+def get_discussions_count(db: Session, filters: Dict = None) -> int:
+    """
+    Get the total count of discussions with enhanced filtering.
+    """
+    try:
+        if not filters:
+            filters = {}
+            
+        logger.info(f"Counting discussions with filters: {filters}")
+        
+        # Start with base query
+        query = db.query(models.Discussion)
+        
+        # Apply filters
+        query = _apply_filters(query, filters, db)
+        
+        count = query.count()
+        logger.info(f"Found {count} discussions matching filters")
+        return count
+        
+    except exc.SQLAlchemyError as e:
+        logger.error(f"Database error in get_discussions_count: {str(e)}")
+        raise DatabaseError(f"Failed to count discussions: {str(e)}")
+
+# Remove the _build_discussion_schema function since we're using get_discussion_by_id instead
+
 def generate_discussion_id(repository: str, url: str) -> str:
     """
     Generate a unique discussion ID based on repository and URL.
@@ -508,7 +641,10 @@ def upload_discussions(db: Session, upload_data: schemas.DiscussionUpload) -> sc
                     logger.info(f"Generated discussion title: {title}")
                 
                 # Get repository language if possible
-                language = disc.repository_language
+                if disc.repository_language:
+                    language = disc.repository_language
+                else:
+                    language = None
                 
                 # Use batch_id from request or from the batch we created
                 discussion_batch_id = disc.batch_id or batch_id
