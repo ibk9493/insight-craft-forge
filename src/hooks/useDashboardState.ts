@@ -21,6 +21,8 @@ export function useDashboardState() {
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
   const [codeDownloadUrl, setCodeDownloadUrl] = useState<string | null>(null);
+  const [screenshotUrlText, setScreenshotUrlText] = useState<string | null>(null);
+  const [codeDownloadUrlText, setCodeDownloadUrlText] = useState<string | null>(null);
   const [isCodeUrlValid, setIsCodeUrlValid] = useState<boolean>(false);
   const [currentDiscussion, setCurrentDiscussion] = useState<any | null>(null);
   
@@ -120,13 +122,15 @@ export function useDashboardState() {
     }
   }, [discussionId, navigate]);
 
-  const handleScreenshotUrlChange = (url: string) => {
+  const handleScreenshotUrlChange = (url: string, selectedOption: string) => {
     setScreenshotUrl(url);
+    setScreenshotUrlText(selectedOption)
     toast.success("Screenshot URL saved");
   };
   
-  const handleCodeUrlChange = (url: string) => {
+  const handleCodeUrlChange = (url: string, selectedOption: string) => {
     setCodeDownloadUrl(url);
+    setCodeDownloadUrlText(selectedOption)
     setIsCodeUrlValid(validateGitHubCodeUrl(url));
   };
 
@@ -267,8 +271,12 @@ export function useDashboardState() {
     setIsInitialized,
     screenshotUrl,
     setScreenshotUrl,
+    screenshotUrlText,
+    setScreenshotUrlText,
     codeDownloadUrl,
     setCodeDownloadUrl,
+    codeDownloadUrlText,
+    setCodeDownloadUrlText,
     isCodeUrlValid,
     steps,
     setSteps,

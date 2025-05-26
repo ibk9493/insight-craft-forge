@@ -93,9 +93,8 @@ export function useTaskSubtasks() {
       description: 'Check if a code download link is provided',
       requiresRemarks: true
     },
-    // NEW: Screenshot URL field
     {
-      id: 'screenshot_url',
+      id: 'screenshot',
       title: 'Screenshot Google Drive URL',
       status: 'pending' as SubTaskStatus,
       options: ['Provided', 'Not Needed'],
@@ -104,9 +103,8 @@ export function useTaskSubtasks() {
       textValue: '',
       placeholder: 'Enter Google Drive URL for the screenshot'
     },
-    // NEW: Code download URL field with verification
     {
-      id: 'code_download_url',
+      id: 'codeDownloadUrl',
       title: 'Code Download URL',
       status: 'pending' as SubTaskStatus,
       options: ['Verified manually', 'Not verified'],
