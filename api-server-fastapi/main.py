@@ -11,7 +11,7 @@ import models
 import schemas
 from database import engine, get_db, check_and_create_tables
 from services import discussions_service, annotations_service, consensus_service, auth_service, summary_service, \
-    batch_service, jwt_auth_service
+    batch_service, jwt_auth_service, user_agreement_service,    general_report_service
 
 # from fastapi import APIRouter, Depends, HTTPException # Already imported
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -117,44 +117,119 @@ async def root():
         "schema_warning": schema_warning if schema_warning else None
     }
 
-
+@app.get("/api/tasks/{discussion_id}/{task_id}/completion-status")
+def get_task_completion_status(discussion_id: str, task_id: int, db: Session = Depends(get_db)):
+    consensus = consensus_service.get_consensus_annotation_by_discussion_and_task(db, discussion_id, task_id)
+    if consensus:
+        return consensus_service._get_task_completion_status(consensus.data, task_id)
+    else:
+        return {"can_complete": False, "message": "No consensus exists yet"}
 # Discussions endpoints
 @app.get("/api/discussions", response_model=schemas.PaginatedDiscussionResponse)
 def get_all_discussions(
         status: Optional[str] = None,
+        search: Optional[str] = None,
+        repository_language: Optional[str] = None,  # Comma-separated
+        release_tag: Optional[str] = None,          # Comma-separated
+        from_date: Optional[str] = None,            # ISO date string
+        to_date: Optional[str] = None,              # ISO date string
+        batch_id: Optional[int] = None,
+        user_id: Optional[str] = None,
         page: int = Query(1, ge=1, description="Page number, starting from 1"),
         per_page: int = Query(10, ge=1, le=100, description="Items per page (1-100)"),
         db: Session = Depends(get_db)
 ):
-    # Calculate offset
-    offset = (page - 1) * per_page
-    
-    # Get total count and paginated results
-    total_count = discussions_service.get_discussions_count(db, status)
-    discussions = discussions_service.get_discussions(
-        db, 
-        status=status, 
-        limit=per_page, 
-        offset=offset
-    )
-    
-    # Calculate total pages
-    total_pages = (total_count + per_page - 1) // per_page
-    
-    return schemas.PaginatedDiscussionResponse(
-        items=discussions,
-        total=total_count,
-        page=page,
-        per_page=per_page,
-        pages=total_pages
-    )
+    try:
+        # Build filter parameters
+        filters = {
+            'status': status,
+            'search': search,
+            'repository_language': repository_language.split(',') if repository_language else None,
+            'release_tag': release_tag.split(',') if release_tag else None,
+            'from_date': from_date,
+            'to_date': to_date,
+            'batch_id': batch_id,
+            'user_id': user_id
+        }
+        
+        # Calculate offset
+        offset = (page - 1) * per_page
+        
+        # Get total count and paginated results
+        total_count = discussions_service.get_discussions_count(db, filters)
+        discussions = discussions_service.get_discussions(
+            db,
+            filters=filters,
+            limit=per_page,
+            offset=offset
+        )
+        
+        # Calculate total pages
+        total_pages = (total_count + per_page - 1) // per_page
+        
+        return schemas.PaginatedDiscussionResponse(
+            items=discussions,
+            total=total_count,
+            page=page,
+            per_page=per_page,
+            pages=total_pages
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in get_all_discussions: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 
 
 @app.get("/api/discussions/{discussion_id}", response_model=schemas.Discussion)
 def get_discussion(discussion_id: str, db: Session = Depends(get_db)):
     return discussions_service.get_discussion_by_id(db, discussion_id)
 
-@app.get("/api/discussions", response_model=List[schemas.Discussion])
+
+
+@app.get("/api/filter-options", response_model=schemas.FilterOptionsResponse)
+def get_filter_options_endpoint(db: Session = Depends(get_db)):
+    """
+    Get available filter options from the database.
+    """
+    logger.info("=== ENDPOINT: Filter options called ===")
+    
+    try:
+        options = discussions_service.get_filter_options(db)
+        logger.info(f"ENDPOINT: Service returned: {options}")
+        logger.info(f"ENDPOINT: Options type: {type(options)}")
+        
+        if options is None:
+            logger.error("ENDPOINT: Service returned None!")
+            raise HTTPException(status_code=500, detail="Service returned None")
+        
+        # Validate the structure
+        required_keys = ['repository_languages', 'release_tags', 'batches', 'date_range']
+        for key in required_keys:
+            if key not in options:
+                logger.error(f"ENDPOINT: Missing key {key} in options")
+                options[key] = [] if key != 'date_range' else {'min_date': None, 'max_date': None}
+        
+        logger.info("ENDPOINT: Creating response model...")
+        response = schemas.FilterOptionsResponse(**options)
+        logger.info(f"ENDPOINT: Response created successfully: {response}")
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"ENDPOINT ERROR: {str(e)}")
+        import traceback
+        logger.error(f"ENDPOINT TRACEBACK: {traceback.format_exc()}")
+        
+        # Return a valid empty response
+        return schemas.FilterOptionsResponse(
+            repository_languages=[],
+            release_tags=[],
+            batches=[],
+            date_range={'min_date': None, 'max_date': None}
+        )
+
+@app.get("/api/get/all/discussions", response_model=List[schemas.Discussion])
 def get_all_discussions_outdated(
         status: Optional[str] = None,
         db: Session = Depends(get_db)
@@ -703,6 +778,7 @@ async def get_summary_report(
         pass
         
     return result
+@app.get("/api/auth/authorized-users", response_model=List[schemas.AuthorizedUser], tags=["Auth"])
 
 def get_authorized_users_list(
         current_user: schemas.AuthorizedUser = Depends(jwt_auth_service.get_admin),
@@ -1091,3 +1167,575 @@ async def get_public_user_info(
     # Implementation of the new endpoint
     # This is a placeholder and should be replaced with the actual implementation
     return {"message": "This endpoint is not implemented yet"}
+# Add these endpoints to your main.py file
+
+
+# ================= User Agreement Analysis APIs =================
+
+@app.get("/api/users/{user_id}/annotations/agreement-analysis", tags=["User Analysis"])
+async def get_user_agreement_analysis(
+    user_id: str = Path(..., description="User ID to analyze"),
+    task_id: Optional[int] = Query(None, description="Filter by specific task (1, 2, or 3)"),
+    include_details: bool = Query(False, description="Include detailed breakdown per discussion"),
+    current_user: schemas.AuthorizedUser = Depends(jwt_auth_service.require_authentication),
+    db: Session = Depends(get_db)
+):
+    """
+    Analyze a user's annotation agreement across all discussions.
+    Shows which annotations match consensus vs those that don't.
+    
+    **Parameters:**
+    - **user_id**: ID of the user to analyze
+    - **task_id**: Optional filter for specific task (1=Question Quality, 2=Answer Quality, 3=Rewrite)
+    - **include_details**: Whether to include detailed breakdown per annotation
+    
+    **Returns:**
+    - Overall agreement statistics
+    - Task-by-task breakdown
+    - Field-level agreement rates
+    - Personalized recommendations
+    - Optional detailed annotation comparisons
+    """
+    try:
+        # Authorization check - users can only see their own data unless admin/pod_lead
+        if current_user.email != user_id and current_user.role not in ["admin", "pod_lead"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only view your own agreement analysis unless you are an admin or pod lead"
+            )
+        
+        logger.info(f"Getting agreement analysis for user {user_id}, task_filter: {task_id}")
+        
+        analysis = await user_agreement_service.analyze_user_agreement(
+            db, user_id, task_id, include_details
+        )
+        
+        return analysis
+        
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions
+    except Exception as e:
+        logger.error(f"Error analyzing user agreement: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Analysis failed: {str(e)}"
+        )
+
+
+@app.get("/api/users/{user_id}/annotations/disagreement-report", tags=["User Analysis"])
+async def get_user_disagreement_report(
+    user_id: str = Path(..., description="User ID to analyze"),
+    task_id: Optional[int] = Query(None, description="Filter by specific task"),
+    current_user: schemas.AuthorizedUser = Depends(jwt_auth_service.require_authentication),
+    db: Session = Depends(get_db)
+):
+    """
+    Get detailed report of where user's annotations disagree with consensus.
+    Useful for training and feedback purposes.
+    
+    **Parameters:**
+    - **user_id**: ID of the user to analyze
+    - **task_id**: Optional filter for specific task
+    
+    **Returns:**
+    - Detailed disagreement breakdown
+    - Common error patterns  
+    - Training recommendations
+    - Specific examples of disagreements
+    """
+    try:
+        # Authorization check
+        if current_user.email != user_id and current_user.role not in ["admin", "pod_lead"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only view your own disagreement report unless you are an admin or pod lead"
+            )
+        
+        logger.info(f"Generating disagreement report for user {user_id}, task_filter: {task_id}")
+        
+        report = await user_agreement_service.generate_disagreement_report(
+            db, user_id, task_id
+        )
+        
+        return report
+        
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions
+    except Exception as e:
+        logger.error(f"Error generating disagreement report: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Report generation failed: {str(e)}"
+        )
+
+
+@app.get("/api/users/{user_id}/annotations/summary", tags=["User Analysis"])
+async def get_user_agreement_summary(
+    user_id: str = Path(..., description="User ID to get summary for"),
+    current_user: schemas.AuthorizedUser = Depends(jwt_auth_service.require_authentication),
+    db: Session = Depends(get_db)
+):
+    """
+    Get a quick summary of user's agreement statistics.
+    Lighter weight version for dashboard/overview purposes.
+    
+    **Parameters:**
+    - **user_id**: ID of the user to analyze
+    
+    **Returns:**
+    - Basic agreement rate
+    - Total annotations count
+    - Overall performance status (excellent/good/needs_improvement/needs_training)
+    """
+    try:
+        # Authorization check
+        if current_user.email != user_id and current_user.role not in ["admin", "pod_lead"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only view your own summary unless you are an admin or pod lead"
+            )
+        
+        logger.info(f"Getting agreement summary for user {user_id}")
+        
+        summary = user_agreement_service.get_user_agreement_summary(db, user_id)
+        
+        return summary
+        
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions
+    except Exception as e:
+        logger.error(f"Error getting user agreement summary: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Summary generation failed: {str(e)}"
+        )
+
+
+@app.get("/api/admin/users/agreement-overview", tags=["Admin", "User Analysis"])
+async def get_all_users_agreement_overview(
+    admin_user: schemas.AuthorizedUser = Depends(jwt_auth_service.get_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Get agreement overview for all users (Admin only).
+    Useful for identifying users who need additional training.
+    
+    **Returns:**
+    - Agreement summary for all users
+    - Users ranked by performance
+    - Users flagged for additional training
+    """
+    try:
+        logger.info("Getting agreement overview for all users (admin request)")
+        
+        # Get all users who have made annotations
+        users_with_annotations = db.query(models.Annotation.user_id).distinct().all()
+        user_ids = [user[0] for user in users_with_annotations]
+        
+        if not user_ids:
+            return {
+                "total_users": 0,
+                "users": [],
+                "summary": {
+                    "excellent_users": 0,
+                    "good_users": 0,
+                    "users_needing_improvement": 0,
+                    "users_needing_training": 0
+                }
+            }
+        
+        # Get summary for each user
+        user_summaries = []
+        status_counts = {"excellent": 0, "good": 0, "needs_improvement": 0, "needs_training": 0, "no_data": 0, "error": 0}
+        
+        for user_id in user_ids:
+            try:
+                summary = user_agreement_service.get_user_agreement_summary(db, user_id)
+                user_summaries.append(summary)
+                
+                status = summary.get("status", "error")
+                if status in status_counts:
+                    status_counts[status] += 1
+                    
+            except Exception as e:
+                logger.error(f"Error getting summary for user {user_id}: {str(e)}")
+                user_summaries.append({
+                    "user_id": user_id,
+                    "status": "error",
+                    "error": str(e)
+                })
+                status_counts["error"] += 1
+        
+        # Sort users by agreement rate (descending)
+        user_summaries.sort(key=lambda x: x.get("agreement_rate", 0), reverse=True)
+        
+        # Identify users needing attention
+        users_needing_training = [
+            user for user in user_summaries 
+            if user.get("status") in ["needs_training", "needs_improvement"]
+        ]
+        
+        return {
+            "total_users": len(user_summaries),
+            "users": user_summaries,
+            "users_needing_training": users_needing_training,
+            "summary": {
+                "excellent_users": status_counts["excellent"],
+                "good_users": status_counts["good"], 
+                "users_needing_improvement": status_counts["needs_improvement"],
+                "users_needing_training": status_counts["needs_training"],
+                "users_with_no_data": status_counts["no_data"],
+                "users_with_errors": status_counts["error"]
+            },
+            "analysis_timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting all users agreement overview: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Overview generation failed: {str(e)}"
+        )
+
+
+@app.get("/api/tasks/{discussion_id}/{task_id}/completion-status", tags=["Tasks"])
+async def get_task_completion_status(
+    discussion_id: str = Path(..., description="Discussion ID"),
+    task_id: int = Path(..., description="Task ID (1, 2, or 3)"),
+    current_user: schemas.AuthorizedUser = Depends(jwt_auth_service.require_authentication),
+    db: Session = Depends(get_db)
+):
+    """
+    Check if a task can be marked as completed based on consensus criteria.
+    Shows which completion criteria are met/missing.
+    
+    **Parameters:**
+    - **discussion_id**: ID of the discussion
+    - **task_id**: Task ID (1=Question Quality, 2=Answer Quality, 3=Rewrite)
+    
+    **Returns:**
+    - Whether task can be completed
+    - Which criteria are met/missing
+    - Detailed completion status
+    """
+    try:
+        logger.info(f"Checking completion status for discussion {discussion_id}, task {task_id}")
+        
+        # Get consensus annotation
+        consensus = consensus_service.get_consensus_annotation_by_discussion_and_task(
+            db, discussion_id, task_id
+        )
+        
+        if not consensus:
+            return {
+                "discussion_id": discussion_id,
+                "task_id": task_id,
+                "can_complete": False,
+                "message": "No consensus annotation exists yet",
+                "criteria": {},
+                "missing_criteria": []
+            }
+        
+        # Import here to avoid circular imports
+        from services.consensus_service import _get_task_completion_status
+        
+        # Get detailed completion status
+        completion_status = _get_task_completion_status(consensus.data, task_id)
+        completion_status["discussion_id"] = discussion_id
+        
+        return completion_status
+        
+    except Exception as e:
+        logger.error(f"Error checking task completion status: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Status check failed: {str(e)}"
+        )
+    
+# Add this endpoint to your main.py file
+
+
+# ================= General Workflow Report API =================
+
+@app.get("/api/admin/workflow/general-report", tags=["Admin", "Workflow"])
+async def get_general_workflow_report(
+    admin_user: schemas.AuthorizedUser = Depends(jwt_auth_service.get_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate a comprehensive workflow report showing:
+    
+    **Ready for Consensus Creation:**
+    - Tasks with 100% (or near-perfect) agreement between annotators
+    - Tasks that have enough annotators but no consensus yet
+    - Detailed agreement analysis for each ready task
+    
+    **Ready for Task Unlock:**
+    - Tasks with consensus that meets completion criteria
+    - Next tasks that should be unlocked in the workflow
+    - Automatic workflow progression opportunities
+    
+    **Overall Workflow Status:**
+    - Summary statistics across all discussions
+    - Task-by-task breakdown of workflow status
+    - Actionable recommendations for workflow management
+    
+    **Use Cases:**
+    - Daily workflow management
+    - Identifying bottlenecks in the annotation process
+    - Automating consensus creation and task unlocking
+    - Monitoring overall project progress
+    
+    **Returns:**
+    - `ready_for_consensus`: List of tasks ready for consensus creation
+    - `ready_for_task_unlock`: List of completed tasks that should unlock next tasks
+    - `workflow_summary`: High-level statistics and progress metrics
+    - `task_breakdown`: Task-specific workflow statistics
+    - `recommendations`: Actionable items prioritized by importance
+    """
+    try:
+        logger.info("Generating general workflow report (admin request)")
+        
+        report = general_report_service.generate_general_report(db)
+        
+        return report
+        
+    except Exception as e:
+        logger.error(f"Error generating general workflow report: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Report generation failed: {str(e)}"
+        )
+
+
+@app.get("/api/admin/workflow/consensus-candidates", tags=["Admin", "Workflow"])
+async def get_consensus_candidates(
+    min_agreement_rate: float = Query(80.0, description="Minimum agreement rate to consider ready (0-100)"),
+    task_id: Optional[int] = Query(None, description="Filter by specific task (1, 2, or 3)"),
+    admin_user: schemas.AuthorizedUser = Depends(jwt_auth_service.get_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Get a focused list of tasks that are candidates for consensus creation.
+    
+    **Parameters:**
+    - **min_agreement_rate**: Minimum agreement rate to consider (default: 80%)
+    - **task_id**: Optional filter for specific task
+    
+    **Returns:**
+    - Filtered list of discussions/tasks ready for consensus
+    - Agreement details for each candidate
+    - Recommended consensus values based on majority agreement
+    """
+    try:
+        logger.info(f"Getting consensus candidates with min_agreement_rate: {min_agreement_rate}")
+        
+        # Generate full report
+        full_report = general_report_service.generate_general_report(db)
+        
+        # Filter consensus candidates based on criteria
+        candidates = []
+        for item in full_report["ready_for_consensus"]:
+            # Apply agreement rate filter
+            if item["agreement_rate"] >= min_agreement_rate:
+                # Apply task filter if specified
+                if task_id is None or item["task_id"] == task_id:
+                    candidates.append(item)
+        
+        return {
+            "total_candidates": len(candidates),
+            "min_agreement_rate": min_agreement_rate,
+            "task_filter": task_id,
+            "candidates": candidates,
+            "report_timestamp": full_report["report_timestamp"]
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting consensus candidates: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get consensus candidates: {str(e)}"
+        )
+
+
+@app.get("/api/admin/workflow/unlock-candidates", tags=["Admin", "Workflow"])
+async def get_unlock_candidates(
+    task_id: Optional[int] = Query(None, description="Filter by completed task (1, 2, or 3)"),
+    admin_user: schemas.AuthorizedUser = Depends(jwt_auth_service.get_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Get a focused list of tasks that should have their next task unlocked.
+    
+    **Parameters:**
+    - **task_id**: Optional filter for specific completed task
+    
+    **Returns:**
+    - List of discussions where next task should be unlocked
+    - Consensus criteria validation results
+    - Current task status information
+    """
+    try:
+        logger.info(f"Getting unlock candidates for task: {task_id}")
+        
+        # Generate full report
+        full_report = general_report_service.generate_general_report(db)
+        
+        # Filter unlock candidates
+        candidates = []
+        for item in full_report["ready_for_task_unlock"]:
+            # Apply task filter if specified
+            if task_id is None or item["completed_task_id"] == task_id:
+                candidates.append(item)
+        
+        return {
+            "total_candidates": len(candidates),
+            "completed_task_filter": task_id,
+            "candidates": candidates,
+            "report_timestamp": full_report["report_timestamp"]
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting unlock candidates: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get unlock candidates: {str(e)}"
+        )
+
+
+@app.post("/api/admin/workflow/auto-create-consensus", tags=["Admin", "Workflow"])
+async def auto_create_consensus_for_candidates(
+    min_agreement_rate: float = Query(90.0, description="Minimum agreement rate for auto-creation"),
+    task_id: Optional[int] = Query(None, description="Filter by specific task"),
+    dry_run: bool = Query(True, description="Preview changes without executing"),
+    admin_user: schemas.AuthorizedUser = Depends(jwt_auth_service.get_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Automatically create consensus annotations for tasks with perfect agreement.
+    
+    **Parameters:**
+    - **min_agreement_rate**: Minimum agreement rate for auto-creation (default: 90%)
+    - **task_id**: Optional filter for specific task
+    - **dry_run**: If true, only preview what would be created (default: true)
+    
+    **Returns:**
+    - List of consensus annotations that would be/were created
+    - Success/failure status for each creation
+    - Summary of actions taken
+    
+    **Safety Features:**
+    - High agreement threshold required (90% default)
+    - Dry run mode for previewing changes
+    - Admin-only access
+    - Detailed logging of all actions
+    """
+    try:
+        logger.info(f"Auto-creating consensus (dry_run: {dry_run}, min_agreement: {min_agreement_rate})")
+        
+        # Get candidates
+        candidates_response = await get_consensus_candidates(
+            min_agreement_rate=min_agreement_rate,
+            task_id=task_id,
+            admin_user=admin_user,
+            db=db
+        )
+        
+        candidates = candidates_response["candidates"]
+        
+        if not candidates:
+            return {
+                "message": "No candidates found for auto-consensus creation",
+                "total_candidates": 0,
+                "created": [],
+                "dry_run": dry_run
+            }
+        
+        created_consensus = []
+        errors = []
+        
+        for candidate in candidates:
+            try:
+                discussion_id = candidate["discussion_id"]
+                task_id_val = candidate["task_id"]
+                
+                if dry_run:
+                    # Preview mode - don't actually create
+                    created_consensus.append({
+                        "discussion_id": discussion_id,
+                        "task_id": task_id_val,
+                        "status": "would_create",
+                        "agreement_rate": candidate["agreement_rate"],
+                        "message": f"Would create consensus with {candidate['agreement_rate']}% agreement"
+                    })
+                else:
+                    # Actually create consensus based on majority values
+                    consensus_data = _build_consensus_from_agreement(
+                        candidate["agreement_details"]["field_agreement"]
+                    )
+                    
+                    # Create consensus annotation
+                    consensus_input = schemas.ConsensusAnnotationCreate(
+                        discussion_id=discussion_id,
+                        task_id=task_id_val,
+                        annotator_id="auto_consensus",
+                        data=consensus_data
+                    )
+                    
+                    result = consensus_service.create_or_update_consensus_annotation(
+                        db, consensus_input, admin_user.email
+                    )
+                    
+                    created_consensus.append({
+                        "discussion_id": discussion_id,
+                        "task_id": task_id_val,
+                        "consensus_id": result.id,
+                        "status": "created",
+                        "agreement_rate": candidate["agreement_rate"],
+                        "message": "Successfully created consensus"
+                    })
+                    
+                    logger.info(f"Auto-created consensus for {discussion_id}/task{task_id_val}")
+                
+            except Exception as e:
+                error_msg = f"Failed to create consensus for {candidate['discussion_id']}/task{candidate['task_id']}: {str(e)}"
+                logger.error(error_msg)
+                errors.append(error_msg)
+        
+        return {
+            "message": f"{'Previewed' if dry_run else 'Created'} consensus for {len(created_consensus)} tasks",
+            "total_candidates": len(candidates),
+            "successful_creations": len(created_consensus),
+            "errors": errors,
+            "created_consensus": created_consensus,
+            "dry_run": dry_run,
+            "min_agreement_rate": min_agreement_rate,
+            "admin_user": admin_user.email,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in auto-create consensus: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Auto-consensus creation failed: {str(e)}"
+        )
+
+
+def _build_consensus_from_agreement(field_agreement: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Build consensus data based on field agreement analysis.
+    Uses the consensus value from each field's agreement analysis.
+    """
+    consensus_data = {}
+    
+    for field, stats in field_agreement.items():
+        consensus_value = stats.get("consensus_value")
+        if consensus_value is not None:
+            consensus_data[field] = consensus_value
+    
+    # Add metadata
+    consensus_data["_auto_generated"] = True
+    consensus_data["_generation_timestamp"] = datetime.utcnow().isoformat()
+    
+    return consensus_data

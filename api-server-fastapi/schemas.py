@@ -373,3 +373,12 @@ class UserPublicResponse(BaseModel):
     }
 
 # Discussion Schemas
+class FilterOptionsResponse(BaseModel):
+    repository_languages: List[str]
+    release_tags: List[str]
+    batches: List[Dict[str, Any]]
+    date_range: Dict[str, Optional[str]]
+    
+    model_config = {
+        "from_attributes": True
+    }

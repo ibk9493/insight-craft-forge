@@ -148,6 +148,12 @@ def create_or_update_consensus_annotation(
     try:
         db.commit()
         db.refresh(db_annotation)
+        _update_task_statuses_after_consensus(
+            db, 
+            consensus_input.discussion_id, 
+            consensus_input.task_id, 
+            annotation_data_dict  # Pass the consensus data for validation
+        )
     except Exception as e:
         db.rollback()
         raise e
@@ -161,6 +167,192 @@ def create_or_update_consensus_annotation(
         data=db_annotation.data,
         timestamp=db_annotation.timestamp
     )
+
+def _should_task_be_completed(db: Session, discussion_id: str, task_id: int, consensus_data: dict) -> bool:
+    """
+    Determine if a task should be marked as 'completed' based on consensus data.
+    
+    Rules:
+    - Task 1: Must have relevance=True AND learning_value=True AND clarity=True (image_grounded optional)
+    - Task 2: Must have address_all_aspects=True AND with_explanation=True (code_executable depends on if code exists)
+    - Task 3: Always completed when consensus exists (since it's rewriting/classification)
+    
+    Returns:
+    - True if task should be marked as 'completed'
+    - False if task should remain 'unlocked' (consensus exists but criteria not met)
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"Evaluating completion criteria for task {task_id}, discussion {discussion_id}")
+    logger.info(f"Consensus data: {consensus_data}")
+    
+    if task_id == 1:
+        # Task 1: Question Quality - require core quality criteria
+        relevance = consensus_data.get('relevance', False)
+        learning_value = consensus_data.get('learning', False)  # Note: might be 'learning' not 'learning_value'
+        clarity = consensus_data.get('clarity', False)
+        
+        # image_grounded is optional - only required if the discussion actually has images
+        image_grounded = consensus_data.get('grounded', True)  # Default to True if not applicable
+        
+        required_fields = [relevance, learning_value, clarity]
+        
+        # Check if image grounding is applicable (you might want to check if discussion has images)
+        if consensus_data.get('grounded') is not None and consensus_data.get('grounded') != 'N/A':
+            required_fields.append(image_grounded)
+        
+        all_criteria_met = all(required_fields)
+        
+        logger.info(f"Task 1 criteria: relevance={relevance}, learning={learning_value}, clarity={clarity}, grounded={image_grounded}")
+        logger.info(f"Task 1 completion criteria met: {all_criteria_met}")
+        
+        return all_criteria_met
+    
+    elif task_id == 2:
+        # Task 2: Answer Quality - require completeness and explanation
+        address_all_aspects = consensus_data.get('aspects', False)
+        with_explanation = consensus_data.get('explanation', False)
+        
+        # code_executable - only required if there's actually code to execute
+        code_executable = consensus_data.get('execution')
+        
+        required_fields = [address_all_aspects, with_explanation]
+        
+        # If there's code, it should be executable or marked as N/A
+        if code_executable is not None:
+            if code_executable in ['Executable', 'N/A']:
+                code_ok = True
+            else:
+                code_ok = False
+            required_fields.append(code_ok)
+        
+        all_criteria_met = all(required_fields)
+        
+        logger.info(f"Task 2 criteria: aspects={address_all_aspects}, explanation={with_explanation}, code_executable={code_executable}")
+        logger.info(f"Task 2 completion criteria met: {all_criteria_met}")
+        
+        return all_criteria_met
+    
+    elif task_id == 3:
+        # Task 3: Rewrite - always complete when consensus exists
+        # This task is about rewriting/classification, not quality gates
+        logger.info("Task 3 automatically marked as completable (rewrite task)")
+        return True
+    
+    else:
+        logger.warning(f"Unknown task_id: {task_id}")
+        return False
+
+
+def _update_task_statuses_after_consensus(db: Session, discussion_id: str, completed_task_id: int, consensus_data: dict):
+    """
+    Enhanced task status update logic that considers true/false field criteria.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        logger.info(f"Auto-updating task statuses for discussion {discussion_id} after task {completed_task_id} consensus")
+        
+        from services import discussions_service
+        
+        # 1. Check if the current task should actually be marked as completed
+        should_complete = _should_task_be_completed(db, discussion_id, completed_task_id, consensus_data)
+        
+        if should_complete:
+            # Mark as completed and unlock next task
+            logger.info(f"Task {completed_task_id} meets completion criteria - marking as completed")
+            discussions_service.update_task_status(db, discussion_id, completed_task_id, "completed")
+            
+            # 2. Unlock the next task
+            next_task_id = completed_task_id + 1
+            if next_task_id <= 3:
+                next_task_assoc = db.query(models.discussion_task_association).filter(
+                    models.discussion_task_association.c.discussion_id == discussion_id,
+                    models.discussion_task_association.c.task_number == next_task_id
+                ).first()
+                
+                if next_task_assoc and next_task_assoc.status == "locked":
+                    logger.info(f"Unlocking task {next_task_id}")
+                    discussions_service.update_task_status(db, discussion_id, next_task_id, "unlocked")
+        
+        else:
+            # Consensus exists but criteria not met - keep task unlocked for further work
+            logger.info(f"Task {completed_task_id} consensus exists but criteria not met - keeping as unlocked")
+            discussions_service.update_task_status(db, discussion_id, completed_task_id, "unlocked")
+            
+            # Don't unlock next task since current task isn't truly complete
+            logger.info("Not unlocking next task since current task criteria not met")
+        
+        logger.info(f"Successfully updated task statuses after consensus evaluation")
+        
+    except Exception as e:
+        logger.error(f"Error updating task statuses after consensus: {str(e)}")
+
+
+def _get_task_completion_status(consensus_data: dict, task_id: int) -> dict:
+    """
+    Get a detailed breakdown of task completion status for debugging/UI display.
+    
+    Returns:
+    - Dict with completion status and details about which criteria are met/not met
+    """
+    
+    if task_id == 1:
+        relevance = consensus_data.get('relevance', False)
+        learning_value = consensus_data.get('learning', False) 
+        clarity = consensus_data.get('clarity', False)
+        image_grounded = consensus_data.get('grounded', True)
+        
+        criteria = {
+            'relevance': relevance,
+            'learning_value': learning_value, 
+            'clarity': clarity,
+            'image_grounded': image_grounded if consensus_data.get('grounded') not in [None, 'N/A'] else True
+        }
+        
+        all_met = all(criteria.values())
+        
+        return {
+            'task_id': task_id,
+            'can_complete': all_met,
+            'criteria': criteria,
+            'missing_criteria': [k for k, v in criteria.items() if not v],
+            'message': "All quality criteria met" if all_met else f"Missing: {', '.join([k for k, v in criteria.items() if not v])}"
+        }
+    
+    elif task_id == 2:
+        address_all_aspects = consensus_data.get('aspects', False)
+        with_explanation = consensus_data.get('explanation', False)
+        code_execution = consensus_data.get('execution')
+        
+        criteria = {
+            'address_all_aspects': address_all_aspects,
+            'with_explanation': with_explanation,
+        }
+        
+        if code_execution is not None:
+            criteria['code_executable'] = code_execution in ['Executable', 'N/A']
+        
+        all_met = all(criteria.values())
+        
+        return {
+            'task_id': task_id,
+            'can_complete': all_met,
+            'criteria': criteria,
+            'missing_criteria': [k for k, v in criteria.items() if not v],
+            'message': "All answer quality criteria met" if all_met else f"Missing: {', '.join([k for k, v in criteria.items() if not v])}"
+        }
+    
+    elif task_id == 3:
+        return {
+            'task_id': task_id,
+            'can_complete': True,
+            'criteria': {'rewrite_complete': True},
+            'missing_criteria': [],
+            'message': "Rewrite task - automatically completable"
+        }
 
 
 def calculate_consensus(db: Session, discussion_id: str, task_id: int) -> Dict[str, Any]:

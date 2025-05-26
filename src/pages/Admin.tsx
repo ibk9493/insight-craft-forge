@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import {useToast} from '@/hooks/use-toast'
 import { useNavigate } from 'react-router-dom';
@@ -9,9 +8,21 @@ import JsonUploader from '@/components/admin/JsonUploader';
 import TaskManager from '@/components/admin/TaskManager';
 import SystemReports from '@/components/admin/SystemReports';
 import BatchManager from '@/components/admin/BatchManager';
+import WorkflowInsightsDashboard from '@/components/admin/WorkflowInsightsDashboard';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"; 
 import { useAnnotationData } from '@/hooks/useAnnotationData';
-import { Loader, Settings, Upload, Users, FileText, Package, BarChart3, CheckSquare, Shield } from 'lucide-react';
+import { 
+  Loader, 
+  Settings, 
+  Upload, 
+  Users, 
+  FileText, 
+  Package, 
+  BarChart3, 
+  CheckSquare, 
+  Shield,
+  Activity // Add this import
+} from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import UserAccessManager from '@/components/admin/UserAccessManager';
@@ -24,7 +35,8 @@ const Admin = () => {
   const { isAuthenticated, isPodLead, isAdmin, user } = useUser();
   const navigate = useNavigate();
   const { discussions, loading, error } = useAnnotationData();
-  const [activeTab, setActiveTab] = useState("analytics-dashboard");
+  // Updated default tab - prioritize workflow insights
+  const [activeTab, setActiveTab] = useState((isAdmin || isPodLead) ? "task-management" : "analytics-dashboard");
   const [systemSummary, setSystemSummary] = useState<SystemSummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const { toast } = useToast();
@@ -71,21 +83,7 @@ const Admin = () => {
         description: `Generating ${format.toUpperCase()} report...`,
       });
 
-      // // First try the downloadReport function which returns a URL
-      // const result = await api.summary.downloadReport(format);
-      //
-      // if (result && result.downloadUrl) {
-      //   // If it returns a downloadUrl, use it
-      //   window.open(result.downloadUrl, '_blank');
-      //   toast({
-      //     title: "Report Ready",
-      //     description: `${format.toUpperCase()} report is ready to view.`,
-      //     variant: "default",
-      //   });
-      //   return;
-      // }
-
-      // If no URL is returned, use the direct file download method
+      // Use the direct file download method
       const downloadResult = await api.summary.downloadReportAsFile(format);
 
       if (downloadResult.success) {
@@ -168,20 +166,31 @@ const Admin = () => {
         
         <TabsContainer value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabList>
+            {/* NEW: Workflow Insights Tab - Available to both Pod Lead and Admin */}
+
+            
             {isAdmin && (
               <Tab value="analytics-dashboard" className="flex items-center gap-2">
                 <BarChart3 className="h-4 w-4" />
                 <span>Analytics</span>
               </Tab>
             )}
+            
             <Tab value="task-management" className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
               <span>Task Management</span>
             </Tab>
+            
             {(isAdmin || isPodLead) && (
               <Tab value="bulk-tasks" className="flex items-center gap-2">
                 <CheckSquare className="h-4 w-4" />
                 <span>Bulk Tasks</span>
+              </Tab>
+            )}
+              {(isAdmin || isPodLead) && (
+              <Tab value="workflow-insights" className="flex items-center gap-2">
+                <Activity className="h-4 w-4" />
+                <span>Workflow Insights</span>
               </Tab>
             )}
             {(isAdmin || isPodLead) && (
@@ -194,11 +203,9 @@ const Admin = () => {
                   <Users className="h-4 w-4" />
                   <span>Consensus Review</span>
                 </Tab>
-                
               </>
             )}
 
-            
             {isAdmin && (
               <>
                 <Tab value="upload-discussions" className="flex items-center gap-2">
@@ -220,7 +227,21 @@ const Admin = () => {
               </>
             )}
           </TabList>
-          
+
+          {/* NEW: Workflow Insights Tab - Available to both Pod Lead and Admin */}
+          {(isAdmin || isPodLead) && (
+            <TabPanel value="workflow-insights">
+              <div className="mb-4">
+                <h2 className="text-lg font-medium">Workflow Insights</h2>
+                <p className="text-sm text-gray-500">
+                  Real-time analysis of annotation workflow and user performance
+                </p>
+              </div>
+              
+              <WorkflowInsightsDashboard />
+            </TabPanel>
+          )}
+
           {/* Analytics Dashboard Tab - Admin Only */}
           {isAdmin && (
             <TabPanel value="analytics-dashboard">
@@ -251,12 +272,10 @@ const Admin = () => {
             </div>
             
             <TaskManager 
-              discussions={discussions} 
-              onTaskUpdated={handleDiscussionUpdated}
-            />
+                         />
           </TabPanel>
 
-          {/* Bulk Task Management Tab - Admin Only */}
+          {/* Bulk Task Management Tab */}
           {(isAdmin || isPodLead) && (
             <TabPanel value="bulk-tasks">
               <div className="mb-4">
@@ -267,15 +286,11 @@ const Admin = () => {
               </div>
               
               <BulkTaskManager
-                discussions={discussions}
-                onTaskUpdated={(updatedDiscussions) => {
-                  console.log(`Updated ${updatedDiscussions.length} discussions`);
-                }}
               />
             </TabPanel>
           )}
 
-          {/* Annotation Quality Tab - Pod Lead */}
+          {/* Annotation Quality Tab */}
           {(isAdmin || isPodLead) && (
             <TabPanel value="annotation-quality">
               <div className="mb-4">
@@ -289,7 +304,7 @@ const Admin = () => {
             </TabPanel>
           )}
           
-          {/* Consensus Review Tab - Available to Pod Lead */}
+          {/* Consensus Review Tab */}
           {(isAdmin || isPodLead) && (
             <TabPanel value="consensus-review">
               <div className="mb-4">
@@ -321,7 +336,7 @@ const Admin = () => {
             </TabPanel>
           )}
           
-          {/* Upload Discussions Tab - Admin Only */}
+          {/* Admin-only tabs */}
           {isAdmin && (
             <>
               <TabPanel value="upload-discussions">
@@ -334,7 +349,6 @@ const Admin = () => {
                 <JsonUploader />
               </TabPanel>
 
-              {/* Batch Management Tab - Admin Only */}
               <TabPanel value="batch-management">
                 <div className="mb-4">
                   <h2 className="text-lg font-medium">Batch Management</h2>
@@ -345,7 +359,6 @@ const Admin = () => {
                 <BatchManager />
               </TabPanel>
 
-              {/* User Management Tab - Admin Only */}
               <TabPanel value="user-management">
                 <div className="mb-4">
                   <h2 className="text-lg font-medium">User Management</h2>
@@ -356,7 +369,6 @@ const Admin = () => {
                 <UserAccessManager />
               </TabPanel>
               
-              {/* System Reports Tab - Admin Only */}
               <TabPanel value="system-reports">
                 <div className="mb-4">
                   <h2 className="text-lg font-medium">System Reports</h2>

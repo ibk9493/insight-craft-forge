@@ -20,30 +20,31 @@ interface DiscussionQueryParams {
   page?: number;
   per_page?: number;
 }
+interface EnhancedDiscussionQueryParams {
+  status?: string;
+  search?: string;
+  repository_language?: string;  // comma-separated
+  release_tag?: string;          // comma-separated
+  from_date?: string;            // ISO date string
+  to_date?: string;              // ISO date string
+  batch_id?: number;
+  page?: number;
+  per_page?: number;
+  user_id?: string;
+}
 
-// Update the fetchDiscussions function to handle pagination
-export const fetchDiscussions = async (params: DiscussionQueryParams = {}): Promise<PaginatedDiscussionsResponse> => {
-  const queryParams = new URLSearchParams();
-  
-  if (params.status) queryParams.append('status', params.status);
-  if (params.page) queryParams.append('page', params.page.toString());
-  if (params.per_page) queryParams.append('per_page', params.per_page.toString());
-  
-  const url = `/api/discussions${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
-  
-  return await safeApiRequest<PaginatedDiscussionsResponse>(
-    url, 
-    'GET', 
-    undefined, 
-    undefined, 
-    {
-      items: [],
-      total: 0,
-      page: 1,
-      per_page: 10,
-      pages: 0
-    }
-  );
+interface FilterOptionsResponse {
+  repository_languages: string[];
+  release_tags: string[];
+  batches: Array<{id: number; name: string}>;
+  date_range: {
+    min_date: string | null;
+    max_date: string | null;
+  };
+}
+// Update this function to use the enhanced parameters
+export const fetchDiscussions = async (params: EnhancedDiscussionQueryParams = {}): Promise<PaginatedDiscussionsResponse> => {
+  return api.discussions.getAll(params);
 };
 
 // Helper function to format GitHub discussions for API compatibility
@@ -226,15 +227,200 @@ export const enhancedApiRequest = async <T>(
 
 export const api = {
   // Discussion endpoints - updated with pagination support
+  workflow: {
+    generalReport: () => {
+      console.log('[Workflow] Getting general workflow report');
+      return safeApiRequest('/api/admin/workflow/general-report', 'GET', undefined, undefined, {
+        report_timestamp: new Date().toISOString(),
+        total_discussions: 0,
+        ready_for_consensus: [],
+        ready_for_task_unlock: [],
+        workflow_summary: {
+          discussions_ready_for_consensus: 0,
+          discussions_ready_for_unlock: 0,
+          fully_completed_discussions: 0,
+          blocked_discussions: 0
+        },
+        task_breakdown: {
+          task_1: { ready_for_consensus: 0, ready_for_unlock: 0, completed: 0 },
+          task_2: { ready_for_consensus: 0, ready_for_unlock: 0, completed: 0 },
+          task_3: { ready_for_consensus: 0, ready_for_unlock: 0, completed: 0 }
+        },
+        recommendations: []
+      });
+    },
+
+    agreementOverview: () => {
+      console.log('[Workflow] Getting user agreement overview');
+      return safeApiRequest('/api/admin/users/agreement-overview', 'GET', undefined, undefined, {
+        total_users: 0,
+        users: [],
+        users_needing_training: [],
+        summary: {
+          excellent_users: 0,
+          good_users: 0,
+          users_needing_improvement: 0,
+          users_needing_training: 0,
+          users_with_no_data: 0,
+          users_with_errors: 0
+        },
+        analysis_timestamp: new Date().toISOString()
+      });
+    },
+
+    consensusCandidates: (minAgreementRate = 80.0, taskId = null) => {
+      const queryParams = new URLSearchParams();
+      queryParams.append('min_agreement_rate', minAgreementRate.toString());
+      if (taskId) queryParams.append('task_id', taskId.toString());
+      
+      const url = `/api/admin/workflow/consensus-candidates?${queryParams.toString()}`;
+      
+      console.log('[Workflow] Getting consensus candidates');
+      return safeApiRequest(url, 'GET', undefined, undefined, {
+        total_candidates: 0,
+        candidates: [],
+        min_agreement_rate: minAgreementRate,
+        task_filter: taskId,
+        report_timestamp: new Date().toISOString()
+      });
+    },
+
+    unlockCandidates: (taskId = null) => {
+      const queryParams = new URLSearchParams();
+      if (taskId) queryParams.append('task_id', taskId.toString());
+      
+      const url = `/api/admin/workflow/unlock-candidates?${queryParams.toString()}`;
+      
+      console.log('[Workflow] Getting unlock candidates');
+      return safeApiRequest(url, 'GET', undefined, undefined, {
+        total_candidates: 0,
+        candidates: [],
+        completed_task_filter: taskId,
+        report_timestamp: new Date().toISOString()
+      });
+    },
+
+    autoCreateConsensus: (dryRun = true, minAgreementRate = 90.0, taskId = null) => {
+      const queryParams = new URLSearchParams();
+      queryParams.append('dry_run', dryRun.toString());
+      queryParams.append('min_agreement_rate', minAgreementRate.toString());
+      if (taskId) queryParams.append('task_id', taskId.toString());
+      
+      const url = `/api/admin/workflow/auto-create-consensus?${queryParams.toString()}`;
+      
+      console.log('[Workflow] Auto-creating consensus');
+      return safeApiRequest(url, 'POST', undefined, undefined, {
+        message: dryRun ? 'Preview mode - no changes made' : 'Consensus creation completed',
+        total_candidates: 0,
+        successful_creations: 0,
+        errors: [],
+        created_consensus: [],
+        dry_run: dryRun,
+        min_agreement_rate: minAgreementRate,
+        timestamp: new Date().toISOString()
+      });
+    },
+
+    userAgreementAnalysis: (userId, taskId = null, includeDetails = false) => {
+      const queryParams = new URLSearchParams();
+      if (taskId) queryParams.append('task_id', taskId.toString());
+      queryParams.append('include_details', includeDetails.toString());
+      
+      const url = `/api/users/${encodeURIComponent(userId)}/annotations/agreement-analysis?${queryParams.toString()}`;
+      
+      console.log(`[Workflow] Getting agreement analysis for user: ${userId}`);
+      return safeApiRequest(url, 'GET', undefined, undefined, {
+        user_id: userId,
+        total_annotations: 0,
+        summary: {
+          total_annotations: 0,
+          annotations_with_consensus: 0,
+          perfect_agreements: 0,
+          partial_agreements: 0,
+          disagreements: 0,
+          no_consensus_available: 0,
+          agreement_rate: 0.0
+        },
+        recommendations: []
+      });
+    },
+
+    userDisagreementReport: (userId, taskId = null) => {
+      const queryParams = new URLSearchParams();
+      if (taskId) queryParams.append('task_id', taskId.toString());
+      
+      const url = `/api/users/${encodeURIComponent(userId)}/annotations/disagreement-report?${queryParams.toString()}`;
+      
+      console.log(`[Workflow] Getting disagreement report for user: ${userId}`);
+      return safeApiRequest(url, 'GET', undefined, undefined, {
+        user_id: userId,
+        total_disagreements: 0,
+        disagreement_details: [],
+        training_recommendations: [],
+        overall_stats: {}
+      });
+    },
+
+    userAgreementSummary: (userId) => {
+      const url = `/api/users/${encodeURIComponent(userId)}/annotations/summary`;
+      
+      console.log(`[Workflow] Getting agreement summary for user: ${userId}`);
+      return safeApiRequest(url, 'GET', undefined, undefined, {
+        user_id: userId,
+        total_annotations: 0,
+        annotations_with_consensus: 0,
+        agreement_rate: 0,
+        status: 'no_data'
+      });
+    },
+
+    taskCompletionStatus: (discussionId, taskId) => {
+      const url = `/api/tasks/${encodeURIComponent(discussionId)}/${taskId}/completion-status`;
+      
+      console.log(`[Workflow] Getting completion status for discussion: ${discussionId}, task: ${taskId}`);
+      return safeApiRequest(url, 'GET', undefined, undefined, {
+        discussion_id: discussionId,
+        task_id: taskId,
+        can_complete: false,
+        message: 'Status check failed',
+        criteria: {},
+        missing_criteria: []
+      });
+    }
+  },
+
   discussions: {
     // Updated to support pagination parameters
-    getAll: (params: DiscussionQueryParams = {}) => {
+    getFilterOptions: () => {
+      console.log('[Discussions] Getting filter options');
+      return safeApiRequest<FilterOptionsResponse>(
+        '/api/filter-options', 
+        'GET', 
+        undefined, 
+        undefined, 
+        {
+          repository_languages: [],
+          release_tags: [],
+          batches: [],
+          date_range: { min_date: null, max_date: null }
+        }
+      );
+    },
+
+    // Update your existing getAll method to support all filters
+    getAll: (params: EnhancedDiscussionQueryParams = {}) => {
       const queryParams = new URLSearchParams();
       
       if (params.status) queryParams.append('status', params.status);
+      if (params.search) queryParams.append('search', params.search);
+      if (params.repository_language) queryParams.append('repository_language', params.repository_language);
+      if (params.release_tag) queryParams.append('release_tag', params.release_tag);
+      if (params.from_date) queryParams.append('from_date', params.from_date);
+      if (params.to_date) queryParams.append('to_date', params.to_date);
+      if (params.batch_id) queryParams.append('batch_id', params.batch_id.toString());
       if (params.page) queryParams.append('page', params.page.toString());
       if (params.per_page) queryParams.append('per_page', params.per_page.toString());
-      
+      if (params.user_id) queryParams.append('user_id', params.user_id); // ← ADD THIS LINE
       const url = `/api/discussions${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
       
       return safeApiRequest<PaginatedDiscussionsResponse>(
@@ -740,4 +926,9 @@ users: {
 };
 
 // Export the pagination types for use in other files
-export type { PaginatedDiscussionsResponse, DiscussionQueryParams };
+export type { 
+  PaginatedDiscussionsResponse, 
+  DiscussionQueryParams, 
+  EnhancedDiscussionQueryParams, 
+  FilterOptionsResponse 
+};

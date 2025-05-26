@@ -2,12 +2,26 @@ import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { Discussion } from '@/services/api/types';
 import { api } from '@/services/api/endpoints';
 
-// Add pagination types
+// Enhanced pagination types
 interface PaginationInfo {
   page: number;
   per_page: number;
   total: number;
   pages: number;
+}
+
+interface EnhancedDiscussionParams {
+  status?: string;
+  search?: string;
+  repository_language?: string;  // comma-separated
+  release_tag?: string;          // comma-separated
+  from_date?: string;            // ISO date string
+  to_date?: string;              // ISO date string
+  batch_id?: number;
+  page?: number;
+  per_page?: number;
+  forceRefresh?: boolean;
+  user_id?: string;
 }
 
 interface PaginatedDiscussionsResponse {
@@ -16,7 +30,18 @@ interface PaginatedDiscussionsResponse {
   page: number;
   per_page: number;
   pages: number;
-  requestStatus?: string | null; // Add optional requestStatus field
+  requestStatus?: string | null;
+  // Add filter tracking
+  appliedFilters?: {
+    status?: string;
+    search?: string;
+    repository_language?: string;
+    release_tag?: string;
+    from_date?: string;
+    to_date?: string;
+    batch_id?: number;
+    user_id?: string;
+  };
 }
 
 interface DiscussionsState {
@@ -25,9 +50,19 @@ interface DiscussionsState {
   error: string | null;
   lastFetched: number | null;
   selectedDiscussion: Discussion | null;
-  // Add pagination state
   pagination: PaginationInfo;
   currentStatus: string | null;
+  // Add current filters to state
+  currentFilters: {
+    status?: string;
+    search?: string;
+    repository_language?: string;
+    release_tag?: string;
+    from_date?: string;
+    to_date?: string;
+    batch_id?: number;
+    user_id?: string;
+  };
 }
 
 const initialState: DiscussionsState = {
@@ -43,54 +78,62 @@ const initialState: DiscussionsState = {
     pages: 0,
   },
   currentStatus: null,
+  currentFilters: {},
 };
 
 // Only fetch if data is stale (older than 5 minutes)
 const CACHE_TIME = 5 * 60 * 1000; // 5 minutes in milliseconds
 
-// Updated fetch discussions function to handle pagination
-const fetchDiscussionsApi = async (params: {
-  status?: string;
-  page?: number;
-  per_page?: number;
-} = {}): Promise<PaginatedDiscussionsResponse> => {
-  const queryParams = new URLSearchParams();
-  if (params.status) queryParams.append('status', params.status);
-  if (params.page) queryParams.append('page', params.page.toString());
-  if (params.per_page) queryParams.append('per_page', params.per_page.toString());
-  
-  const response = await fetch(`/api/discussions?${queryParams.toString()}`);
-  if (!response.ok) {
-    throw new Error('Failed to fetch discussions');
-  }
-  
-  return await response.json();
-};
-
-// Update the fetch discussions thunk to handle pagination
+// Enhanced fetch discussions thunk with all filter support
 export const fetchDiscussions = createAsyncThunk(
   'discussions/fetch',
-  async (params: { 
-    status?: string; 
-    page?: number; 
-    per_page?: number; 
-    forceRefresh?: boolean 
-  } = {}, { getState }) => {
+  async (params: EnhancedDiscussionParams = {}, { getState }) => {
     const { discussions } = getState() as { discussions: DiscussionsState };
     const now = Date.now();
     
     const {
-      status = null,
+      status,
+      search,
+      repository_language,
+      release_tag,
+      from_date,
+      to_date,
+      batch_id,
+      user_id,
       page = 1,
       per_page = 10,
       forceRefresh = false
     } = params;
     
+    // Create filters object for comparison
+    const newFilters = {
+      status,
+      search,
+      repository_language,
+      release_tag,
+      from_date,
+      to_date,
+      batch_id,
+      user_id
+    };
+    
+    // Remove undefined values for cleaner comparison
+    const cleanNewFilters = Object.fromEntries(
+      Object.entries(newFilters).filter(([_, v]) => v !== undefined)
+    );
+    
+    const cleanCurrentFilters = Object.fromEntries(
+      Object.entries(discussions.currentFilters).filter(([_, v]) => v !== undefined)
+    );
+    
+    // Check if filters have changed
+    const filtersChanged = JSON.stringify(cleanCurrentFilters) !== JSON.stringify(cleanNewFilters);
+    
     // Check if we need to fetch new data
     const needsRefresh = forceRefresh || 
       !discussions.lastFetched || 
       now - discussions.lastFetched > CACHE_TIME ||
-      discussions.currentStatus !== status ||
+      filtersChanged ||
       discussions.pagination.page !== page ||
       discussions.pagination.per_page !== per_page;
     
@@ -103,26 +146,36 @@ export const fetchDiscussions = createAsyncThunk(
         per_page: discussions.pagination.per_page,
         pages: discussions.pagination.pages,
         requestStatus: status,
+        appliedFilters: cleanNewFilters,
       };
     }
     
-    // **FIX: Use the updated API method**
+    // Use the enhanced API method with all filter parameters
     const response = await api.discussions.getAll({
-      status: status || undefined,
+      status,
+      search,
+      repository_language,
+      release_tag,
+      from_date,
+      to_date,
+      batch_id,
       page,
-      per_page
+      per_page,
+      user_id
     });
     
     return {
       ...response,
       requestStatus: status,
+      appliedFilters: cleanNewFilters,
     };
   }
 );
-// Add a new thunk for loading more discussions (for infinite scroll if needed)
+
+// Enhanced load more discussions function
 export const loadMoreDiscussions = createAsyncThunk(
   'discussions/loadMore',
-  async (params: { status?: string } = {}, { getState }) => {
+  async (params: Omit<EnhancedDiscussionParams, 'page' | 'per_page' | 'forceRefresh'> = {}, { getState }) => {
     const { discussions } = getState() as { discussions: DiscussionsState };
     const nextPage = discussions.pagination.page + 1;
     
@@ -131,10 +184,12 @@ export const loadMoreDiscussions = createAsyncThunk(
       return null;
     }
     
-    return await fetchDiscussionsApi({
-      status: params.status,
+    return await api.discussions.getAll({
+      ...discussions.currentFilters,
+      ...params,
       page: nextPage,
-      per_page: discussions.pagination.per_page
+      per_page: discussions.pagination.per_page,
+      user_id: discussions.currentFilters.user_id
     });
   }
 );
@@ -180,6 +235,18 @@ export const discussionsSlice = createSlice({
       if (page !== undefined) state.pagination.page = page;
       if (per_page !== undefined) state.pagination.per_page = per_page;
     },
+    // Add action to set filters
+    setFilters: (state, action: PayloadAction<Partial<EnhancedDiscussionParams>>) => {
+      // Remove undefined values
+      const cleanFilters = Object.fromEntries(
+        Object.entries(action.payload).filter(([_, v]) => v !== undefined)
+      );
+      state.currentFilters = { ...state.currentFilters, ...cleanFilters };
+    },
+    // Add action to clear specific filter
+    clearFilter: (state, action: PayloadAction<keyof EnhancedDiscussionParams>) => {
+      delete state.currentFilters[action.payload];
+    },
     // Add action to reset discussions (useful when changing filters)
     resetDiscussions: (state) => {
       state.discussions = [];
@@ -191,6 +258,7 @@ export const discussionsSlice = createSlice({
       };
       state.lastFetched = null;
       state.currentStatus = null;
+      state.currentFilters = {};
     },
   },
   extraReducers: (builder) => {
@@ -209,8 +277,11 @@ export const discussionsSlice = createSlice({
           pages: action.payload.pages,
         };
         state.lastFetched = Date.now();
-        // Store the current status for cache validation
         state.currentStatus = action.payload.requestStatus || null;
+        // Update current filters
+        if (action.payload.appliedFilters) {
+          state.currentFilters = action.payload.appliedFilters;
+        }
       })
       .addCase(fetchDiscussions.rejected, (state, action) => {
         state.loading = false;
@@ -267,10 +338,12 @@ export const {
   setSelectedDiscussion, 
   clearDiscussionCache, 
   setPaginationParams,
+  setFilters,
+  clearFilter,
   resetDiscussions 
 } = discussionsSlice.actions;
 
 export default discussionsSlice.reducer;
 
 // Export types for use in components
-export type { PaginatedDiscussionsResponse, PaginationInfo };
+export type { PaginatedDiscussionsResponse, PaginationInfo, EnhancedDiscussionParams };

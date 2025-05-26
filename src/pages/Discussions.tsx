@@ -18,7 +18,7 @@ import DiscussionFilters from '@/components/discussions/DiscussionFilters';
 import { api } from '@/services/api/endpoints';
 
 // Discussion type imported from api service
-import { Discussion, TaskState, BatchUpload, TaskStatus } from '@/services/api';
+import { Discussion, TaskState, TaskStatus } from '@/services/api';
 
 interface EnhancedDiscussion extends Discussion {
   tasks: {
@@ -38,8 +38,25 @@ interface FilterValues {
   batchId: string;
 }
 
+// Custom hook for debounced search
+function useDebounce(value: string, delay: number) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
 const Discussions = () => {
-  const { isAuthenticated, user, isPodLead,isAdmin } = useUser();
+  const { isAuthenticated, user, isPodLead, isAdmin } = useUser();
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useAppDispatch();
@@ -47,7 +64,7 @@ const Discussions = () => {
   // Get discussions from Redux store
   const { discussions, loading, error, pagination } = useAppSelector(state => state.discussions);
   
-  const { getUserAnnotationStatus, annotations } = useAnnotationData();
+  const { getUserAnnotationStatus } = useAnnotationData();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterValues, setFilterValues] = useState<FilterValues>({
     status: 'all',
@@ -65,7 +82,66 @@ const Discussions = () => {
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [availableBatches, setAvailableBatches] = useState<{ id: number, name: string }[]>([]);
 
-  // Manual fetch batches function (only this one stays)
+  const debouncedSearchQuery = useDebounce(searchQuery, 500);
+
+  // CENTRALIZED FETCH PARAMS BUILDER - THIS ELIMINATES ALL DUPLICATION
+  const buildFetchParams = useCallback((overrides = {}) => {
+    console.log('🔍 DETAILED DEBUG in buildFetchParams:');
+    console.log('  filterValues.showMyAnnotations:', filterValues.showMyAnnotations);
+    console.log('  typeof showMyAnnotations:', typeof filterValues.showMyAnnotations);
+    console.log('  user object:', user);
+    console.log('  user?.id:', user?.id);
+    console.log('  typeof user?.id:', typeof user?.id);
+    
+    // Test the condition step by step
+    const step1 = filterValues.showMyAnnotations;
+    const step2 = user?.id;
+    const step3 = step1 && step2;
+    const step4 = step3 ? user.id.toString() : undefined;
+    console.log('🔍 DETAILED DEBUG in buildFetchParams:');
+    console.log('  step1:', step1);
+    console.log('  step2:', step2);
+    console.log('  step3:', step3);
+    console.log('  step4:', step4);
+    const params ={
+      status: filterValues.status === 'all' ? undefined : filterValues.status,
+      search: debouncedSearchQuery.trim() || undefined,
+      repository_language: filterValues.repositoryLanguage.length > 0 ? filterValues.repositoryLanguage.join(',') : undefined,
+      release_tag: filterValues.releaseTag.length > 0 ? filterValues.releaseTag.join(',') : undefined,
+      from_date: filterValues.fromDate ? filterValues.fromDate.toISOString().split('T')[0] : undefined,
+      to_date: filterValues.toDate ? filterValues.toDate.toISOString().split('T')[0] : undefined,
+      batch_id: filterValues.batchId ? Number(filterValues.batchId) : undefined,
+      user_id: filterValues.showMyAnnotations && user?.id ? user.id.toString() : undefined,
+      page: 1,
+      per_page: pagination.per_page,
+      forceRefresh: true,
+      ...overrides // Allow overriding specific params
+    };
+  console.log('🔍 FINAL PARAMS TO API:', params);
+    return params
+  }, [filterValues, debouncedSearchQuery, user?.id, pagination.per_page]);
+
+  // SINGLE FETCH FUNCTION - USED EVERYWHERE
+  const fetchDiscussionsWithParams = useCallback((overrides = {}) => {
+    const params = buildFetchParams(overrides);
+    console.log('Fetching discussions with params:', params);
+    dispatch(fetchDiscussions(params));
+  }, [buildFetchParams, dispatch]);
+
+  // Fetch filter options
+  const fetchFilterOptions = useCallback(async () => {
+    if (!isAuthenticated) return;
+    
+    try {
+      const options = await api.discussions.getFilterOptions();
+      setAvailableLanguages(options.repository_languages || []);
+      setAvailableTags(options.release_tags || []);
+    } catch (error) {
+      console.error('Failed to fetch filter options:', error);
+    }
+  }, [isAuthenticated]);
+
+  // Fetch batches
   const fetchBatchesData = useCallback(async () => {
     if (!isAuthenticated) return;
     
@@ -97,7 +173,6 @@ const Discussions = () => {
     const pageParam = params.get('page');
     const perPageParam = params.get('per_page');
     const batch = params.get('batch_id');
-    
     const fromDateObj = fromParam ? new Date(fromParam) : undefined;
     const toDateObj = toParam ? new Date(toParam) : undefined;
     
@@ -124,10 +199,18 @@ const Discussions = () => {
     
     // Fetch initial data
     fetchBatchesData();
+    fetchFilterOptions();
     
-    // Initial discussions fetch - DIRECT DISPATCH
+    // Initial discussions fetch with URL params
     const initialFetchParams = {
       status: (statusFromParams && statusFromParams !== 'all') ? statusFromParams : undefined,
+      search: search || undefined,
+      repository_language: lang.length > 0 ? lang.join(',') : undefined,
+      release_tag: tag.length > 0 ? tag.join(',') : undefined,
+      from_date: fromDateObj ? fromDateObj.toISOString().split('T')[0] : undefined,
+      to_date: toDateObj ? toDateObj.toISOString().split('T')[0] : undefined,
+      batch_id: batch ? Number(batch) : undefined,
+      user_id: myAnnotations && user?.id ? user.id.toString() : undefined,
       page: pageParam ? parseInt(pageParam) : 1,
       per_page: perPageParam ? parseInt(perPageParam) : 10,
       forceRefresh: false
@@ -137,90 +220,15 @@ const Discussions = () => {
     dispatch(fetchDiscussions(initialFetchParams));
     
     setIsMounted(true);
-  }, [isAuthenticated, location.search, user?.id, navigate, dispatch, fetchBatchesData]);
+  }, [isAuthenticated, location.search, user?.id, navigate, dispatch, fetchBatchesData, fetchFilterOptions]);
 
-  // Extract available filter options when discussions change
-  useEffect(() => {
-    if (discussions.length > 0) {
-      const languages = Array.from(new Set(
-        discussions
-          .map(d => d.repository_language)
-          .filter(Boolean) as string[]
-      ));
-      
-      const tags = Array.from(new Set(
-        discussions
-          .map(d => d.release_tag)
-          .filter(Boolean) as string[]
-      ));
-      
-      setAvailableLanguages(languages);
-      setAvailableTags(tags);
-    }
-  }, [discussions]);
-
-  // Update URL when filters change - but don't trigger fetches
+  // Effect to handle debounced search - SIMPLIFIED
   useEffect(() => {
     if (!isMounted) return;
     
-    const params = new URLSearchParams();
-    
-    // Add pagination params
-    if (pagination.page > 1) params.set('page', pagination.page.toString());
-    if (pagination.per_page !== 10) params.set('per_page', pagination.per_page.toString());
-    
-    // Format status parameter
-    if (filterValues.status !== 'all') {
-      const validStatus = ['completed', 'unlocked', 'locked'].includes(filterValues.status) 
-        ? filterValues.status 
-        : 'all';
-      params.set('status', validStatus);
-    }
-    
-    // Other filter parameters
-    if (searchQuery) params.set('search', searchQuery.trim());
-    if (filterValues.showMyAnnotations && user?.id) params.set('user_id', user.id.toString());
-    
-    if (filterValues.repositoryLanguage?.length > 0) {
-      const encodedLanguages = filterValues.repositoryLanguage
-        .map(lang => encodeURIComponent(lang))
-        .join(',');
-      params.set('repository_language', encodedLanguages);
-    }
-    
-    if (filterValues.releaseTag?.length > 0) {
-      const encodedTags = filterValues.releaseTag
-        .map(tag => encodeURIComponent(tag))
-        .join(',');
-      params.set('release_tag', encodedTags);
-    }
-    
-    if (filterValues.fromDate instanceof Date) {
-      try {
-        params.set('from_date', filterValues.fromDate.toISOString().split('T')[0]);
-      } catch (error) {
-        console.error('Error formatting fromDate:', error);
-      }
-    }
-    
-    if (filterValues.toDate instanceof Date) {
-      try {
-        params.set('to_date', filterValues.toDate.toISOString().split('T')[0]);
-      } catch (error) {
-        console.error('Error formatting toDate:', error);
-      }
-    }
-    
-    if (filterValues.batchId) {
-      const batchIdNum = Number(filterValues.batchId);
-      if (!isNaN(batchIdNum) && batchIdNum > 0) {
-        params.set('batch_id', batchIdNum.toString());
-      }
-    }
-    
-    const newUrl = params.toString() ? `?${params.toString()}` : '';
-    navigate(`/discussions${newUrl}`, { replace: true });
-  }, [filterValues, searchQuery, pagination, navigate, isMounted, user?.id]);
+    dispatch(setPaginationParams({ page: 1 }));
+    fetchDiscussionsWithParams();
+  }, [debouncedSearchQuery, filterValues, isMounted, dispatch, fetchDiscussionsWithParams]);
 
   // Enhanced discussions with user annotation status
   const enhancedDiscussions = useMemo((): EnhancedDiscussion[] => {
@@ -267,86 +275,41 @@ const Discussions = () => {
     });
   }, [discussions, user, getUserAnnotationStatus]);
 
-  // FIXED: Direct dispatch handlers - no problematic useCallback dependencies
+  // CLEANED UP HANDLERS - ALL USE THE SAME FETCH FUNCTION
   const handleSearchSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
     dispatch(setPaginationParams({ page: 1 }));
-    
-    // DIRECT DISPATCH
-    const fetchParams = {
-      status: filterValues.status === 'all' ? undefined : filterValues.status,
-      page: 1,
-      per_page: pagination.per_page,
-      forceRefresh: true
-    };
-    
-    console.log('Search submit - fetching with params:', fetchParams);
-    dispatch(fetchDiscussions(fetchParams));
-  }, [dispatch, filterValues.status, pagination.per_page]);
+    fetchDiscussionsWithParams();
+  }, [dispatch, fetchDiscussionsWithParams]);
 
   const handleFilterChange = useCallback((newFilters: FilterValues) => {
     console.log('[HANDLE FILTER CHANGE] Received newFilters:', newFilters);
     setFilterValues(newFilters);
     dispatch(setPaginationParams({ page: 1 }));
-    
-    // DIRECT DISPATCH
-    const fetchParams = {
-      status: newFilters.status === 'all' ? undefined : newFilters.status,
-      page: 1,
-      per_page: pagination.per_page,
-      forceRefresh: true
-    };
-    
-    console.log('Filter change - fetching with params:', fetchParams);
-    dispatch(fetchDiscussions(fetchParams));
-  }, [dispatch, pagination.per_page]);
+    // fetchDiscussionsWithParams will be called by the useEffect when filterValues changes
+  }, [dispatch]);
 
   const handlePageChange = useCallback((newPage: number) => {
     dispatch(setPaginationParams({ page: newPage }));
-    
-    // DIRECT DISPATCH
-    const fetchParams = {
-      status: filterValues.status === 'all' ? undefined : filterValues.status,
-      page: newPage,
-      per_page: pagination.per_page,
-      forceRefresh: true
-    };
-    
-    console.log('Page change - fetching with params:', fetchParams);
-    dispatch(fetchDiscussions(fetchParams));
-  }, [dispatch, filterValues.status, pagination.per_page]);
+    fetchDiscussionsWithParams({ page: newPage });
+  }, [dispatch, fetchDiscussionsWithParams]);
 
   const handlePerPageChange = useCallback((newPerPage: number) => {
     dispatch(setPaginationParams({ page: 1, per_page: newPerPage }));
-    
-    // DIRECT DISPATCH
-    const fetchParams = {
-      status: filterValues.status === 'all' ? undefined : filterValues.status,
-      page: 1,
-      per_page: newPerPage,
-      forceRefresh: true
-    };
-    
-    console.log('Per page change - fetching with params:', fetchParams);
-    dispatch(fetchDiscussions(fetchParams));
-  }, [dispatch, filterValues.status]);
+    fetchDiscussionsWithParams({ page: 1, per_page: newPerPage });
+  }, [dispatch, fetchDiscussionsWithParams]);
 
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
+    // Debounced search will be handled by useEffect
   }, []);
 
   const handleRetry = useCallback(() => {
-    // DIRECT DISPATCH
-    const fetchParams = {
-      status: filterValues.status === 'all' ? undefined : filterValues.status,
+    fetchDiscussionsWithParams({ 
       page: pagination.page,
-      per_page: pagination.per_page,
-      forceRefresh: true
-    };
-    
-    console.log('Retry - fetching with params:', fetchParams);
-    dispatch(fetchDiscussions(fetchParams));
-  }, [dispatch, filterValues.status, pagination.page, pagination.per_page]);
+      per_page: pagination.per_page 
+    });
+  }, [fetchDiscussionsWithParams, pagination.page, pagination.per_page]);
 
   const handleClearFilters = useCallback(() => {
     setSearchQuery('');
@@ -361,16 +324,20 @@ const Discussions = () => {
     });
     dispatch(setPaginationParams({ page: 1 }));
     
-    // DIRECT DISPATCH
-    const fetchParams = {
-      status: undefined, // 'all' becomes undefined
+    // Use direct dispatch for clear filters since we're clearing everything
+    dispatch(fetchDiscussions({
+      status: undefined,
+      search: undefined,
+      repository_language: undefined,
+      release_tag: undefined,
+      from_date: undefined,
+      to_date: undefined,
+      batch_id: undefined,
+      user_id: undefined,
       page: 1,
       per_page: pagination.per_page,
       forceRefresh: true
-    };
-    
-    console.log('Clear filters - fetching with params:', fetchParams);
-    dispatch(fetchDiscussions(fetchParams));
+    }));
   }, [dispatch, pagination.per_page]);
 
   // Task navigation handler
@@ -439,7 +406,7 @@ const Discussions = () => {
       navigate(`/dashboard?discussionId=${discussionId}&taskId=${taskNumber}&mode=new&timestamp=${Date.now()}`);
     }
     
-  }, [discussions, getUserAnnotationStatus, isPodLead,isAdmin, navigate, user]);
+  }, [discussions, getUserAnnotationStatus, isPodLead, isAdmin, navigate, user]);
 
   // Utility functions
   const getTaskStatusClass = useCallback((status: 'locked' | 'unlocked' | 'completed', userAnnotated?: boolean) => {
@@ -463,7 +430,7 @@ const Discussions = () => {
     
     const userAnnotated = task.userAnnotated === true;
     const requiredAnnotators = taskNumber === 3 ? 5 : 3;
-    const maxAnnotatorsReached = task.annotators >= requiredAnnotators && !isPodLead &&  !isAdmin &&!userAnnotated;
+    const maxAnnotatorsReached = task.annotators >= requiredAnnotators && !isPodLead && !isAdmin && !userAnnotated;
     
     const isEnabled = (task.status === 'unlocked' || task.status === 'completed' || isPodLead || isAdmin || userAnnotated) && !maxAnnotatorsReached;
     
@@ -483,7 +450,7 @@ const Discussions = () => {
     }
         
     return { isEnabled, text };
-  }, [isPodLead,isAdmin]);
+  }, [isPodLead, isAdmin]);
 
   const openExternalLink = useCallback((url: string) => {
     window.open(url, '_blank', 'noopener,noreferrer');
@@ -647,7 +614,16 @@ const Discussions = () => {
                         {discussion.repository}
                       </CardDescription>
                     </div>
+
                     <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-1">
+                        {discussion.id && (
+                          <Badge variant="outline" className="flex items-center gap-1">
+                            <Code className="h-3.5 w-3.5" />
+                            <span>{discussion.id}</span>
+                          </Badge>
+                        )}
+                      </div>
                       <Button 
                         size="sm" 
                         variant="ghost" 
