@@ -145,7 +145,7 @@ class AnnotationUpdate(BaseModel):
 class Annotation(AnnotationBase):
     id: int
     timestamp: datetime
-
+    pod_lead_email: Optional[str] = None 
     model_config = {
         "from_attributes": True,
         "populate_by_name": True

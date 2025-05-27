@@ -176,6 +176,7 @@ def get_discussion_by_id(db: Session, discussion_id: str) -> Optional[schemas.Di
                 annotations[f"task{task_num}_consensus"] = schemas.Annotation(
                     id=0,  # Use a placeholder ID for consensus
                     discussion_id=consensus.discussion_id,
+                    pod_lead_email=consensus.user_id, 
                     user_id="consensus",
                     task_id=consensus.task_id,
                     data=consensus.data,

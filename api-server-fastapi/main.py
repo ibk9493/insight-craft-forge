@@ -646,7 +646,8 @@ async def get_summary_report(
         return [processed_data]  # Return array with single object
 
     # GET ALL DISCUSSIONS
-    discussions = discussions_service.get_discussions(db, status=None, limit=100000, offset=0)
+    discussions = discussions_service.get_discussions(db, filters=None, limit=100000, offset=0)
+
     
     result = []
     for discussion in discussions:
