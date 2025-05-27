@@ -31,6 +31,9 @@ interface EnhancedDiscussionQueryParams {
   page?: number;
   per_page?: number;
   user_id?: string;
+  task1_status?: string;
+  task2_status?: string;
+  task3_status?: string;
 }
 
 interface FilterOptionsResponse {
@@ -42,6 +45,28 @@ interface FilterOptionsResponse {
     max_date: string | null;
   };
 }
+
+// NEW: Add missing response types
+interface TaskCompletionStatusResponse {
+  discussion_id: string;
+  task_id: number;
+  can_complete: boolean;
+  message: string;
+  criteria: Record<string, boolean>;
+  missing_criteria: string[];
+}
+
+interface ExportResponse {
+  success: boolean;
+  downloadUrl: string;
+  filename: string;
+  format: string;
+  discussionCount?: number;
+  batchId?: number;
+  batchName?: string;
+  expiresIn: string;
+}
+
 // Update this function to use the enhanced parameters
 export const fetchDiscussions = async (params: EnhancedDiscussionQueryParams = {}): Promise<PaginatedDiscussionsResponse> => {
   return api.discussions.getAll(params);
@@ -374,11 +399,12 @@ export const api = {
       });
     },
 
-    taskCompletionStatus: (discussionId, taskId) => {
+    // NEW: Task completion status endpoint
+    taskCompletionStatus: (discussionId: string, taskId: number) => {
       const url = `/api/tasks/${encodeURIComponent(discussionId)}/${taskId}/completion-status`;
       
       console.log(`[Workflow] Getting completion status for discussion: ${discussionId}, task: ${taskId}`);
-      return safeApiRequest(url, 'GET', undefined, undefined, {
+      return safeApiRequest<TaskCompletionStatusResponse>(url, 'GET', undefined, undefined, {
         discussion_id: discussionId,
         task_id: taskId,
         can_complete: false,
@@ -420,7 +446,10 @@ export const api = {
       if (params.batch_id) queryParams.append('batch_id', params.batch_id.toString());
       if (params.page) queryParams.append('page', params.page.toString());
       if (params.per_page) queryParams.append('per_page', params.per_page.toString());
-      if (params.user_id) queryParams.append('user_id', params.user_id); // ← ADD THIS LINE
+      if (params.user_id) queryParams.append('user_id', params.user_id);
+      if (params.task1_status) queryParams.append('task1_status', params.task1_status);
+      if (params.task2_status) queryParams.append('task2_status', params.task2_status);
+      if (params.task3_status) queryParams.append('task3_status', params.task3_status);
       const url = `/api/discussions${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
       
       return safeApiRequest<PaginatedDiscussionsResponse>(
@@ -652,6 +681,30 @@ export const api = {
         message: 'Password reset failed' 
       });
     },
+
+    // NEW: Check email authorization
+    checkEmailAuthorization: (email: string) => {
+      console.log('[Auth] Checking email authorization:', email);
+      return safeApiRequest<{id: number, email: string, role: UserRole} | null>(
+        `/api/auth/check-email/${encodeURIComponent(email)}`, 
+        'GET', 
+        undefined, 
+        undefined, 
+        null
+      );
+    },
+
+    // NEW: Verify user authorization
+    verifyUserAuthorization: (email: string) => {
+      console.log('[Auth] Verifying user authorization:', email);
+      return safeApiRequest<{id: number, email: string, role: UserRole}>(
+        '/api/auth/verify-user', 
+        'POST', 
+        { email }, 
+        undefined, 
+        { id: 0, email: '', role: 'annotator' as UserRole }
+      );
+    },
   },
   
   // Admin endpoints
@@ -762,6 +815,14 @@ export const api = {
       });
     },
 
+    updateBatch: (batchId: number, name: string, description?: string) => {
+      console.log(`[Batches] Updating batch with ID: ${batchId}`);
+      return safeApiRequest<BatchManagementResult>(`/api/batches/${batchId}`, 'PUT', { name, description }, undefined, {
+        success: false,
+        message: 'Failed to update batch'
+      });
+    },
+
     getBatchDiscussions: (batchId: number, params: DiscussionQueryParams = {}) => {
       const queryParams = new URLSearchParams();
       
@@ -786,11 +847,59 @@ export const api = {
       );
     }
   },
+
+  // NEW: Downloads endpoints (from download_handler.py)
+  downloads: {
+    getFile: (filename: string) => {
+      console.log(`[Downloads] Getting file: ${filename}`);
+      // This endpoint returns the actual file, so we handle it differently
+      const url = `/downloads/${encodeURIComponent(filename)}`;
+      window.open(formatApiUrl(url), '_blank');
+      return Promise.resolve({ success: true });
+    }
+  },
+
+  // NEW: Export endpoints (from export_service.py)
+  export: {
+    batchDiscussions: (batchId: number, format: 'json' | 'csv' = 'json') => {
+      console.log(`[Export] Exporting batch ${batchId} discussions as ${format}`);
+      return safeApiRequest<ExportResponse>(
+        `/api/export/batches/${batchId}?format=${format}`, 
+        'GET', 
+        undefined, 
+        undefined, 
+        {
+          success: false,
+          downloadUrl: '',
+          filename: '',
+          format: format,
+          expiresIn: '24 hours'
+        }
+      );
+    },
+
+    allDiscussions: (format: 'json' | 'csv' = 'json') => {
+      console.log(`[Export] Exporting all discussions as ${format}`);
+      return safeApiRequest<ExportResponse>(
+        `/api/export/discussions?format=${format}`, 
+        'GET', 
+        undefined, 
+        undefined, 
+        {
+          success: false,
+          downloadUrl: '',
+          filename: '',
+          format: format,
+          expiresIn: '24 hours'
+        }
+      );
+    }
+  },
   
   summary: {
     getSystemSummary: () => {
       console.log('[Summary] Getting system summary statistics');
-      return safeApiRequest<SystemSummary>('/api/summary/stats', 'GET', undefined, undefined, {
+      return safeApiRequest<any>('/api/summary/stats', 'GET', undefined, undefined, {
         totalDiscussions: 0,
         task1Completed: 0,
         task2Completed: 0,
@@ -822,6 +931,7 @@ export const api = {
         totalTasksCompleted: 0
       });
     },
+
     downloadReportAsFile: async (format: 'json' | 'csv' = 'json') => {
       console.log(`[Summary] Downloading ${format} report as file`);
 
@@ -864,6 +974,7 @@ export const api = {
         return { success: false, error: error.message };
       }
     },
+
     downloadReport: (format: 'json' | 'csv' = 'json') => {
       console.log(`[Summary] Downloading report in ${format} format`);
       return safeApiRequest<{downloadUrl: string}>(`/api/summary/report?format=${format}`, 'GET', undefined, undefined, {
@@ -887,42 +998,161 @@ export const api = {
     }
   },
 
-// User endpoints
-users: {
-  getUserById: (userId: string) => {
-    console.log(`[Users] Getting user with ID: ${userId}`);
-    return safeApiRequest<{id: string, email: string, username: string, role: UserRole}>(
-      `/api/auth/users/${encodeURIComponent(userId)}`, 
-      'GET', 
-      undefined, 
-      undefined, 
-      {id: userId, email: '', username: '', role: 'annotator' as UserRole}
-    );
+  // User endpoints
+  users: {
+    getUserById: (userId: string) => {
+      console.log(`[Users] Getting user with ID: ${userId}`);
+      return safeApiRequest<{id: string, email: string, username: string, role: UserRole}>(
+        `/api/auth/users/${encodeURIComponent(userId)}`, 
+        'GET', 
+        undefined, 
+        undefined, 
+        {id: userId, email: '', username: '', role: 'annotator' as UserRole}
+      );
+    },
+    
+    getAllUsers: () => {
+      console.log('[Users] Getting all users');
+      return safeApiRequest<{id: string, email: string, username: string, role: UserRole}[]>(
+        '/api/auth/users', 
+        'GET', 
+        undefined, 
+        undefined, 
+        []
+      );
+    },
+    
+    // Add a method to check if a user exists and get basic info without needing admin privileges
+    getPublicUserInfo: (userId: string) => {
+      console.log(`[Users] Getting public info for user: ${userId}`);
+      return safeApiRequest<{id: string, username: string}>(
+        `/api/auth/users/${encodeURIComponent(userId)}/public`, 
+        'GET', 
+        undefined, 
+        undefined, 
+        {id: userId, username: `User ${userId}`}
+      );
+    }
   },
-  
-  getAllUsers: () => {
-    console.log('[Users] Getting all users');
-    return safeApiRequest<{id: string, email: string, username: string, role: UserRole}[]>(
-      '/api/auth/users', 
-      'GET', 
-      undefined, 
-      undefined, 
-      []
-    );
+
+  // NEW: Pod Lead specific endpoints (using existing database)
+  podLead: {
+    // Get pod lead summary/dashboard data (uses existing tables)
+    getSummary: () => {
+      console.log('[Pod Lead] Getting pod lead summary');
+      return safeApiRequest('/api/pod-lead/summary', 'GET', undefined, undefined, {
+        team_members: [],
+        team_performance: {
+          total_annotations: 0,
+          average_agreement_rate: 0,
+          users_needing_attention: []
+        },
+        workflow_status: {
+          discussions_ready_for_review: 0,
+          pending_consensus: 0
+        }
+      });
+    },
+    getBreakdown: () => {
+      console.log('[Pod Lead] Getting pod lead breakdown');
+      return safeApiRequest('/api/pod-lead/breakdown', 'GET', undefined, undefined, {
+        pod_lead_email: '',
+        consensus_created: 0,
+        annotations_overridden: 0,
+        team_members_managed: 0,
+        recent_activity: new Date().toISOString()
+      });
+    },
+    getAllBreakdown: () => {
+      console.log('[Pod Lead] Getting all pod leads breakdown');
+      return safeApiRequest('/api/pod-lead/all-breakdown', 'GET', undefined, undefined, []);
+    },
+    // Get team performance metrics (aggregates existing user data)
+    getTeamPerformance: () => {
+      console.log('[Pod Lead] Getting team performance metrics');
+      return safeApiRequest('/api/pod-lead/team/performance', 'GET', undefined, undefined, {
+        team_members: [],
+        performance_summary: {
+          excellent_performers: 0,
+          needs_improvement: 0,
+          total_annotations: 0,
+          average_agreement_rate: 0
+        }
+      });
+    },
+
+    // Get discussions that need pod lead review (filters existing discussions)
+    getDiscussionsForReview: (params: { priority?: string; page?: number; per_page?: number } = {}) => {
+      const queryParams = new URLSearchParams();
+      if (params.priority) queryParams.append('priority', params.priority);
+      if (params.page) queryParams.append('page', params.page.toString());
+      if (params.per_page) queryParams.append('per_page', params.per_page.toString());
+      
+      const url = `/api/pod-lead/discussions/review${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+      
+      console.log('[Pod Lead] Getting discussions for review');
+      return safeApiRequest(url, 'GET', undefined, undefined, {
+        items: [],
+        total: 0,
+        page: 1,
+        per_page: 10,
+        pages: 0
+      });
+    },
+
+    // Override annotation as pod lead (already exists!)
+    overrideAnnotation: (annotatorId: string, discussionId: string, taskId: number, data: Record<string, any>) => {
+      console.log(`[Pod Lead] Overriding annotation for ${annotatorId} on ${discussionId} task ${taskId}`);
+      return safeApiRequest<Annotation>('/api/pod-lead/annotations/override', 'PUT', {
+        annotator_id: annotatorId,
+        discussion_id: discussionId,
+        task_id: taskId,
+        data
+      }, undefined, {} as Annotation);
+    },
+
+    // Get team member's detailed performance (uses existing user agreement analysis)
+    getUserPerformance: (userId: string) => {
+      console.log(`[Pod Lead] Getting performance data for user: ${userId}`);
+      // This can directly use the existing workflow.userAgreementAnalysis endpoint
+      return api.workflow.userAgreementAnalysis(userId, null, true);
+    }
   },
-  
-  // Add a method to check if a user exists and get basic info without needing admin privileges
-  getPublicUserInfo: (userId: string) => {
-    console.log(`[Users] Getting public info for user: ${userId}`);
-    return safeApiRequest<{id: string, username: string}>(
-      `/api/auth/users/${encodeURIComponent(userId)}/public`, 
-      'GET', 
-      undefined, 
-      undefined, 
-      {id: userId, username: `User ${userId}`}
-    );
-  }
-}
+
+  // NEW: File Upload/Management endpoints (for code uploads, attachments)
+  files: {
+    upload: (file: File, discussionId?: string, taskId?: number) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (discussionId) formData.append('discussion_id', discussionId);
+      if (taskId) formData.append('task_id', taskId.toString());
+      
+      console.log(`[Files] Uploading file: ${file.name}`);
+      return safeApiRequest<{success: boolean, fileUrl: string, filename: string}>('/api/files/upload', 'POST', formData, {
+        'Content-Type': undefined as any
+      }, { success: false, fileUrl: '', filename: '' });
+    },
+
+    delete: (fileUrl: string) => {
+      console.log(`[Files] Deleting file: ${fileUrl}`);
+      return safeApiRequest<{success: boolean, message: string}>('/api/files/delete', 'DELETE', { file_url: fileUrl }, undefined, {
+        success: false,
+        message: 'Failed to delete file'
+      });
+    },
+
+    getMetadata: (fileUrl: string) => {
+      console.log(`[Files] Getting file metadata: ${fileUrl}`);
+      return safeApiRequest<{filename: string, size: number, type: string, uploadedAt: string}>(`/api/files/metadata?file_url=${encodeURIComponent(fileUrl)}`, 'GET', undefined, undefined, {
+        filename: '',
+        size: 0,
+        type: '',
+        uploadedAt: ''
+      });
+    }
+  },
+
+
 };
 
 // Export the pagination types for use in other files
@@ -930,5 +1160,7 @@ export type {
   PaginatedDiscussionsResponse, 
   DiscussionQueryParams, 
   EnhancedDiscussionQueryParams, 
-  FilterOptionsResponse 
+  FilterOptionsResponse,
+  TaskCompletionStatusResponse,
+  ExportResponse
 };

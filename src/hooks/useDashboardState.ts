@@ -122,13 +122,13 @@ export function useDashboardState() {
     }
   }, [discussionId, navigate]);
 
-  const handleScreenshotUrlChange = (url: string, selectedOption: string) => {
+  const handleScreenshotUrlChange = (url: string, selectedOption?: string) => {
     setScreenshotUrl(url);
     setScreenshotUrlText(selectedOption)
     toast.success("Screenshot URL saved");
   };
   
-  const handleCodeUrlChange = (url: string, selectedOption: string) => {
+  const handleCodeUrlChange = (url: string, selectedOption?: string) => {
     setCodeDownloadUrl(url);
     setCodeDownloadUrlText(selectedOption)
     setIsCodeUrlValid(validateGitHubCodeUrl(url));

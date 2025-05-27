@@ -11,7 +11,7 @@ import models
 import schemas
 from database import engine, get_db, check_and_create_tables
 from services import discussions_service, annotations_service, consensus_service, auth_service, summary_service, \
-    batch_service, jwt_auth_service, user_agreement_service,    general_report_service
+    batch_service, jwt_auth_service, user_agreement_service,    general_report_service, pod_lead_service
 
 # from fastapi import APIRouter, Depends, HTTPException # Already imported
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -135,11 +135,21 @@ def get_all_discussions(
         to_date: Optional[str] = None,              # ISO date string
         batch_id: Optional[int] = None,
         user_id: Optional[str] = None,
+        task1_status: Optional[str] = None,         # ADD THIS
+        task2_status: Optional[str] = None,         # ADD THIS
+        task3_status: Optional[str] = None,         # ADD THIS
         page: int = Query(1, ge=1, description="Page number, starting from 1"),
         per_page: int = Query(10, ge=1, le=100, description="Items per page (1-100)"),
         db: Session = Depends(get_db)
 ):
     try:
+        # Build filter parameters
+ 
+        logger.info(f"ENDPOINT DEBUG - Received parameters:")
+        logger.info(f"  task1_status: {task1_status}")
+        logger.info(f"  task2_status: {task2_status}")
+        logger.info(f"  task3_status: {task3_status}")
+        
         # Build filter parameters
         filters = {
             'status': status,
@@ -149,9 +159,15 @@ def get_all_discussions(
             'from_date': from_date,
             'to_date': to_date,
             'batch_id': batch_id,
-            'user_id': user_id
+            'user_id': user_id,
+            'task1_status': task1_status,
+            'task2_status': task2_status,
+            'task3_status': task3_status
         }
         
+        # ADD THIS DEBUG LOGGING:
+        logger.info(f"ENDPOINT DEBUG - Built filters dict:")
+        logger.info(f"  {filters}")
         # Calculate offset
         offset = (page - 1) * per_page
         
@@ -178,7 +194,6 @@ def get_all_discussions(
     except Exception as e:
         logger.error(f"Error in get_all_discussions: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
-
 
 
 @app.get("/api/discussions/{discussion_id}", response_model=schemas.Discussion)
@@ -631,7 +646,8 @@ async def get_summary_report(
         return [processed_data]  # Return array with single object
 
     # GET ALL DISCUSSIONS
-    discussions = discussions_service.get_discussions(db, status=None, limit=100000, offset=0)
+    discussions = discussions_service.get_discussions(db, filters=None, limit=100000, offset=0)
+
     
     result = []
     for discussion in discussions:
@@ -1739,3 +1755,174 @@ def _build_consensus_from_agreement(field_agreement: Dict[str, Any]) -> Dict[str
     consensus_data["_generation_timestamp"] = datetime.utcnow().isoformat()
     
     return consensus_data
+
+@app.get("/api/pod-lead/summary", tags=["Pod Lead"])
+async def get_pod_lead_summary_endpoint(
+    pod_lead: schemas.AuthorizedUser = Depends(jwt_auth_service.get_pod_lead),
+    db: Session = Depends(get_db)
+):
+    """
+    Get pod lead dashboard summary including team performance and workflow status.
+    
+    **Returns:**
+    - Team member list with performance metrics
+    - Overall team performance summary  
+    - Workflow status (discussions needing review)
+    - Users needing attention
+    """
+    try:
+        logger.info(f"Pod lead {pod_lead.email} requesting summary")
+        summary = pod_lead_service.get_pod_lead_summary(db, pod_lead.email)
+        return summary
+    except Exception as e:
+        logger.error(f"Error getting pod lead summary: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get pod lead summary: {str(e)}"
+        )
+
+@app.get("/api/pod-lead/team/performance", tags=["Pod Lead"])
+async def get_team_performance_endpoint(
+    pod_lead: schemas.AuthorizedUser = Depends(jwt_auth_service.get_pod_lead),
+    db: Session = Depends(get_db)
+):
+    """
+    Get detailed team performance metrics for pod lead.
+    
+    **Returns:**
+    - Individual team member performance
+    - Performance categorization (excellent, good, needs improvement, needs training)
+    - Top performers and attention needed lists
+    """
+    try:
+        logger.info(f"Pod lead {pod_lead.email} requesting team performance")
+        performance = pod_lead_service.get_team_performance(db)
+        return performance
+    except Exception as e:
+        logger.error(f"Error getting team performance: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get team performance: {str(e)}"
+        )
+
+@app.get("/api/pod-lead/discussions/review", tags=["Pod Lead"])
+async def get_discussions_for_review_endpoint(
+    priority: Optional[str] = Query(None, description="Filter by priority (high, medium, low)"),
+    page: int = Query(1, ge=1, description="Page number"),
+    per_page: int = Query(10, ge=1, le=100, description="Items per page"),
+    pod_lead: schemas.AuthorizedUser = Depends(jwt_auth_service.get_pod_lead),
+    db: Session = Depends(get_db)
+):
+    """
+    Get discussions that need pod lead review.
+    
+    **Parameters:**
+    - **priority**: Filter by priority level (high, medium, low)
+    - **page**: Page number for pagination
+    - **per_page**: Number of items per page
+    
+    **Returns:**
+    - Discussions with high disagreement rates
+    - Discussions missing consensus
+    - Issues requiring pod lead attention
+    """
+    try:
+        logger.info(f"Pod lead {pod_lead.email} requesting discussions for review")
+        discussions = pod_lead_service.get_discussions_for_review(
+            db, priority=priority, page=page, per_page=per_page
+        )
+        return discussions
+    except Exception as e:
+        logger.error(f"Error getting discussions for review: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get discussions for review: {str(e)}"
+        )
+    
+    
+@app.get("/api/pod-lead/breakdown", tags=["Pod Lead"])
+async def get_pod_lead_breakdown_endpoint(
+    pod_lead: schemas.AuthorizedUser = Depends(jwt_auth_service.get_pod_lead),
+    db: Session = Depends(get_db)
+):
+    """Get pod lead activity breakdown using existing consensus data."""
+    try:
+        # Get consensus annotations created by this pod lead
+        consensus_created = db.query(models.ConsensusAnnotation).filter(
+            models.ConsensusAnnotation.user_id == pod_lead.email
+        ).count()
+        
+        # Get team members from existing service
+        team_summary = pod_lead_service.get_pod_lead_summary(db, pod_lead.email)
+        team_members_count = team_summary['team_performance']['team_size']
+        
+        # Get recent activity
+        recent_consensus = db.query(models.ConsensusAnnotation).filter(
+            models.ConsensusAnnotation.user_id == pod_lead.email
+        ).order_by(models.ConsensusAnnotation.timestamp.desc()).first()
+        
+        recent_activity = recent_consensus.timestamp.isoformat() if recent_consensus else datetime.utcnow().isoformat()
+        
+        return {
+            "pod_lead_email": pod_lead.email,
+            "consensus_created": consensus_created,
+            "annotations_overridden": 0,  # Can be enhanced later with override tracking
+            "team_members_managed": team_members_count,
+            "recent_activity": recent_activity
+        }
+    except Exception as e:
+        logger.error(f"Error getting pod lead breakdown: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get pod lead breakdown: {str(e)}"
+        )
+
+@app.get("/api/pod-lead/all-breakdown", tags=["Admin"])  
+async def get_all_pod_leads_breakdown(
+    admin_user: schemas.AuthorizedUser = Depends(jwt_auth_service.get_admin),
+    db: Session = Depends(get_db)
+):
+    """Get breakdown for all pod leads using existing services."""
+    try:
+        pod_leads = db.query(models.AuthorizedUser).filter(
+            models.AuthorizedUser.role == "pod_lead"
+        ).all()
+        
+        breakdown_data = []
+        
+        for pod_lead in pod_leads:
+            # Get consensus created by this pod lead
+            consensus_created = db.query(models.ConsensusAnnotation).filter(
+                models.ConsensusAnnotation.user_id == pod_lead.email
+            ).count()
+            
+            # Get team info from existing service
+            try:
+                team_summary = pod_lead_service.get_pod_lead_summary(db, pod_lead.email)
+                team_members_count = team_summary['team_performance']['team_size']
+            except:
+                team_members_count = 0
+            
+            # Get recent activity
+            recent_consensus = db.query(models.ConsensusAnnotation).filter(
+                models.ConsensusAnnotation.user_id == pod_lead.email
+            ).order_by(models.ConsensusAnnotation.timestamp.desc()).first()
+            
+            recent_activity = recent_consensus.timestamp.isoformat() if recent_consensus else datetime.utcnow().isoformat()
+            
+            breakdown_data.append({
+                "pod_lead_email": pod_lead.email,
+                "consensus_created": consensus_created,
+                "annotations_overridden": 0,  # Placeholder
+                "team_members_managed": team_members_count,
+                "recent_activity": recent_activity
+            })
+        
+        return breakdown_data
+        
+    except Exception as e:
+        logger.error(f"Error getting all pod leads breakdown: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get pod leads breakdown: {str(e)}"
+        )

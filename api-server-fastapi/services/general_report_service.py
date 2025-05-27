@@ -2,7 +2,7 @@
 
 from sqlalchemy.orm import Session
 from typing import Dict, List, Any, Optional
-from collections import defaultdict
+from collections import defaultdict, Counter  # Added Counter import here
 from datetime import datetime
 import logging
 import models
@@ -312,8 +312,7 @@ def _calculate_field_agreement(annotations: List[models.Annotation], task_id: in
             agreement_rate = 100.0
             consensus_value = field_values[0]
         else:
-            # Find majority
-            from collections import Counter
+            # Find majority - Counter is now imported at the top
             value_counts = Counter(field_values)
             most_common_value, most_common_count = value_counts.most_common(1)[0]
             agreement_rate = (most_common_count / len(field_values)) * 100

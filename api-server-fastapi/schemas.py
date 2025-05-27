@@ -145,7 +145,7 @@ class AnnotationUpdate(BaseModel):
 class Annotation(AnnotationBase):
     id: int
     timestamp: datetime
-
+    pod_lead_email: Optional[str] = None 
     model_config = {
         "from_attributes": True,
         "populate_by_name": True
@@ -379,6 +379,63 @@ class FilterOptionsResponse(BaseModel):
     batches: List[Dict[str, Any]]
     date_range: Dict[str, Optional[str]]
     
+    model_config = {
+        "from_attributes": True
+    }
+
+class TeamMemberSummary(BaseModel):
+    user_id: str
+    email: str
+    total_annotations: int
+    agreement_rate: float
+    status: str
+    last_activity: Optional[str] = None
+
+class TeamPerformanceSummary(BaseModel):
+    total_annotations: int
+    average_agreement_rate: float
+    users_needing_attention: List[TeamMemberSummary]
+    team_size: int
+
+class WorkflowStatus(BaseModel):
+    discussions_ready_for_review: int
+    pending_consensus: int
+
+class PodLeadSummaryResponse(BaseModel):
+    team_members: List[TeamMemberSummary]
+    team_performance: TeamPerformanceSummary
+    workflow_status: WorkflowStatus
+    generated_at: str
+
+    model_config = {
+        "from_attributes": True
+    }
+
+class TeamPerformanceResponse(BaseModel):
+    team_members: List[TeamMemberSummary]
+    performance_summary: Dict[str, Any]
+    top_performers: List[TeamMemberSummary]
+    attention_needed: List[TeamMemberSummary]
+
+    model_config = {
+        "from_attributes": True
+    }
+
+class DiscussionForReview(BaseModel):
+    discussion_id: str
+    title: str
+    priority: str
+    issues: List[str]
+    url: str
+    repository: str
+
+class DiscussionsForReviewResponse(BaseModel):
+    items: List[DiscussionForReview]
+    total: int
+    page: int
+    per_page: int
+    pages: int
+
     model_config = {
         "from_attributes": True
     }

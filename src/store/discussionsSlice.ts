@@ -22,6 +22,9 @@ interface EnhancedDiscussionParams {
   per_page?: number;
   forceRefresh?: boolean;
   user_id?: string;
+  task1_status?: string;
+  task2_status?: string;
+  task3_status?: string;
 }
 
 interface PaginatedDiscussionsResponse {
@@ -41,6 +44,9 @@ interface PaginatedDiscussionsResponse {
     to_date?: string;
     batch_id?: number;
     user_id?: string;
+    task1_status?: string;
+    task2_status?: string;
+    task3_status?: string;
   };
 }
 
@@ -62,6 +68,9 @@ interface DiscussionsState {
     to_date?: string;
     batch_id?: number;
     user_id?: string;
+    task1_status?: string;
+    task2_status?: string;
+    task3_status?: string;
   };
 }
 
@@ -100,6 +109,9 @@ export const fetchDiscussions = createAsyncThunk(
       to_date,
       batch_id,
       user_id,
+      task1_status,
+      task2_status,
+      task3_status,
       page = 1,
       per_page = 10,
       forceRefresh = false
@@ -114,7 +126,10 @@ export const fetchDiscussions = createAsyncThunk(
       from_date,
       to_date,
       batch_id,
-      user_id
+      user_id,
+      task1_status,
+      task2_status,
+      task3_status
     };
     
     // Remove undefined values for cleaner comparison
@@ -161,7 +176,10 @@ export const fetchDiscussions = createAsyncThunk(
       batch_id,
       page,
       per_page,
-      user_id
+      user_id,
+      task1_status,
+      task2_status,
+      task3_status
     });
     
     return {
