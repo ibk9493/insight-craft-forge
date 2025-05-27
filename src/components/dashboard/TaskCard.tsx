@@ -272,8 +272,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
                   })
               ) : (
                   <>
-                    {/* Special handling for code_download_url field */}
-                    {task.id === 'code_download_url' && (
+                    {/* Special handling for codeDownloadUrl field */}
+                    {task.id === 'codeDownloadUrl' && (
                         <div className="mt-3 space-y-3">
                           {/* URL Verification Options */}
                           {task.options && task.options.length > 0 && (
@@ -326,19 +326,19 @@ const TaskCard: React.FC<TaskCardProps> = ({
                             </div>
 
                             {/* Show repository release info if available */}
-                            {currentDiscussion?.release_tag && (
+                            {currentDiscussion?.releaseTag && (
                                 <div className="flex items-center gap-2 text-sm text-gray-600">
-                                  <span>Repository has release: {currentDiscussion.release_tag}</span>
-                                  {currentDiscussion.release_url && (
+                                  <span>Repository has release: {currentDiscussion.releaseTag}</span>
+                                  {currentDiscussion.releaseUrl && (
                                       <Button
                                           variant="ghost"
                                           size="sm"
                                           className="text-xs"
                                           onClick={() => {
                                             if (sectionIndex !== undefined) {
-                                              handleSectionSubTaskChange(sectionIndex, task.id, task.selectedOption, currentDiscussion.release_url);
+                                              handleSectionSubTaskChange(sectionIndex, task.id, task.selectedOption, currentDiscussion.releaseUrl);
                                             } else {
-                                              onSubTaskChange(task.id, task.selectedOption, currentDiscussion.release_url, undefined, undefined, undefined, undefined, currentDiscussion.release_url);
+                                              onSubTaskChange(task.id, task.selectedOption, currentDiscussion.releaseUrl, undefined, undefined, undefined, undefined, currentDiscussion.releaseUrl);
                                             }
                                           }}
                                       >
@@ -378,8 +378,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
                         </div>
                     )}
 
-                    {/* Regular field rendering for non-code_download_url fields */}
-                    {task.id !== 'code_download_url' && (
+                    {/* Regular field rendering for non-codeDownloadUrl fields */}
+                    {task.id !== 'codeDownloadUrl' && (
                         <>
                           {task.options && task.options.length > 0 && (
                               <div className="flex flex-wrap gap-2 mt-2">

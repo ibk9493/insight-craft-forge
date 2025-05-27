@@ -59,7 +59,9 @@ const Dashboard = () => {
     steps,
     tasks,
     screenshotUrl,
+    screenshotUrlText,
     codeDownloadUrl,
+    codeDownloadUrlText,
     handleCodeUrlChange,
     validateGitHubCodeUrl,
     isPodLead,
@@ -155,23 +157,23 @@ const Dashboard = () => {
     // Add proper null/undefined checks and array length validation
     if (task3Forms.length === 0 && task3SubTasks && Array.isArray(task3SubTasks) && task3SubTasks.length > 0) {
       try {
-        setTask3Forms([{ 
-          id: 'form-1', 
-          name: 'Form 1', 
-          subTasks: JSON.parse(JSON.stringify(task3SubTasks)) 
+        setTask3Forms([{
+          id: 'form-1',
+          name: 'Form 1',
+          subTasks: JSON.parse(JSON.stringify(task3SubTasks))
         }]);
       } catch (error) {
         console.error('Error initializing task3Forms:', error);
         console.log('task3SubTasks value:', task3SubTasks);
       }
     }
-    
+
     if (consensusTask3Forms.length === 0 && consensusTask3 && Array.isArray(consensusTask3) && consensusTask3.length > 0) {
       try {
-        setConsensusTask3Forms([{ 
-          id: 'consensus-form-1', 
-          name: 'Form 1', 
-          subTasks: JSON.parse(JSON.stringify(consensusTask3)) 
+        setConsensusTask3Forms([{
+          id: 'consensus-form-1',
+          name: 'Form 1',
+          subTasks: JSON.parse(JSON.stringify(consensusTask3))
         }]);
       } catch (error) {
         console.error('Error initializing consensusTask3Forms:', error);
@@ -179,8 +181,6 @@ const Dashboard = () => {
       }
     }
   }, [task3SubTasks, consensusTask3, task3Forms.length, consensusTask3Forms.length]);
-
-// Update the useEffect in Dashboard component that loads annotations:
 
   useEffect(() => {
     setConsensusStars(null);
@@ -195,21 +195,20 @@ const Dashboard = () => {
               setTask1SubTasks(loadResult.tasks);
               break;
             case TaskId.ANSWER_QUALITY:
+              { console.log("Screenshot:", screenshotUrl, codeDownloadUrl)
+              const screenshotTask = loadResult.tasks.find(t => t.id === 'screenshot');
+              if (screenshotTask && screenshotTask.textValue) {
+                handleScreenshotUrlChange(screenshotTask.textValue, screenshotTask.selectedOption);
+              }
+
+              const codeTask = loadResult.tasks.find(t => t.id === 'codeDownloadUrl');
+              if (codeTask && codeTask.textValue) {
+                handleCodeUrlChange(codeTask.textValue, codeTask.selectedOption);
+              }
               setTask2SubTasks(loadResult.tasks);
-
-              // NEW: Sync external state with API field names
-              const screenshotTask = loadResult.tasks.find(t => t.id === 'screenshot_url');
-              if (screenshotTask && screenshotTask.textValue && handleScreenshotUrlChange) {
-                handleScreenshotUrlChange(screenshotTask.textValue);
-              }
-
-              const codeTask = loadResult.tasks.find(t => t.id === 'code_download_url');
-              if (codeTask && codeTask.textValue && handleCodeUrlChange) {
-                handleCodeUrlChange(codeTask.textValue);
-              }
-              break;
+              break; }
             case TaskId.REWRITE:
-              // Handle Task 3 with multiple forms (existing code)
+              // Handle Task 3 with multiple forms
               if (loadResult.forms && loadResult.forms.length > 0) {
                 console.log('Loading Task 3 forms:', loadResult.forms);
                 setTask3Forms(loadResult.forms);
@@ -218,62 +217,6 @@ const Dashboard = () => {
                 setTask3SubTasks(loadResult.tasks);
               }
               break;
-          }
-        } else {
-          // If no loadResult.tasks, check if we need to manually load from raw annotation data
-          const userAnnotation = getUserAnnotation(discussionId, currentStep);
-          if (userAnnotation && currentStep === TaskId.ANSWER_QUALITY) {
-            // Handle Task 2 special case where API returns different field names
-            const mappedSubTasks = task2SubTasks.map(task => {
-              if (task.id === 'screenshot_url') {
-                const screenshotValue = userAnnotation.data['screenshot'];
-                if (screenshotValue) {
-                  handleScreenshotUrlChange && handleScreenshotUrlChange(screenshotValue);
-                  return {
-                    ...task,
-                    selectedOption: 'Provided',
-                    textValue: screenshotValue,
-                    status: 'completed' as SubTaskStatus
-                  };
-                }
-              } else if (task.id === 'code_download_url') {
-                const codeValue = userAnnotation.data['codeDownloadUrl'];
-                if (codeValue) {
-                  handleCodeUrlChange && handleCodeUrlChange(codeValue);
-                  return {
-                    ...task,
-                    selectedOption: 'Verified manually',
-                    textValue: codeValue,
-                    docDownloadLink: codeValue,
-                    enableDocDownload: true,
-                    status: 'completed' as SubTaskStatus
-                  };
-                }
-              } else {
-                // Handle regular fields
-                const savedValue = userAnnotation.data[task.id];
-                const savedTextValue = userAnnotation.data[`${task.id}_text`];
-
-                if (savedValue !== undefined) {
-                  let selectedOption = '';
-
-                  if (typeof savedValue === 'boolean') {
-                    selectedOption = savedValue ? 'Yes' : 'No';
-                  } else if (typeof savedValue === 'string') {
-                    selectedOption = savedValue;
-                  }
-
-                  return {
-                    ...task,
-                    selectedOption,
-                    textValue: savedTextValue || '',
-                    status: 'completed' as SubTaskStatus
-                  };
-                }
-              }
-              return task;
-            });
-            setTask2SubTasks(mappedSubTasks);
           }
         }
       } else if (viewMode === 'consensus' && (isPodLead || isAdmin)) {
@@ -287,13 +230,12 @@ const Dashboard = () => {
               case TaskId.ANSWER_QUALITY:
                 setConsensusTask2(consensusViewData.tasks);
 
-                // NEW: Sync external state for consensus mode too
-                const screenshotTask = consensusViewData.tasks.find(t => t.id === 'screenshot_url');
+                const screenshotTask = consensusViewData.tasks.find(t => t.id === 'screenshot');
                 if (screenshotTask && screenshotTask.textValue && handleScreenshotUrlChange) {
                   handleScreenshotUrlChange(screenshotTask.textValue);
                 }
 
-                const codeTask = consensusViewData.tasks.find(t => t.id === 'code_download_url');
+                const codeTask = consensusViewData.tasks.find(t => t.id === 'codeDownloadUrl');
                 if (codeTask && codeTask.textValue && handleCodeUrlChange) {
                   handleCodeUrlChange(codeTask.textValue);
                 }
@@ -312,7 +254,8 @@ const Dashboard = () => {
         loadConsensus();
       }
     }
-  }, [discussionId, currentStep, viewMode, user, isPodLead, isAdmin, annotationsLoaded, getUserAnnotation, task2SubTasks]);
+  }, [discussionId, currentStep, viewMode, user, isPodLead, isAdmin, annotationsLoaded, getUserAnnotation]); // Removed task2SubTasks
+
   const getSummaryData = () => ({ task1Results: {}, task2Results: {}, task3Results: {} });
 
   const onSaveClick = async () => {
@@ -322,6 +265,8 @@ const Dashboard = () => {
         viewMode,
         screenshotUrl,
         codeDownloadUrl,
+        screenshotUrlText,
+        codeDownloadUrlText,
         handleBackToGrid,
         viewMode === 'consensus' ? consensusStars : null,
         viewMode === 'consensus' ? consensusComment : '',
@@ -329,115 +274,6 @@ const Dashboard = () => {
         currentStep === TaskId.REWRITE ? consensusTask3Forms : undefined
     );
   };
-  const prepareTask2AnnotationData = (subTasks: SubTask[]) => {
-    const annotationData: Record<string, any> = {};
-
-    subTasks.forEach(task => {
-      // Handle regular fields
-      if (task.id !== 'screenshot_url' && task.id !== 'code_download_url') {
-        if (task.selectedOption) {
-          // Convert string options back to boolean for boolean fields
-          if (task.options && task.options.includes('Yes') && task.options.includes('No')) {
-            annotationData[task.id] = task.selectedOption === 'Yes';
-          } else {
-            annotationData[task.id] = task.selectedOption;
-          }
-        }
-
-        // Include text values
-        if (task.textValue) {
-          annotationData[`${task.id}_text`] = task.textValue;
-        }
-      }
-      // Handle special fields with API-specific naming
-      else if (task.id === 'screenshot_url') {
-        if (task.textValue) {
-          annotationData['screenshot'] = task.textValue;
-        }
-      }
-      else if (task.id === 'code_download_url') {
-        if (task.textValue) {
-          annotationData['codeDownloadUrl'] = task.textValue;
-        }
-      }
-    });
-
-    return annotationData;
-  };
-  useEffect(() => {
-    // Force refresh Task 2 subtasks to include new fields
-    if (currentStep === TaskId.ANSWER_QUALITY) {
-      const updatedTask2 = [
-        {
-          id: 'aspects',
-          title: 'Addresses All Aspects',
-          status: 'pending' as SubTaskStatus,
-          options: ['Yes', 'No'],
-          description: 'Check if the answer addresses all aspects of the question'
-        },
-        {
-          id: 'explanation',
-          title: 'Explanation Provided',
-          status: 'pending' as SubTaskStatus,
-          options: ['Yes', 'No'],
-          description: 'Check if the answer provides an explanation',
-          requiresRemarks: true
-        },
-        {
-          id: 'execution',
-          title: 'Manual Code Execution Check',
-          status: 'pending' as SubTaskStatus,
-          options: ['Executable', 'Not Executable', 'N/A'],
-          description: 'Check if the provided code is executable',
-          requiresRemarks: true
-        },
-        {
-          id: 'download',
-          title: 'Provide Code Download Link',
-          status: 'pending' as SubTaskStatus,
-          options: ['Provided', 'Not Provided', 'N/A'],
-          description: 'Check if a code download link is provided',
-          requiresRemarks: true
-        },
-        // NEW: Screenshot URL field
-        {
-          id: 'screenshot_url',
-          title: 'Screenshot Google Drive URL',
-          status: 'pending' as SubTaskStatus,
-          options: ['Provided', 'Not Needed'],
-          description: 'Provide Google Drive URL for the screenshot',
-          textInput: true,
-          textValue: screenshotUrl || '',
-          placeholder: 'Enter Google Drive URL for the screenshot'
-        },
-        // NEW: Code download URL field with verification
-        {
-          id: 'code_download_url',
-          title: 'Code Download URL',
-          status: 'pending' as SubTaskStatus,
-          options: ['Verified manually', 'Not verified'],
-          description: 'Provide and verify the code download URL',
-          textInput: true,
-          textValue: codeDownloadUrl || '',
-          placeholder: 'https://github.com/owner/repo/archive/refs/tags/version.tar.gz',
-          enableDocDownload: false,
-          docDownloadLink: ''
-        }
-      ];
-
-      // Only update if the current task2SubTasks doesn't have the new fields
-      const hasNewFields = task2SubTasks.some(t => t.id === 'screenshot_url' || t.id === 'code_download_url');
-      if (!hasNewFields) {
-        console.log('Adding new fields to Task 2');
-        setTask2SubTasks(updatedTask2);
-
-        // Also update consensus tasks
-        if (viewMode === 'consensus') {
-          setConsensusTask2(updatedTask2);
-        }
-      }
-    }
-  }, [currentStep, task2SubTasks.length, screenshotUrl, codeDownloadUrl]);
 
   const handleViewDiscussion = () => {
     if (currentDiscussion) dispatch(openModal(currentDiscussion));
@@ -456,54 +292,42 @@ const Dashboard = () => {
       setConsensusTask1(mappedSubTasks);
     }
     else if (currentStep === TaskId.ANSWER_QUALITY) {
-      // Task 2 - UPDATED to handle special field mappings
       const baseSubTasks = JSON.parse(JSON.stringify(task2SubTasks));
       const mappedSubTasks = baseSubTasks.map(task => {
         const savedValue = annotation.data[task.id];
         const savedTextValue = annotation.data[`${task.id}_text`];
 
-        // Handle special Task 2 field mappings
-        let actualTextValue = savedTextValue;
-        let actualSelectedOption = savedValue;
-
-        if (task.id === 'screenshot_url') {
-          actualTextValue = annotation.data['screenshot'] || '';
-          actualSelectedOption = actualTextValue ? 'Provided' : 'Not Needed';
-        } else if (task.id === 'code_download_url') {
-          actualTextValue = annotation.data['codeDownloadUrl'] || '';
-          actualSelectedOption = actualTextValue ? 'Verified manually' : 'Not verified';
-        }
-
-        if (actualSelectedOption !== undefined || actualTextValue) {
+        if (savedValue !== undefined || savedTextValue) {
           let selectedOption = '';
 
-          if (typeof actualSelectedOption === 'boolean') {
+          if (typeof savedValue === 'boolean') {
             if (task.options && task.options.length > 0) {
               const trueOption = task.options.find(o => o.toLowerCase() === 'true' || o.toLowerCase() === 'yes');
               const falseOption = task.options.find(o => o.toLowerCase() === 'false' || o.toLowerCase() === 'no');
-              if (actualSelectedOption === true && trueOption) selectedOption = trueOption;
-              else if (actualSelectedOption === false && falseOption) selectedOption = falseOption;
+              if (savedValue === true && trueOption) selectedOption = trueOption;
+              else if (savedValue === false && falseOption) selectedOption = falseOption;
             } else {
-              selectedOption = actualSelectedOption ? 'Yes' : 'No';
+              selectedOption = savedValue ? 'Yes' : 'No';
             }
-          } else if (typeof actualSelectedOption === 'string') {
-            if (task.options && task.options.includes(actualSelectedOption)) {
-              selectedOption = actualSelectedOption;
+          } else if (typeof savedValue === 'string') {
+            if (task.options && task.options.includes(savedValue)) {
+              selectedOption = savedValue;
             } else {
-              selectedOption = actualSelectedOption;
+              selectedOption = savedValue;
             }
           }
 
-          let updatedTask = {
+          const updatedTask = {
             ...task,
-            selectedOption: selectedOption || actualSelectedOption,
+            selectedOption: selectedOption || savedValue,
             status: 'completed' as SubTaskStatus,
-            textValue: typeof actualTextValue === 'string' ? actualTextValue : (task.textValue || '')
+            textValue: typeof savedTextValue === 'string' ? savedTextValue : (task.textValue || '')
           };
 
-          if (task.id === 'code_download_url') {
-            updatedTask.docDownloadLink = actualTextValue || '';
-            updatedTask.enableDocDownload = !!(actualTextValue && actualTextValue.trim());
+          // Special handling for codeDownloadUrl to enable download button
+          if (task.id === 'codeDownloadUrl') {
+            updatedTask.docDownloadLink = savedTextValue || '';
+            updatedTask.enableDocDownload = !!(savedTextValue && savedTextValue.trim());
           }
 
           return updatedTask;
@@ -514,19 +338,16 @@ const Dashboard = () => {
 
       setConsensusTask2(mappedSubTasks);
 
-      // Also sync the external state for screenshot and code URLs
-      const screenshotUrl = annotation.data['screenshot'];
-      const codeUrl = annotation.data['codeDownloadUrl'];
-
-      if (screenshotUrl && handleScreenshotUrlChange) {
-        handleScreenshotUrlChange(screenshotUrl);
+      // Sync the external state
+      if (annotation.data['screenshot']) {
+        handleScreenshotUrlChange(annotation.data['screenshot'], annotation.data['screenshot_text'] | '');
       }
-      if (codeUrl && handleCodeUrlChange) {
-        handleCodeUrlChange(codeUrl);
+      if (annotation.data['codeDownloadUrl']) {
+        handleCodeUrlChange(annotation.data['codeDownloadUrl'], annotation.data['codeDownloadUrl_text'] | '');
       }
     }
     else if (currentStep === TaskId.REWRITE) {
-      // Task 3 - NEW: Handle multiple forms structure
+      // Task 3 - Handle multiple forms structure
       if (annotation.data.forms && Array.isArray(annotation.data.forms)) {
         // Multi-form annotation - populate consensus forms
         const consensusForms = annotation.data.forms.map((formData: any, index: number) => {
@@ -640,93 +461,47 @@ const Dashboard = () => {
     setConsensusComment('');
     toast.success('Consensus populated with selected annotation. Please provide overall feedback.');
   };
-  
-  // Helper function for Task 3 single form mapping
-  const mapAnnotationToSubTasksForTask3 = (baseSubTasks: SubTask[], annotation: Annotation): SubTask[] => {
+
+  const mapAnnotationToSubTasks = (baseSubTasks: SubTask[], annotation: Annotation): SubTask[] => {
     return baseSubTasks.map(task => {
       const savedValue = annotation.data[task.id];
       const savedTextValue = annotation.data[`${task.id}_text`];
-      
-      // Handle short_answer_list with new format
-      if (task.id === 'short_answer_list') {
-        // Check for aggregated format first
-        if (Array.isArray(annotation.data.short_answer_list)) {
-          const shortAnswerData = annotation.data.short_answer_list;
-          
-          // Handle nested array format (multiple forms)
-          if (shortAnswerData.length > 0 && Array.isArray(shortAnswerData[0])) {
-            // Use first form's data
-            const firstFormData = shortAnswerData[0];
-            const claims = firstFormData.map((item: any) => 
-              typeof item === 'object' ? item.claim : item
-            );
-            const weights = firstFormData.map((item: any) => 
-              typeof item === 'object' ? parseInt(item.weight) || 1 : 1
-            );
-            
-            return {
-              ...task,
-              selectedOption: 'Completed',
-              status: 'completed' as SubTaskStatus,
-              textValues: claims,
-              weights: weights
-            };
-          }
-          // Handle single form format
-          else {
-            const claims = shortAnswerData.map((item: any) => 
-              typeof item === 'object' ? item.claim : item
-            );
-            const weights = shortAnswerData.map((item: any) => 
-              typeof item === 'object' ? parseInt(item.weight) || 1 : 1
-            );
-            
-            return {
-              ...task,
-              selectedOption: 'Completed',
-              status: 'completed' as SubTaskStatus,
-              textValues: claims,
-              weights: weights
-            };
-          }
-        }
-      }
-      
-      // Handle supporting docs from aggregated data
-      else if (task.id === 'supporting_docs') {
-        const docsData = annotation.data['supporting_docs_data'];
-        if (Array.isArray(docsData)) {
+
+      // Special handling for screenshot field
+      if (task.id === 'screenshot') {
+        const screenshotValue = annotation.data['screenshot'];
+        const screenshotStatus = annotation.data['screenshot_status'];
+
+        if (screenshotValue && typeof screenshotValue === 'string') {
           return {
             ...task,
-            selectedOption: 'Provided',
-            status: 'completed' as SubTaskStatus,
-            supportingDocs: docsData.map((doc: any) => ({
-              link: doc.link || '',
-              paragraph: doc.paragraph || ''
-            }))
+            selectedOption: screenshotStatus || 'Provided',
+            textValue: screenshotValue, // The actual URL goes in textValue
+            status: 'completed' as SubTaskStatus
           };
         }
       }
-      
-      // Handle doc_download_link from aggregated data
-      else if (task.id === 'doc_download_link') {
-        const linkValue = annotation.data['doc_download_link'] || annotation.data['doc_download_links']?.[0];
-        const hasLink = linkValue && typeof linkValue === 'string' && linkValue.trim() !== '';
-        
-        return {
-          ...task,
-          selectedOption: hasLink ? 'Needed' : 'Not Needed',
-          status: 'completed' as SubTaskStatus,
-          textValue: linkValue || '',
-          docDownloadLink: hasLink ? linkValue : undefined,
-          enableDocDownload: hasLink
-        };
+
+      // Special handling for codeDownloadUrl field
+      if (task.id === 'codeDownloadUrl') {
+        const codeValue = annotation.data['codeDownloadUrl'];
+        const codeStatus = annotation.data['codeDownloadUrl_status'];
+        if (codeValue && typeof codeValue === 'string') {
+          return {
+            ...task,
+            selectedOption: codeStatus || 'Verified manually',
+            textValue: codeValue, // The actual URL goes in textValue
+            docDownloadLink: codeValue,
+            enableDocDownload: true,
+            status: 'completed' as SubTaskStatus
+          };
+        }
       }
-      
-      // Handle other fields using aggregated data
-      else if (savedValue !== undefined) {
+
+      // Regular field handling
+      if (savedValue !== undefined || savedTextValue !== undefined) {
         let selectedOption = '';
-        
+
         if (typeof savedValue === 'boolean') {
           if (task.options && task.options.length > 0) {
             const trueOption = task.options.find(o => o.toLowerCase() === 'true' || o.toLowerCase() === 'yes');
@@ -743,7 +518,122 @@ const Dashboard = () => {
             selectedOption = savedValue;
           }
         }
-        
+
+        return {
+          ...task,
+          selectedOption: selectedOption || savedValue,
+          status: 'completed' as SubTaskStatus,
+          textValue: typeof savedTextValue === 'string' ? savedTextValue : (task.textValue || '')
+        };
+      }
+
+      return task;
+    });
+  };
+
+  // Helper function for Task 3 single form mapping
+  const mapAnnotationToSubTasksForTask3 = (baseSubTasks: SubTask[], annotation: Annotation): SubTask[] => {
+    return baseSubTasks.map(task => {
+      const savedValue = annotation.data[task.id];
+      const savedTextValue = annotation.data[`${task.id}_text`];
+
+      // Handle short_answer_list with new format
+      if (task.id === 'short_answer_list') {
+        // Check for aggregated format first
+        if (Array.isArray(annotation.data.short_answer_list)) {
+          const shortAnswerData = annotation.data.short_answer_list;
+
+          // Handle nested array format (multiple forms)
+          if (shortAnswerData.length > 0 && Array.isArray(shortAnswerData[0])) {
+            // Use first form's data
+            const firstFormData = shortAnswerData[0];
+            const claims = firstFormData.map((item: any) =>
+              typeof item === 'object' ? item.claim : item
+            );
+            const weights = firstFormData.map((item: any) =>
+              typeof item === 'object' ? parseInt(item.weight) || 1 : 1
+            );
+
+            return {
+              ...task,
+              selectedOption: 'Completed',
+              status: 'completed' as SubTaskStatus,
+              textValues: claims,
+              weights: weights
+            };
+          }
+          // Handle single form format
+          else {
+            const claims = shortAnswerData.map((item: any) =>
+              typeof item === 'object' ? item.claim : item
+            );
+            const weights = shortAnswerData.map((item: any) =>
+              typeof item === 'object' ? parseInt(item.weight) || 1 : 1
+            );
+
+            return {
+              ...task,
+              selectedOption: 'Completed',
+              status: 'completed' as SubTaskStatus,
+              textValues: claims,
+              weights: weights
+            };
+          }
+        }
+      }
+
+      // Handle supporting docs from aggregated data
+      else if (task.id === 'supporting_docs') {
+        const docsData = annotation.data['supporting_docs_data'];
+        if (Array.isArray(docsData)) {
+          return {
+            ...task,
+            selectedOption: 'Provided',
+            status: 'completed' as SubTaskStatus,
+            supportingDocs: docsData.map((doc: any) => ({
+              link: doc.link || '',
+              paragraph: doc.paragraph || ''
+            }))
+          };
+        }
+      }
+
+      // Handle doc_download_link from aggregated data
+      else if (task.id === 'doc_download_link') {
+        const linkValue = annotation.data['doc_download_link'] || annotation.data['doc_download_links']?.[0];
+        const hasLink = linkValue && typeof linkValue === 'string' && linkValue.trim() !== '';
+
+        return {
+          ...task,
+          selectedOption: hasLink ? 'Needed' : 'Not Needed',
+          status: 'completed' as SubTaskStatus,
+          textValue: linkValue || '',
+          docDownloadLink: hasLink ? linkValue : undefined,
+          enableDocDownload: hasLink
+        };
+      }
+
+      // Handle other fields using aggregated data
+      else if (savedValue !== undefined) {
+        let selectedOption = '';
+
+        if (typeof savedValue === 'boolean') {
+          if (task.options && task.options.length > 0) {
+            const trueOption = task.options.find(o => o.toLowerCase() === 'true' || o.toLowerCase() === 'yes');
+            const falseOption = task.options.find(o => o.toLowerCase() === 'false' || o.toLowerCase() === 'no');
+            if (savedValue === true && trueOption) selectedOption = trueOption;
+            else if (savedValue === false && falseOption) selectedOption = falseOption;
+          } else {
+            selectedOption = savedValue ? 'Yes' : 'No';
+          }
+        } else if (typeof savedValue === 'string') {
+          if (task.options && task.options.length > 0 && task.options.includes(savedValue)) {
+            selectedOption = savedValue;
+          } else if (!task.options || task.options.length === 0) {
+            selectedOption = savedValue;
+          }
+        }
+
         // Handle aggregated text values
         let textValue = savedTextValue;
         if (!textValue) {
@@ -754,7 +644,7 @@ const Dashboard = () => {
             textValue = annotation.data.longAnswer_list[0];
           }
         }
-        
+
         return {
           ...task,
           selectedOption,
@@ -762,81 +652,22 @@ const Dashboard = () => {
           textValue: typeof textValue === 'string' ? textValue : (task.textValue || '')
         };
       }
-      
-      return task;
-    });
-  };
-  
-  // Helper function for Tasks 1 & 2 (unchanged)
-  const mapAnnotationToSubTasks = (baseSubTasks: SubTask[], annotation: Annotation): SubTask[] => {
-    return baseSubTasks.map(task => {
-      const savedValue = annotation.data[task.id];
-      const savedTextValue = annotation.data[`${task.id}_text`];
-
-      // Handle special Task 2 field mappings from API
-      let actualTextValue = savedTextValue;
-      let actualSelectedOption = savedValue;
-
-      // Map API field names to our task structure
-      if (task.id === 'screenshot_url') {
-        actualTextValue = annotation.data['screenshot'] || '';
-        actualSelectedOption = annotation.data['screenshot_status'] || (actualTextValue ? 'Provided' : 'Not Needed');
-      } else if (task.id === 'code_download_url') {
-        actualTextValue = annotation.data['codeDownloadUrl'] || '';
-        actualSelectedOption = annotation.data['codeDownloadUrl_status'] || (actualTextValue ? 'Verified manually' : 'Not verified');
-      }
-
-      if (actualSelectedOption !== undefined || actualTextValue !== undefined) {
-        let selectedOption = '';
-
-        if (typeof actualSelectedOption === 'boolean') {
-          if (task.options && task.options.length > 0) {
-            const trueOption = task.options.find(o => o.toLowerCase() === 'true' || o.toLowerCase() === 'yes');
-            const falseOption = task.options.find(o => o.toLowerCase() === 'false' || o.toLowerCase() === 'no');
-            if (actualSelectedOption === true && trueOption) selectedOption = trueOption;
-            else if (actualSelectedOption === false && falseOption) selectedOption = falseOption;
-          } else {
-            selectedOption = actualSelectedOption ? 'Yes' : 'No';
-          }
-        } else if (typeof actualSelectedOption === 'string') {
-          if (task.options && task.options.length > 0 && task.options.includes(actualSelectedOption)) {
-            selectedOption = actualSelectedOption;
-          } else if (!task.options || task.options.length === 0) {
-            selectedOption = actualSelectedOption;
-          }
-        }
-
-        // Create the updated task
-        let updatedTask = {
-          ...task,
-          selectedOption: selectedOption || actualSelectedOption,
-          status: 'completed' as SubTaskStatus,
-          textValue: typeof actualTextValue === 'string' ? actualTextValue : (task.textValue || '')
-        };
-
-        // Handle special properties for specific fields
-        if (task.id === 'code_download_url') {
-          updatedTask.docDownloadLink = actualTextValue || '';
-          updatedTask.enableDocDownload = !!(actualTextValue && actualTextValue.trim());
-        }
-
-        return updatedTask;
-      }
 
       return task;
     });
   };
+
 // Simple duplication function
 const handleDuplicateForm = (type: string) => {
   if (!task3SubTasks) return;
-  
+
   const newForm = {
     id: `form-${Date.now()}`,
     name: `Form ${task3Forms.length + 1+ type}`,
     subTasks: JSON.parse(JSON.stringify(task3SubTasks)),
     type: type
   };
-  
+
   if (type === 'Q') {
     // Clear questions in new form
     newForm.subTasks = newForm.subTasks.map((task: { id: string; }) => {
@@ -847,7 +678,7 @@ const handleDuplicateForm = (type: string) => {
     });
   }
   // For type 'A', questions are duplicated (no changes needed)
-  
+
   setTask3Forms([...task3Forms, newForm]);
   setActiveTask3Form(task3Forms.length);
 };
@@ -926,14 +757,14 @@ const handleDuplicateForm = (type: string) => {
                         status={getTask2Progress()}
                         onSubTaskChange={(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink) => {
                           // Handle screenshot_url and code_download_url fields
-                          if (taskId === 'screenshot_url') {
+                          if (taskId === 'screenshot') {
                             if (textValue && handleScreenshotUrlChange) {
-                              handleScreenshotUrlChange(textValue);
+                              handleScreenshotUrlChange(textValue, selectedOption);
                             }
                             handleSubTaskChange('task2', taskId, selectedOption, textValue);
-                          } else if (taskId === 'code_download_url') {
+                          } else if (taskId === 'codeDownloadUrl') {
                             if (textValue && handleCodeUrlChange) {
-                              handleCodeUrlChange(textValue);
+                              handleCodeUrlChange(textValue, selectedOption);
                             }
                             handleSubTaskChange('task2', taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink);
                           } else {
@@ -955,14 +786,14 @@ const handleDuplicateForm = (type: string) => {
                           status={getTask2Progress(true)}
                           onSubTaskChange={(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink) => {
                             // Handle screenshot_url and code_download_url fields in consensus mode
-                            if (taskId === 'screenshot_url') {
+                            if (taskId === 'screenshot') {
                               if (textValue && handleScreenshotUrlChange) {
-                                handleScreenshotUrlChange(textValue);
+                                handleScreenshotUrlChange(textValue, selectedOption);
                               }
                               handleSubTaskChange('consensus2', taskId, selectedOption, textValue);
-                            } else if (taskId === 'code_download_url') {
+                            } else if (taskId === 'codeDownloadUrl') {
                               if (textValue && handleCodeUrlChange) {
-                                handleCodeUrlChange(textValue);
+                                handleCodeUrlChange(textValue, selectedOption);
                               }
                               handleSubTaskChange('consensus2', taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink);
                             } else {
@@ -1007,16 +838,16 @@ const handleDuplicateForm = (type: string) => {
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-lg font-semibold">Task 3 Forms</h3>
         <div className="flex space-x-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => handleDuplicateForm('Q')}
           >
             + Question Form
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => handleDuplicateForm('A')}
           >
             + Answer Form
@@ -1026,19 +857,19 @@ const handleDuplicateForm = (type: string) => {
       <div className="flex space-x-2 border-b">
         {task3Forms.map((form, index) => (
           <div key={form.id} className="relative">
-            <Button 
-              variant={activeTask3Form === index ? 'default' : 'ghost'} 
-              size="sm" 
-              className="rounded-b-none" 
+            <Button
+              variant={activeTask3Form === index ? 'default' : 'ghost'}
+              size="sm"
+              className="rounded-b-none"
               onClick={() => setActiveTask3Form(index)}
             >
               {form.name}
             </Button>
             {index > 0 && (
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="absolute -top-2 -right-2 h-6 w-6 p-0 rounded-full" 
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute -top-2 -right-2 h-6 w-6 p-0 rounded-full"
                 onClick={e => {
                   e.stopPropagation();
                   const updatedForms = task3Forms.filter((_, i) => i !== index);
@@ -1062,12 +893,12 @@ const handleDuplicateForm = (type: string) => {
         status={(() => {
           const currentForm = task3Forms[activeTask3Form];
           if (!currentForm || !currentForm.subTasks) return 'pending';
-          
-          const completed = currentForm.subTasks.filter(t => 
+
+          const completed = currentForm.subTasks.filter(t =>
             t.status === 'completed' || t.status === 'na'
           ).length;
           const total = currentForm.subTasks.length;
-          
+
           if (completed === total) return 'completed';
           if (completed > 0) return 'inProgress';
           return 'pending';
@@ -1078,14 +909,14 @@ const handleDuplicateForm = (type: string) => {
           currentForm.subTasks = currentForm.subTasks.map(task => {
             if (task.id === taskId) {
               const isCompleted = computeCompleted(task, selectedOption, textValue, textValues, supportingDocs);
-              return { 
-                ...task, 
-                selectedOption, 
-                textValue: textValue !== undefined ? textValue : task.textValue, 
-                textValues: textValues !== undefined ? textValues : task.textValues, 
-                supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs, 
-                weights: weights !== undefined ? weights : task.weights, 
-                status: isCompleted ? 'completed' : 'pending' 
+              return {
+                ...task,
+                selectedOption,
+                textValue: textValue !== undefined ? textValue : task.textValue,
+                textValues: textValues !== undefined ? textValues : task.textValues,
+                supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
+                weights: weights !== undefined ? weights : task.weights,
+                status: isCompleted ? 'completed' : 'pending'
               };
             }
             return task;
@@ -1109,8 +940,8 @@ const handleDuplicateForm = (type: string) => {
                     <Textarea
                       value={claim}
                       onChange={e => {
-                        const newValues = [...(task.textValues || [])]; 
-                        newValues[index] = e.target.value; 
+                        const newValues = [...(task.textValues || [])];
+                        newValues[index] = e.target.value;
                         console.log('Claim changed:', index, 'to', e.target.value);
                         // FIX: Call with proper parameter order
                         onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, task.weights);
@@ -1119,32 +950,32 @@ const handleDuplicateForm = (type: string) => {
                       className="min-h-[80px] text-sm"
                     />
                   </div>
-                  
+
                   {/* Weight Selection */}
                   <div className="flex flex-col items-center min-w-[80px]">
                     <label className="text-xs font-medium text-gray-600 mb-1">Weight</label>
-                    <select 
-                      value={task.weights?.[index] || 1} 
+                    <select
+                      value={task.weights?.[index] || 1}
                       onChange={e => {
                         // Create new weights array properly
                         const currentWeights = task.weights || task.textValues?.map(() => 1) || [];
-                        const newWeights = [...currentWeights]; 
-                        newWeights[index] = parseInt(e.target.value); 
-                        
+                        const newWeights = [...currentWeights];
+                        newWeights[index] = parseInt(e.target.value);
+
                         console.log('Weight changed:', index, 'to', e.target.value, 'new weights:', newWeights);
                         console.log('Current task:', task.id, 'textValues:', task.textValues);
-                        
+
                         // FIX: Call with proper parameter order - weights is the 7th parameter
                         onChange(
                           task.id,           // taskId
-                          task.selectedOption, // selectedOption  
+                          task.selectedOption, // selectedOption
                           undefined,         // textValue
                           task.textValues,   // textValues
                           undefined,         // supportingDocs
                           undefined,         // sectionIndex
                           newWeights         // weights
                         );
-                      }} 
+                      }}
                       className="w-16 px-2 py-2 border rounded-md text-center text-sm"
                     >
                       <option value={1}>1</option>
@@ -1153,14 +984,14 @@ const handleDuplicateForm = (type: string) => {
                     </select>
                     <span className="text-xs text-gray-500 mt-1">Priority</span>
                   </div>
-                  
+
                   {/* Remove Button */}
-                  <Button 
-                    variant="ghost" 
+                  <Button
+                    variant="ghost"
                     size="sm"
                     onClick={() => {
-                      const newValues = task.textValues?.filter((_, i) => i !== index) || []; 
-                      const newWeights = task.weights?.filter((_, i) => i !== index) || []; 
+                      const newValues = task.textValues?.filter((_, i) => i !== index) || [];
+                      const newWeights = task.weights?.filter((_, i) => i !== index) || [];
                       console.log('Removing claim:', index, 'newValues:', newValues, 'newWeights:', newWeights);
                       onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, newWeights);
                     }}
@@ -1171,13 +1002,13 @@ const handleDuplicateForm = (type: string) => {
                   </Button>
                 </div>
               ))}
-              
+
               {/* Add New Claim Button */}
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => {
-                  const newValues = [...(task.textValues || []), '']; 
+                  const newValues = [...(task.textValues || []), ''];
                   const newWeights = [...(task.weights || []), 1];
                   console.log('Adding new claim, newValues:', newValues, 'newWeights:', newWeights);
                   onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, newWeights);
@@ -1200,16 +1031,16 @@ const handleDuplicateForm = (type: string) => {
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-lg font-semibold">Task 3 Consensus Forms</h3>
         <div className="flex space-x-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => handleDuplicateForm('Q')}
           >
             + Question Form
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => handleDuplicateForm('A')}
           >
             + Answer Form
@@ -1219,19 +1050,19 @@ const handleDuplicateForm = (type: string) => {
       <div className="flex space-x-2 border-b">
         {consensusTask3Forms.map((form, index) => (
           <div key={form.id} className="relative">
-            <Button 
-              variant={activeConsensusTask3Form === index ? 'default' : 'ghost'} 
-              size="sm" 
-              className="rounded-b-none" 
+            <Button
+              variant={activeConsensusTask3Form === index ? 'default' : 'ghost'}
+              size="sm"
+              className="rounded-b-none"
               onClick={() => setActiveConsensusTask3Form(index)}
             >
               {form.name}
             </Button>
             {index > 0 && (
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="absolute -top-2 -right-2 h-6 w-6 p-0 rounded-full" 
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute -top-2 -right-2 h-6 w-6 p-0 rounded-full"
                 onClick={e => {
                   e.stopPropagation();
                   const updatedForms = consensusTask3Forms.filter((_, i) => i !== index);
@@ -1248,7 +1079,7 @@ const handleDuplicateForm = (type: string) => {
         ))}
       </div>
     </div>
-    
+
     {consensusTask3Forms[activeConsensusTask3Form] && (
       <TaskCard
         title={`Task 3: Rewrite Consensus - ${consensusTask3Forms[activeConsensusTask3Form].name}`}
@@ -1258,12 +1089,12 @@ const handleDuplicateForm = (type: string) => {
         status={(() => {
           const currentForm = consensusTask3Forms[activeConsensusTask3Form];
           if (!currentForm || !currentForm.subTasks) return 'pending';
-          
-          const completed = currentForm.subTasks.filter(t => 
+
+          const completed = currentForm.subTasks.filter(t =>
             t.status === 'completed' || t.status === 'na'
           ).length;
           const total = currentForm.subTasks.length;
-          
+
           if (completed === total) return 'completed';
           if (completed > 0) return 'inProgress';
           return 'pending';
@@ -1271,23 +1102,23 @@ const handleDuplicateForm = (type: string) => {
         onSubTaskChange={(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights) => {
           const updatedForms = [...consensusTask3Forms];
           const currentForm = updatedForms[activeConsensusTask3Form];
-          
+
           currentForm.subTasks = currentForm.subTasks.map(task => {
             if (task.id === taskId) {
               const isCompleted = computeCompleted(task, selectedOption, textValue, textValues, supportingDocs);
-              return { 
-                ...task, 
-                selectedOption, 
-                textValue: textValue !== undefined ? textValue : task.textValue, 
-                textValues: textValues !== undefined ? textValues : task.textValues, 
-                supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs, 
-                weights: weights !== undefined ? weights : task.weights, 
-                status: isCompleted ? 'completed' : 'pending' 
+              return {
+                ...task,
+                selectedOption,
+                textValue: textValue !== undefined ? textValue : task.textValue,
+                textValues: textValues !== undefined ? textValues : task.textValues,
+                supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
+                weights: weights !== undefined ? weights : task.weights,
+                status: isCompleted ? 'completed' : 'pending'
               };
             }
             return task;
           });
-          
+
           setConsensusTask3Forms(updatedForms);
         }}
         active
@@ -1307,26 +1138,26 @@ const handleDuplicateForm = (type: string) => {
                     <Textarea
                       value={claim}
                       onChange={e => {
-                        const newValues = [...(task.textValues || [])]; 
-                        newValues[index] = e.target.value; 
+                        const newValues = [...(task.textValues || [])];
+                        newValues[index] = e.target.value;
                         onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, task.weights);
                       }}
                       placeholder="Enter a short answer claim"
                       className="min-h-[80px] text-sm"
                     />
                   </div>
-                  
+
                   {/* Weight Selection */}
                   <div className="flex flex-col items-center min-w-[80px]">
                     <label className="text-xs font-medium text-gray-600 mb-1">Weight</label>
-                    <select 
-                      value={task.weights?.[index] || 1} 
+                    <select
+                      value={task.weights?.[index] || 1}
                       onChange={e => {
                         const currentWeights = task.weights || task.textValues?.map(() => 1) || [];
-                        const newWeights = [...currentWeights]; 
-                        newWeights[index] = parseInt(e.target.value); 
+                        const newWeights = [...currentWeights];
+                        newWeights[index] = parseInt(e.target.value);
                         onChange(task.id, task.selectedOption, undefined, task.textValues, undefined, undefined, newWeights);
-                      }} 
+                      }}
                       className="w-16 px-2 py-2 border rounded-md text-center text-sm"
                     >
                       <option value={1}>1</option>
@@ -1335,14 +1166,14 @@ const handleDuplicateForm = (type: string) => {
                     </select>
                     <span className="text-xs text-gray-500 mt-1">Priority</span>
                   </div>
-                  
+
                   {/* Remove Button */}
-                  <Button 
-                    variant="ghost" 
+                  <Button
+                    variant="ghost"
                     size="sm"
                     onClick={() => {
-                      const newValues = task.textValues?.filter((_, i) => i !== index) || []; 
-                      const newWeights = task.weights?.filter((_, i) => i !== index) || []; 
+                      const newValues = task.textValues?.filter((_, i) => i !== index) || [];
+                      const newWeights = task.weights?.filter((_, i) => i !== index) || [];
                       onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, newWeights);
                     }}
                     disabled={task.textValues?.length === 1}
@@ -1352,13 +1183,13 @@ const handleDuplicateForm = (type: string) => {
                   </Button>
                 </div>
               ))}
-              
+
               {/* Add New Claim Button */}
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => {
-                  const newValues = [...(task.textValues || []), '']; 
+                  const newValues = [...(task.textValues || []), ''];
                   const newWeights = [...(task.weights || []), 1];
                   onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, newWeights);
                 }}
@@ -1372,26 +1203,26 @@ const handleDuplicateForm = (type: string) => {
         }}
       />
     )}
-    
+
     <div className="mt-4 p-4 border rounded bg-gray-50">
       <h3 className="text-lg font-semibold mb-2">Overall Consensus Feedback</h3>
       <div className="mb-2">
         <label className="block text-sm font-medium text-gray-700 mb-1">Rating (1-5 stars):</label>
         <div className="flex space-x-1">
           {[1, 2, 3, 4, 5].map(star => (
-            <Button 
-              key={star} 
-              variant={consensusStars === star ? 'default' : 'outline'} 
-              size="sm" 
+            <Button
+              key={star}
+              variant={consensusStars === star ? 'default' : 'outline'}
+              size="sm"
               onClick={() => setConsensusStars(star)}
             >
               {star}
             </Button>
           ))}
           {consensusStars && (
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => setConsensusStars(null)}
             >
               Clear
@@ -1403,67 +1234,67 @@ const handleDuplicateForm = (type: string) => {
         <label htmlFor="consensusCommentTask3" className="block text-sm font-medium text-gray-700 mb-1">
           Comment:
         </label>
-        <Textarea 
-          id="consensusCommentTask3" 
-          value={consensusComment} 
-          onChange={e => setConsensusComment(e.target.value)} 
-          placeholder="Provide an overall comment for this consensus..." 
-          rows={3} 
+        <Textarea
+          id="consensusCommentTask3"
+          value={consensusComment}
+          onChange={e => setConsensusComment(e.target.value)}
+          placeholder="Provide an overall comment for this consensus..."
+          rows={3}
         />
       </div>
     </div>
-    
-    <AnnotatorView 
-      discussionId={discussionId || ''} 
-      currentStep={currentStep} 
-      getAnnotationsForTask={getAnnotationsForTask} 
-      onUseForConsensus={handleUseAnnotationForConsensus} 
-      getUserEmailById={getUserEmailById} 
+
+    <AnnotatorView
+      discussionId={discussionId || ''}
+      currentStep={currentStep}
+      getAnnotationsForTask={getAnnotationsForTask}
+      onUseForConsensus={handleUseAnnotationForConsensus}
+      getUserEmailById={getUserEmailById}
     />
   </>
 )}
                 {currentStep === TaskId.SUMMARY && <Summary results={getSummaryData()} />}
               </>
           )}
-        
-              <DashboardNavigation 
-                viewMode={viewMode} 
-                currentStep={currentStep} 
+
+              <DashboardNavigation
+                viewMode={viewMode}
+                currentStep={currentStep}
                 // Update this line to pass form context
                 canProceed={(() => {
                   if (currentStep === TaskId.REWRITE) {
                     // For Task 3, check the current active form's completion
                     if (viewMode === 'consensus') {
                       return canProceed(
-                        currentStep, 
-                        viewMode, 
-                        undefined, 
+                        currentStep,
+                        viewMode,
                         undefined,
-                        activeConsensusTask3Form, 
+                        undefined,
+                        activeConsensusTask3Form,
                         consensusTask3Forms
                       );
                     } else {
                       return canProceed(
-                        currentStep, 
-                        viewMode, 
-                        activeTask3Form, 
+                        currentStep,
+                        viewMode,
+                        activeTask3Form,
                         task3Forms
                       );
                     }
                   }
                   // For other tasks, use original logic
                   return canProceed(currentStep, viewMode);
-                })()} 
+                })()}
                 onBackToGrid={handleBackToGrid}
-                onSave={onSaveClick} 
-                isConsensus={viewMode === 'consensus'} 
-                screenshotUrl={screenshotUrl} 
-                onScreenshotUrlChange={handleScreenshotUrlChange} 
-                codeDownloadUrl={codeDownloadUrl} 
-                discussionId={discussionId ?? undefined} 
-                onCodeUrlChange={handleCodeUrlChange} 
-                onCodeUrlVerify={validateGitHubCodeUrl} 
-                currentDiscussion={currentDiscussion} 
+                onSave={onSaveClick}
+                isConsensus={viewMode === 'consensus'}
+                screenshotUrl={screenshotUrl}
+                // onScreenshotUrlChange={handleScreenshotUrlChange}
+                codeDownloadUrl={codeDownloadUrl}
+                discussionId={discussionId ?? undefined}
+                // onCodeUrlChange={handleCodeUrlChange}
+                onCodeUrlVerify={validateGitHubCodeUrl}
+                currentDiscussion={currentDiscussion}
               /></div>
         <DiscussionDetailsModal discussion={null} />
       </div>
