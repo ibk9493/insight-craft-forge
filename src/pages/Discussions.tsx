@@ -98,7 +98,8 @@ const Discussions = () => {
       console.error('Failed to fetch batches:', err);
     }
   }, [isAuthenticated]);
-  const fetchDiscussionsWithCurrentState = useCallback(() => {
+
+  const fetchDiscussionsWithCurrentState = useCallback((overrides = {}) => {
     const params = {
       status: filterValues.status === 'all' ? undefined : filterValues.status,
       search: debouncedSearchQuery.trim() || undefined,
@@ -112,7 +113,9 @@ const Discussions = () => {
       task2_status: filterValues.taskStatuses.task2 === 'all' ? undefined : filterValues.taskStatuses.task2,
       task3_status: filterValues.taskStatuses.task3 === 'all' ? undefined : filterValues.taskStatuses.task3,
       page: pagination.page,
-      per_page: pagination.per_page
+      per_page: pagination.per_page,
+      forceRefresh: true,
+      ...overrides // Add this line to allow overriding any param
     };
     const paramsString = JSON.stringify(params);
     if (lastFetchParamsRef.current === paramsString) return;
@@ -252,13 +255,15 @@ const Discussions = () => {
     dispatch(setPaginationParams({ page: 1 }));
   }, [dispatch]);
 
-  const handlePageChange = useCallback((newPage: number) => {
-    dispatch(setPaginationParams({ page: newPage }));
-  }, [dispatch]);
+ const handlePageChange = useCallback((newPage: number) => {
+  dispatch(setPaginationParams({ page: newPage }));
+  fetchDiscussionsWithCurrentState({ page: newPage }); // Pass the new page explicitly
+}, [dispatch, fetchDiscussionsWithCurrentState]);
 
-  const handlePerPageChange = useCallback((newPerPage: number) => {
-    dispatch(setPaginationParams({ page: 1, per_page: newPerPage }));
-  }, [dispatch]);
+const handlePerPageChange = useCallback((newPerPage: number) => {
+  dispatch(setPaginationParams({ page: 1, per_page: newPerPage }));
+  fetchDiscussionsWithCurrentState({ page: 1, per_page: newPerPage }); // Pass both explicitly
+}, [dispatch, fetchDiscussionsWithCurrentState]);
 
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
