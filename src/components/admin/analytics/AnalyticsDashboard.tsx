@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs-wrapper';
@@ -129,17 +128,24 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
     return csv;
   };
 
-  // Ensure systemSummary always has valid values even if the API fails
+  // ✅ FIXED: Map backend snake_case to frontend expectations
   const safeSystemSummary = {
-    totalDiscussions: systemSummary?.totalDiscussions || 0,
-    task1Completed: systemSummary?.task1Completed || 0,
-    task2Completed: systemSummary?.task2Completed || 0,
-    task3Completed: systemSummary?.task3Completed || 0,
-    totalTasksCompleted: systemSummary?.totalTasksCompleted || 0,
-    totalAnnotations: systemSummary?.totalAnnotations || 0,
-    uniqueAnnotators: systemSummary?.uniqueAnnotators || 0,
-    batchesBreakdown: systemSummary?.batchesBreakdown || []
+    // Handle both camelCase (frontend) and snake_case (backend) properties
+    totalDiscussions: systemSummary?.totalDiscussions || systemSummary?.total_discussions || 0,
+    task1Completed: systemSummary?.task1Completed || systemSummary?.task1_completed || 0,
+    task2Completed: systemSummary?.task2Completed || systemSummary?.task2_completed || 0,
+    task3Completed: systemSummary?.task3Completed || systemSummary?.task3_completed || 0,
+    totalTasksCompleted: systemSummary?.totalTasksCompleted || systemSummary?.total_tasks_completed || 0,
+    totalAnnotations: systemSummary?.totalAnnotations || systemSummary?.total_annotations || 0,
+    uniqueAnnotators: systemSummary?.uniqueAnnotators || systemSummary?.unique_annotators || 0,
+    // Handle batches breakdown with different possible property names
+    batchesBreakdown: systemSummary?.batchesBreakdown || systemSummary?.batches_breakdown || 
+                     systemSummary?.batchBreakdown || []
   };
+
+  // Debug log to see what we're actually receiving
+  console.log('SystemSummary received:', systemSummary);
+  console.log('Processed safe summary:', safeSystemSummary);
 
   return (
     <Card className="w-full shadow-md">
@@ -261,7 +267,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                           if (active && payload && payload.length) {
                             return (
                               <div className="bg-white border p-2 shadow-md">
-                                <p className="font-medium">{`${payload[0].name}: ${payload[0].value}`}</p>
+                                <p className="font-medium">{`${payload[0].payload.name}: ${payload[0].value}`}</p>
                               </div>
                             );
                           }
@@ -308,6 +314,33 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                 </CardContent>
               </Card>
             </div>
+
+            {/* ✅ NEW: Debug section - remove this in production */}
+            {process.env.NODE_ENV === 'development' && (
+              <Card className="bg-gray-50">
+                <CardHeader>
+                  <CardTitle className="text-sm text-gray-600">Debug Info (Dev Only)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-xs space-y-2">
+                    <div>
+                      <strong>Raw systemSummary keys:</strong>{' '}
+                      {systemSummary ? Object.keys(systemSummary).join(', ') : 'null'}
+                    </div>
+                    <div>
+                      <strong>Total Discussions:</strong>{' '}
+                      totalDiscussions={systemSummary?.totalDiscussions}, 
+                      total_discussions={systemSummary?.total_discussions}
+                    </div>
+                    <div>
+                      <strong>Total Annotations:</strong>{' '}
+                      totalAnnotations={systemSummary?.totalAnnotations}, 
+                      total_annotations={systemSummary?.total_annotations}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           {/* Activity Tab */}

@@ -93,13 +93,7 @@ def _get_discussions_with_status(db: Session, status_name: str, filter_func) -> 
 def get_discussion_by_id(db: Session, discussion_id: str) -> Optional[schemas.Discussion]:
     """
     Get a specific discussion by ID, including its task status information and all annotations.
-    
-    Parameters:
-    - db: Database session
-    - discussion_id: The unique ID of the discussion to retrieve
-    
-    Returns:
-    - Discussion with task status information and all annotations, or None if not found
+    Uses existing association table to compute task status fields.
     """
     if not discussion_id:
         logger.warning("Empty discussion_id provided")
@@ -119,8 +113,15 @@ def get_discussion_by_id(db: Session, discussion_id: str) -> Optional[schemas.Di
             models.discussion_task_association.c.discussion_id == discussion_id
         ).all()
         
-        # Create task state dictionary
+        # Create task state dictionary AND compute individual task status fields
         tasks = {}
+        task1_status = "locked"
+        task1_annotators = 0
+        task2_status = "locked"
+        task2_annotators = 0
+        task3_status = "locked"
+        task3_annotators = 0
+        
         for task_num in range(1, 4):
             task_assoc = next((t for t in task_associations if t.task_number == task_num), None)
             status = "locked"
@@ -134,8 +135,19 @@ def get_discussion_by_id(db: Session, discussion_id: str) -> Optional[schemas.Di
                 status=status,
                 annotators=annotators
             )
+            
+            # Set individual task status fields for backward compatibility
+            if task_num == 1:
+                task1_status = status
+                task1_annotators = annotators
+            elif task_num == 2:
+                task2_status = status
+                task2_annotators = annotators
+            elif task_num == 3:
+                task3_status = status
+                task3_annotators = annotators
         
-        # Get all annotations for this discussion
+        # Get all annotations for this discussion (keep your existing logic)
         annotations = {}
         for task_num in range(1, 4):
             task_annotations = db.query(models.Annotation).filter(
@@ -172,7 +184,7 @@ def get_discussion_by_id(db: Session, discussion_id: str) -> Optional[schemas.Di
             else:
                 annotations[f"task{task_num}_consensus"] = None
         
-        # Convert to schema and return
+        # Convert to schema and return with computed task status fields
         discussion = schemas.Discussion(
             id=db_discussion.id,
             title=db_discussion.title,
@@ -190,20 +202,20 @@ def get_discussion_by_id(db: Session, discussion_id: str) -> Optional[schemas.Di
             category=db_discussion.category,
             knowledge=db_discussion.knowledge,
             code=db_discussion.code,
-            # For backward compatibility with older code
-            task1_status=tasks["task1"].status,
-            task1_annotators=tasks["task1"].annotators,
-            task2_status=tasks["task2"].status,
-            task2_annotators=tasks["task2"].annotators,
-            task3_status=tasks["task3"].status,
-            task3_annotators=tasks["task3"].annotators,
+            # Computed task status fields from association table
+            task1_status=task1_status,
+            task1_annotators=task1_annotators,
+            task2_status=task2_status,
+            task2_annotators=task2_annotators,
+            task3_status=task3_status,
+            task3_annotators=task3_annotators,
             # New structure for tasks
             tasks=tasks,
             # Adding annotations data
             annotations=annotations
         )
         
-        logger.info(f"Successfully fetched discussion with annotations: {discussion_id}")
+        logger.info(f"Successfully fetched discussion with computed task status: {discussion_id}")
         return discussion
     except exc.SQLAlchemyError as e:
         logger.error(f"Database error in get_discussion_by_id: {str(e)}")
@@ -211,8 +223,6 @@ def get_discussion_by_id(db: Session, discussion_id: str) -> Optional[schemas.Di
     except Exception as e:
         logger.error(f"Error fetching discussion {discussion_id}: {str(e)}")
         return None
-    
-
 
 def get_discussions(db: Session, filters: Dict = None, limit: int = 10, offset: int = 0) -> List[schemas.Discussion]:
     """

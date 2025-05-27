@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   Card, 
@@ -20,81 +19,105 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { QualityMetrics, AnnotatorPerformance } from '@/services/api/types';
-import { AlertTriangle, ArrowUpDown, Search, Shield, Users } from 'lucide-react';
+import { AlertTriangle, ArrowUpDown, Search, Shield, Users, Loader, RefreshCw } from 'lucide-react';
 import { Progress } from "@/components/ui/progress";
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs-wrapper';
+import { api } from '@/services/api';
+import { useUser } from '@/contexts/UserContext';
+
+// Updated types based on your actual backend data
+interface ConsensusCandidate {
+  discussion_id: string;
+  discussion_title: string;
+  task_id: number;
+  agreement_rate: number;
+  annotator_count: number;
+  required_annotators: number;
+  agreement_details?: any;
+}
+
+interface UserAgreementSummary {
+  user_id: string;
+  total_annotations: number;
+  annotations_with_consensus: number;
+  agreement_rate: number;
+  status: 'excellent' | 'good' | 'needs_improvement' | 'needs_training' | 'no_data' | 'error';
+}
+
+interface AllUsersOverview {
+  total_users: number;
+  users: UserAgreementSummary[];
+  users_needing_training: UserAgreementSummary[];
+  summary: {
+    excellent_users: number;
+    good_users: number;
+    users_needing_improvement: number;
+    users_needing_training: number;
+    users_with_no_data: number;
+    users_with_errors: number;
+  };
+}
 
 interface AnnotationQualityProps {
-  qualityMetrics?: QualityMetrics[];
-  annotatorPerformance?: AnnotatorPerformance[];
   isLoading?: boolean;
   onRefresh?: () => void;
 }
 
-// Mock data for development purposes
-const mockQualityMetrics: QualityMetrics[] = [
-  { 
-    discussionId: 'disc-001', 
-    title: 'How to implement a custom hook for API calls',
-    agreementScore: 0.92, 
-    annotatorCount: 3, 
-    conflictAreas: ['Learning Value'] 
-  },
-  { 
-    discussionId: 'disc-002', 
-    title: 'Creating a responsive table with Tailwind CSS',
-    agreementScore: 0.78, 
-    annotatorCount: 3, 
-    conflictAreas: ['Clarity', 'Learning Value'] 
-  },
-  { 
-    discussionId: 'disc-003', 
-    title: 'Setting up Redux with TypeScript',
-    agreementScore: 0.85, 
-    annotatorCount: 3, 
-    conflictAreas: ['Relevance'] 
-  },
-  { 
-    discussionId: 'disc-004', 
-    title: 'Best practices for error handling in React components',
-    agreementScore: 0.65, 
-    annotatorCount: 3, 
-    conflictAreas: ['Learning Value', 'Clarity', 'Relevance'] 
-  },
-  { 
-    discussionId: 'disc-005', 
-    title: 'Implementing dark mode with Context API',
-    agreementScore: 0.96, 
-    annotatorCount: 3, 
-    conflictAreas: [] 
-  },
-];
-
-const mockAnnotatorPerformance: AnnotatorPerformance[] = [
-  { userId: 'user-001', completedTasks: 42, averageTime: 8.5, agreement: 0.91 },
-  { userId: 'user-002', completedTasks: 37, averageTime: 12.2, agreement: 0.87 },
-  { userId: 'user-003', completedTasks: 56, averageTime: 7.3, agreement: 0.94 },
-  { userId: 'user-004', completedTasks: 23, averageTime: 15.1, agreement: 0.82 },
-  { userId: 'user-005', completedTasks: 19, averageTime: 9.8, agreement: 0.89 },
-];
-
 const AnnotationQuality: React.FC<AnnotationQualityProps> = ({
-  qualityMetrics = mockQualityMetrics,
-  annotatorPerformance = mockAnnotatorPerformance,
-  isLoading = false,
+  isLoading: externalLoading = false,
   onRefresh,
 }) => {
+  const { isAdmin, isPodLead } = useUser();
   const [activeTab, setActiveTab] = useState('agreement');
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortField, setSortField] = useState<'agreementScore' | 'annotatorCount'>('agreementScore');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [sortField, setSortField] = useState<'agreement_rate' | 'annotator_count'>('agreement_rate');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc'); // Changed to asc to show lowest agreement first
+  
+  // Data state
+  const [consensusCandidates, setConsensusCandidates] = useState<ConsensusCandidate[]>([]);
+  const [usersOverview, setUsersOverview] = useState<AllUsersOverview | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  // Load data on component mount
+  useEffect(() => {
+    loadQualityData();
+  }, []);
+
+  const loadQualityData = async () => {
+    setIsLoading(true);
+    try {
+      // Load consensus candidates with lower agreement threshold to show problem areas
+      const consensusData = await api.workflow.consensusCandidates(60.0); // Lower threshold to catch disagreements
+      setConsensusCandidates(consensusData.candidates || []);
+
+      // Load user agreement overview if admin
+      if (isAdmin) {
+        const usersData = await api.workflow.agreementOverview();
+        setUsersOverview(usersData);
+      }
+
+      setLastUpdated(new Date());
+    } catch (error) {
+      console.error('Error loading quality data:', error);
+      toast.error('Failed to load quality metrics');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRefresh = () => {
+    if (onRefresh) {
+      onRefresh();
+    }
+    loadQualityData();
+  };
 
   // Sort and filter discussions
-  const filteredMetrics = qualityMetrics.filter(metric => 
-    metric.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    metric.discussionId.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredMetrics = consensusCandidates.filter(metric => 
+    metric.discussion_title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    metric.discussion_id.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const sortedMetrics = [...filteredMetrics].sort((a, b) => {
@@ -106,28 +129,55 @@ const AnnotationQuality: React.FC<AnnotationQualityProps> = ({
   });
 
   // Handle sort toggle
-  const toggleSort = (field: 'agreementScore' | 'annotatorCount') => {
+  const toggleSort = (field: 'agreement_rate' | 'annotator_count') => {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
       setSortField(field);
-      setSortDirection('desc');
+      setSortDirection(field === 'agreement_rate' ? 'asc' : 'desc'); // Show lowest agreement first
     }
   };
 
   // Helper function to get agreement color
   const getAgreementColor = (score: number) => {
-    if (score >= 0.9) return "bg-green-500";
-    if (score >= 0.75) return "bg-yellow-500";
+    if (score >= 90) return "bg-green-500";
+    if (score >= 75) return "bg-yellow-500";
     return "bg-red-500";
   };
 
   // Helper function to get agreement status
   const getAgreementStatus = (score: number) => {
-    if (score >= 0.9) return "High Agreement";
-    if (score >= 0.75) return "Moderate Agreement";
+    if (score >= 90) return "High Agreement";
+    if (score >= 75) return "Moderate Agreement";
     return "Low Agreement";
   };
+
+  // Get conflict areas from agreement details (mock for now since your backend doesn't provide this)
+  const getConflictAreas = (agreementDetails: any): string[] => {
+    if (!agreementDetails?.field_agreement) return [];
+    
+    const conflicts: string[] = [];
+    Object.entries(agreementDetails.field_agreement).forEach(([field, stats]: [string, any]) => {
+      if (stats.agreement_rate < 80) { // Fields with less than 80% agreement
+        conflicts.push(field);
+      }
+    });
+    
+    return conflicts;
+  };
+
+  // Helper function to get user status color
+  const getUserStatusColor = (status: string) => {
+    switch (status) {
+      case 'excellent': return 'bg-green-50 text-green-700 border-green-200';
+      case 'good': return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'needs_improvement': return 'bg-yellow-50 text-yellow-700 border-yellow-200';
+      case 'needs_training': return 'bg-red-50 text-red-700 border-red-200';
+      default: return 'bg-gray-50 text-gray-700 border-gray-200';
+    }
+  };
+
+  const isLoadingData = isLoading || externalLoading;
 
   return (
     <Card className="w-full shadow-md">
@@ -137,6 +187,11 @@ const AnnotationQuality: React.FC<AnnotationQualityProps> = ({
             <CardTitle>Annotation Quality Metrics</CardTitle>
             <CardDescription>
               Monitor inter-annotator agreement and identify potential issues
+              {lastUpdated && (
+                <span className="ml-2 text-sm">
+                  • Last updated: {lastUpdated.toLocaleTimeString()}
+                </span>
+              )}
             </CardDescription>
           </div>
 
@@ -144,184 +199,280 @@ const AnnotationQuality: React.FC<AnnotationQualityProps> = ({
             <Button 
               variant="outline" 
               size="sm" 
-              onClick={onRefresh}
-              disabled={isLoading}
+              onClick={handleRefresh}
+              disabled={isLoadingData}
             >
+              <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingData ? 'animate-spin' : ''}`} />
               Refresh Data
             </Button>
           </div>
         </div>
       </CardHeader>
       <CardContent>
-        <Tabs 
-          defaultValue={activeTab} 
-          value={activeTab} 
-          onValueChange={setActiveTab} 
-          className="space-y-4"
-        >
-          <TabsList>
-            <TabsTrigger value="agreement" className="flex items-center gap-2">
-              <Shield className="h-4 w-4" />
-              <span>Agreement Analysis</span>
-            </TabsTrigger>
-            <TabsTrigger value="annotators" className="flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              <span>Annotator Performance</span>
-            </TabsTrigger>
-          </TabsList>
+        {isLoadingData ? (
+          <div className="flex flex-col items-center justify-center py-12">
+            <Loader className="h-8 w-8 animate-spin text-blue-600 mb-4" />
+            <p className="text-gray-500">Loading quality metrics...</p>
+          </div>
+        ) : (
+          <Tabs 
+            defaultValue={activeTab} 
+            value={activeTab} 
+            onValueChange={setActiveTab} 
+            className="space-y-4"
+          >
+            <TabsList>
+              <TabsTrigger value="agreement" className="flex items-center gap-2">
+                <Shield className="h-4 w-4" />
+                <span>Agreement Analysis</span>
+              </TabsTrigger>
+              {isAdmin && (
+                <TabsTrigger value="annotators" className="flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  <span>Annotator Performance</span>
+                </TabsTrigger>
+              )}
+            </TabsList>
 
-          {/* Agreement Analysis Tab */}
-          <TabsContent value="agreement">
-            <div className="mb-4">
-              <Input
-                placeholder="Search discussions..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="max-w-md"
-                leftIcon={<Search className="h-4 w-4" />}
-              />
-            </div>
+            {/* Agreement Analysis Tab */}
+            <TabsContent value="agreement">
+              <div className="mb-4">
+                <Input
+                  placeholder="Search discussions..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="max-w-md"
+                />
+              </div>
 
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="max-w-[300px]">Discussion</TableHead>
-                    <TableHead className="w-[150px] cursor-pointer" onClick={() => toggleSort('agreementScore')}>
-                      <div className="flex items-center">
-                        Agreement
-                        <ArrowUpDown className="ml-2 h-4 w-4" />
-                      </div>
-                    </TableHead>
-                    <TableHead className="w-[120px] cursor-pointer" onClick={() => toggleSort('annotatorCount')}>
-                      <div className="flex items-center">
-                        Annotators
-                        <ArrowUpDown className="ml-2 h-4 w-4" />
-                      </div>
-                    </TableHead>
-                    <TableHead className="w-[200px]">Conflict Areas</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortedMetrics.length === 0 ? (
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                        No discussions found
-                      </TableCell>
+                      <TableHead className="max-w-[300px]">Discussion</TableHead>
+                      <TableHead className="w-[150px] cursor-pointer" onClick={() => toggleSort('agreement_rate')}>
+                        <div className="flex items-center">
+                          Agreement
+                          <ArrowUpDown className="ml-2 h-4 w-4" />
+                        </div>
+                      </TableHead>
+                      <TableHead className="w-[120px] cursor-pointer" onClick={() => toggleSort('annotator_count')}>
+                        <div className="flex items-center">
+                          Annotators
+                          <ArrowUpDown className="ml-2 h-4 w-4" />
+                        </div>
+                      </TableHead>
+                      <TableHead className="w-[100px]">Task</TableHead>
+                      <TableHead className="w-[200px]">Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ) : (
-                    sortedMetrics.map((metric) => (
-                      <TableRow key={metric.discussionId}>
-                        <TableCell className="max-w-[300px] truncate">
-                          {metric.title}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col space-y-1">
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium">
-                                {(metric.agreementScore * 100).toFixed(0)}%
-                              </span>
-                              <span 
-                                className={`text-xs ${
-                                  metric.agreementScore < 0.75 ? 'text-red-600' : 
-                                  metric.agreementScore >= 0.9 ? 'text-green-600' : 'text-yellow-600'
-                                }`}
-                              >
-                                {getAgreementStatus(metric.agreementScore)}
-                              </span>
-                            </div>
-                            <Progress 
-                              value={metric.agreementScore * 100}
-                              className={`h-2 ${getAgreementColor(metric.agreementScore)}`}
-                            />
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {metric.annotatorCount}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {metric.conflictAreas.length === 0 ? (
-                              <span className="text-sm text-muted-foreground">None</span>
-                            ) : (
-                              metric.conflictAreas.map((area, i) => (
-                                <Badge key={i} variant="outline" className="text-xs">
-                                  {area}
-                                </Badge>
-                              ))
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button size="sm" variant="outline">
-                            Review
-                          </Button>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedMetrics.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                          {consensusCandidates.length === 0 
+                            ? "No discussions with quality issues found - all discussions have good agreement!"
+                            : "No discussions found matching your search"
+                          }
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </TabsContent>
+                    ) : (
+                      sortedMetrics.map((metric) => (
+                        <TableRow key={`${metric.discussion_id}-${metric.task_id}`}>
+                          <TableCell className="max-w-[300px]">
+                            <div className="truncate" title={metric.discussion_title}>
+                              {metric.discussion_title}
+                            </div>
+                            <div className="text-xs text-gray-500 truncate">
+                              {metric.discussion_id}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium">
+                                  {metric.agreement_rate.toFixed(0)}%
+                                </span>
+                                <span 
+                                  className={`text-xs ${
+                                    metric.agreement_rate < 75 ? 'text-red-600' : 
+                                    metric.agreement_rate >= 90 ? 'text-green-600' : 'text-yellow-600'
+                                  }`}
+                                >
+                                  {getAgreementStatus(metric.agreement_rate)}
+                                </span>
+                              </div>
+                              <Progress 
+                                value={metric.agreement_rate}
+                                className="h-2"
+                              />
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm">
+                              {metric.annotator_count}/{metric.required_annotators}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">
+                              Task {metric.task_id}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {metric.agreement_rate < 75 ? (
+                              <Badge variant="destructive" className="flex items-center gap-1 w-fit">
+                                <AlertTriangle className="h-3 w-3" />
+                                Needs Review
+                              </Badge>
+                            ) : metric.agreement_rate >= 90 ? (
+                              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                                High Agreement
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+                                Moderate Agreement
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => {
+                                // Could navigate to discussion detail or open consensus creation
+                                toast.info(`Review discussion: ${metric.discussion_id}`);
+                              }}
+                            >
+                              Review
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </TabsContent>
 
-          {/* Annotator Performance Tab */}
-          <TabsContent value="annotators">
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Annotator</TableHead>
-                    <TableHead>Completed Tasks</TableHead>
-                    <TableHead>Avg. Time (min)</TableHead>
-                    <TableHead>Agreement</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {annotatorPerformance.map((annotator) => (
-                    <TableRow key={annotator.userId}>
-                      <TableCell className="font-medium">{annotator.userId}</TableCell>
-                      <TableCell>{annotator.completedTasks}</TableCell>
-                      <TableCell>{annotator.averageTime.toFixed(1)}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-col space-y-1">
-                          <span className="text-sm font-medium">
-                            {(annotator.agreement * 100).toFixed(0)}%
-                          </span>
-                          <Progress 
-                            value={annotator.agreement * 100}
-                            className={`h-2 ${getAgreementColor(annotator.agreement)}`}
-                          />
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {annotator.agreement < 0.75 ? (
-                          <Badge variant="destructive" className="flex items-center gap-1">
-                            <AlertTriangle className="h-3 w-3" />
-                            Needs Review
-                          </Badge>
-                        ) : annotator.agreement >= 0.9 ? (
-                          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                            Excellent
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
-                            Good
-                          </Badge>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </TabsContent>
-        </Tabs>
+            {/* Annotator Performance Tab - Admin Only */}
+            {isAdmin && (
+              <TabsContent value="annotators">
+                {!usersOverview ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No user performance data available
+                  </div>
+                ) : (
+                  <>
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                      <Card>
+                        <CardContent className="pt-6">
+                          <div className="text-center">
+                            <p className="text-2xl font-bold text-green-600">{usersOverview.summary.excellent_users}</p>
+                            <p className="text-xs text-gray-500">Excellent</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-6">
+                          <div className="text-center">
+                            <p className="text-2xl font-bold text-blue-600">{usersOverview.summary.good_users}</p>
+                            <p className="text-xs text-gray-500">Good</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-6">
+                          <div className="text-center">
+                            <p className="text-2xl font-bold text-yellow-600">{usersOverview.summary.users_needing_improvement}</p>
+                            <p className="text-xs text-gray-500">Needs Improvement</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-6">
+                          <div className="text-center">
+                            <p className="text-2xl font-bold text-red-600">{usersOverview.summary.users_needing_training}</p>
+                            <p className="text-xs text-gray-500">Needs Training</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* User Performance Table */}
+                    <div className="rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>User ID</TableHead>
+                            <TableHead>Total Annotations</TableHead>
+                            <TableHead>With Consensus</TableHead>
+                            <TableHead>Agreement Rate</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {usersOverview.users.map((user) => (
+                            <TableRow key={user.user_id}>
+                              <TableCell className="font-medium">{user.user_id}</TableCell>
+                              <TableCell>{user.total_annotations}</TableCell>
+                              <TableCell>{user.annotations_with_consensus}</TableCell>
+                              <TableCell>
+                                <div className="flex flex-col space-y-1">
+                                  <span className="text-sm font-medium">
+                                    {user.agreement_rate.toFixed(0)}%
+                                  </span>
+                                  <Progress 
+                                    value={user.agreement_rate}
+                                    className="h-2"
+                                  />
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge 
+                                  variant="outline" 
+                                  className={getUserStatusColor(user.status)}
+                                >
+                                  {user.status.replace('_', ' ')}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={async () => {
+                                    try {
+                                      const analysis = await api.workflow.userAgreementAnalysis(user.user_id, null, true);
+                                      toast.success(`Loaded detailed analysis for ${user.user_id}`);
+                                      // Could open a modal or navigate to detail view
+                                    } catch (error) {
+                                      toast.error('Failed to load user analysis');
+                                    }
+                                  }}
+                                >
+                                  View Details
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
+                )}
+              </TabsContent>
+            )}
+          </Tabs>
+        )}
       </CardContent>
       <CardFooter className="text-sm text-muted-foreground">
-        Note: Agreement scores below 75% may require manual review
+        {isAdmin ? (
+          "Agreement scores below 75% may require manual review. Users needing training have been identified."
+        ) : (
+          "Agreement scores below 75% may require manual review"
+        )}
       </CardFooter>
     </Card>
   );

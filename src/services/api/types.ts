@@ -151,6 +151,18 @@ export interface TaskProgression {
 }
 
 export interface SystemSummary {
+  task_progression: TaskProgression;
+  trainer_breakdown: TrainerBreakdown[];
+  total_discussions: number;
+  task1_completed: number;
+  task2_completed: number;
+  task3_completed: number;
+  total_tasks_completed: number;
+  total_annotations: number;
+  unique_annotators: number;
+  batches_breakdown: BatchBreakdown[];
+  batchBreakdown: any;
+  consensusAnnotations: number;
   totalDiscussions: number;
   task1Completed: number;
   task2Completed: number;

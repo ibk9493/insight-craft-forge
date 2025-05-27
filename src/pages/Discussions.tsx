@@ -16,15 +16,13 @@ import { openModal } from '@/store/discussionModalSlice';
 import { fetchDiscussions, setPaginationParams } from '@/store/discussionsSlice';
 import DiscussionFilters from '@/components/discussions/DiscussionFilters';
 import { api } from '@/services/api/endpoints';
-
-// Discussion type imported from api service
 import { Discussion, TaskState, TaskStatus } from '@/services/api';
 
 interface EnhancedDiscussion extends Discussion {
   tasks: {
-    task1: TaskState & { userAnnotated: boolean };
-    task2: TaskState & { userAnnotated: boolean };
-    task3: TaskState & { userAnnotated: boolean };
+    task1: TaskState & { userAnnotated: boolean; annotators: number };
+    task2: TaskState & { userAnnotated: boolean; annotators: number };
+    task3: TaskState & { userAnnotated: boolean; annotators: number };
   };
 }
 
@@ -43,34 +41,23 @@ interface FilterValues {
   };
 }
 
-// Custom hook for debounced search
 function useDebounce(value: string, delay: number) {
   const [debouncedValue, setDebouncedValue] = useState(value);
-
   useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-
-    return () => {
-      clearTimeout(handler);
-    };
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
   }, [value, delay]);
-
   return debouncedValue;
 }
 
 const Discussions = () => {
   const { isAuthenticated, user, isPodLead, isAdmin } = useUser();
+  const { getUserAnnotationStatus } = useAnnotationData();
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useAppDispatch();
-  
-  // Get discussions from Redux store
   const { discussions, loading, error, pagination } = useAppSelector(state => state.discussions);
-  
-  const { getUserAnnotationStatus } = useAnnotationData();
-  const [searchQuery, setSearchQuery] = useState('');
+
   const [filterValues, setFilterValues] = useState<FilterValues>({
     status: 'all',
     showMyAnnotations: false,
@@ -79,475 +66,64 @@ const Discussions = () => {
     fromDate: undefined,
     toDate: undefined,
     batchId: '',
-    taskStatuses: {
-      task1: 'all',
-      task2: 'all',
-      task3: 'all'
-    }
+    taskStatuses: { task1: 'all', task2: 'all', task3: 'all' }
   });
+  const [searchQuery, setSearchQuery] = useState('');
   const [isMounted, setIsMounted] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
-  
-  // State for available filter options
+
+  const debouncedSearchQuery = useDebounce(searchQuery, 500);
+  const lastFetchParamsRef = useRef<string>('');
   const [availableLanguages, setAvailableLanguages] = useState<string[]>([]);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [availableBatches, setAvailableBatches] = useState<{ id: number, name: string }[]>([]);
-
-  const debouncedSearchQuery = useDebounce(searchQuery, 500);
-
-  // Refs to prevent unnecessary API calls
-  const lastFetchParamsRef = useRef<string>('');
-  const isUpdatingFromUrlRef = useRef(false);
-
-  // STABLE FETCH FUNCTION - Direct dispatch to avoid cascading effects
-  const fetchDiscussionsWithCurrentState = useCallback(() => {
-    const params = {
-      status: filterValues.status === 'all' ? undefined : filterValues.status,
-      search: debouncedSearchQuery.trim() || undefined,
-      repository_language: filterValues.repositoryLanguage.length > 0 ? filterValues.repositoryLanguage.join(',') : undefined,
-      release_tag: filterValues.releaseTag.length > 0 ? filterValues.releaseTag.join(',') : undefined,
-      from_date: filterValues.fromDate ? filterValues.fromDate.toISOString().split('T')[0] : undefined,
-      to_date: filterValues.toDate ? filterValues.toDate.toISOString().split('T')[0] : undefined,
-      batch_id: filterValues.batchId ? Number(filterValues.batchId) : undefined,
-      user_id: filterValues.showMyAnnotations && user?.id ? user.id.toString() : undefined,
-      task1_status: filterValues.taskStatuses.task1 === 'all' ? undefined : filterValues.taskStatuses.task1,
-      task2_status: filterValues.taskStatuses.task2 === 'all' ? undefined : filterValues.taskStatuses.task2,
-      task3_status: filterValues.taskStatuses.task3 === 'all' ? undefined : filterValues.taskStatuses.task3,
-      page: 1,
-      per_page: pagination.per_page,
-      forceRefresh: true
-    };
-
-    // Prevent duplicate API calls by comparing params
-    const paramsString = JSON.stringify(params);
-    if (lastFetchParamsRef.current === paramsString) {
-      console.log('🚫 Skipping duplicate API call with same params');
-      return;
-    }
-    
-    lastFetchParamsRef.current = paramsString;
-    console.log('📡 Making API call with params:', params);
-    dispatch(fetchDiscussions(params));
-  }, [filterValues, debouncedSearchQuery, user?.id, pagination.per_page, dispatch]);
-
-  // Fetch filter options
+  
   const fetchFilterOptions = useCallback(async () => {
     if (!isAuthenticated) return;
-    
     try {
       const options = await api.discussions.getFilterOptions();
       setAvailableLanguages(options.repository_languages || []);
       setAvailableTags(options.release_tags || []);
-    } catch (error) {
-      console.error('Failed to fetch filter options:', error);
+    } catch (err) {
+      console.error('Failed to fetch filter options:', err);
     }
   }, [isAuthenticated]);
-
-  // Fetch batches
+  
   const fetchBatchesData = useCallback(async () => {
     if (!isAuthenticated) return;
-    
     try {
       const batches = await api.batches.getAllBatches();
-      setAvailableBatches(batches.map(batch => ({ id: batch.id, name: batch.name })));
-    } catch (error) {
-      console.error('Failed to fetch batches:', error);
+      setAvailableBatches(batches.map(b => ({ id: b.id, name: b.name })));
+    } catch (err) {
+      console.error('Failed to fetch batches:', err);
     }
   }, [isAuthenticated]);
-
-  // SINGLE INITIALIZATION EFFECT
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigate('/');
-      return;
-    }
-
-    console.log('🚀 Initializing component from URL:', location.search);
-    setIsInitializing(true);
-    isUpdatingFromUrlRef.current = true;
-
-    // Parse URL parameters
-    const params = new URLSearchParams(location.search);
-    const statusFromParams = params.get('status');
-    const search = params.get('search');
-    const userIdFromParams = params.get('user_id');
-    const myAnnotations = userIdFromParams === (user?.id?.toString() || '');
-    const lang = params.get('repository_language')?.split(',').filter(Boolean) || [];
-    const tag = params.get('tag')?.split(',').filter(Boolean) || [];
-    const fromParam = params.get('from_date');
-    const toParam = params.get('to_date');
-    const pageParam = params.get('page');
-    const perPageParam = params.get('per_page');
-    const batch = params.get('batch_id');
-    const fromDateObj = fromParam ? new Date(fromParam) : undefined;
-    const toDateObj = toParam ? new Date(toParam) : undefined;
-    
-    const task1Status = params.get('task1_status') || 'all';
-    const task2Status = params.get('task2_status') || 'all';
-    const task3Status = params.get('task3_status') || 'all';
-    
-    // Set states in batch
-    const newFilterValues = {
-      status: statusFromParams || 'all',
-      showMyAnnotations: myAnnotations,
-      repositoryLanguage: lang,
-      releaseTag: tag,
-      fromDate: fromDateObj,
-      toDate: toDateObj,
-      batchId: batch || '',
-      taskStatuses: {
-        task1: task1Status,
-        task2: task2Status,
-        task3: task3Status
-      }
-    };
-    
-    console.log('🔧 Setting filter values from URL:', newFilterValues);
-    setFilterValues(newFilterValues);
-    setSearchQuery(search || '');
-    
-    if (pageParam || perPageParam) {
-      dispatch(setPaginationParams({
-        page: pageParam ? parseInt(pageParam) : undefined,
-        per_page: perPageParam ? parseInt(perPageParam) : undefined
-      }));
-    }
-    
-    // Fetch data only on first mount
-    if (!isMounted) {
-      fetchBatchesData();
-      fetchFilterOptions();
-    }
-    
-    // Single API call for initialization
-    const initialParams = {
-      status: (statusFromParams && statusFromParams !== 'all') ? statusFromParams : undefined,
-      search: search || undefined,
-      repository_language: lang.length > 0 ? lang.join(',') : undefined,
-      release_tag: tag.length > 0 ? tag.join(',') : undefined,
-      from_date: fromDateObj ? fromDateObj.toISOString().split('T')[0] : undefined,
-      to_date: toDateObj ? toDateObj.toISOString().split('T')[0] : undefined,
-      batch_id: batch ? Number(batch) : undefined,
-      user_id: myAnnotations && user?.id ? user.id.toString() : undefined,
-      task1_status: task1Status === 'all' ? undefined : task1Status,
-      task2_status: task2Status === 'all' ? undefined : task2Status,
-      task3_status: task3Status === 'all' ? undefined : task3Status,
-      page: pageParam ? parseInt(pageParam) : 1,
-      per_page: perPageParam ? parseInt(perPageParam) : 10,
-      forceRefresh: false
-    };
-    
-    console.log('📡 Initial API call:', initialParams);
-    dispatch(fetchDiscussions(initialParams));
-    
-    // Set flags
-    if (!isMounted) setIsMounted(true);
-    
-    // Allow filter changes after initialization - LONGER DELAY
-    setTimeout(() => {
-      console.log('✅ Initialization complete - enabling filter changes');
-      setIsInitializing(false);
-      isUpdatingFromUrlRef.current = false;
-    }, 500); // Increased to 500ms
-    
-  }, [isAuthenticated, location.search, location.pathname, location.key, user?.id, navigate, dispatch, isMounted, fetchBatchesData, fetchFilterOptions]);
-  // FILTER CHANGE EFFECT - Should run FIRST and handle API calls
-  useEffect(() => {
-    if (!isMounted || isInitializing || isUpdatingFromUrlRef.current) {
-      console.log('⏭️ Skipping filter effect - initializing or updating from URL');
-      return;
-    }
-    
-    console.log('🔄 Filters changed, making API call');
-    dispatch(setPaginationParams({ page: 1 }));
-    fetchDiscussionsWithCurrentState();
-  }, [debouncedSearchQuery, filterValues, isMounted, isInitializing]);
-
-  // URL SYNC EFFECT - Should run AFTER filter changes are processed
-  useEffect(() => {
-    if (!isMounted || isInitializing || isUpdatingFromUrlRef.current) {
-      console.log('⏭️ Skipping URL sync - initializing or updating from URL');
-      return;
-    }
-    
-    // Small delay to ensure filter effect runs first
-    const timeoutId = setTimeout(() => {
-      const params = new URLSearchParams();
-      
-      // Add all current filter values to URL
-      if (filterValues.status !== 'all') params.set('status', filterValues.status);
-      if (filterValues.showMyAnnotations && user?.id) params.set('user_id', user.id.toString());
-      if (filterValues.repositoryLanguage.length > 0) params.set('repository_language', filterValues.repositoryLanguage.join(','));
-      if (filterValues.releaseTag.length > 0) params.set('release_tag', filterValues.releaseTag.join(','));
-      if (filterValues.fromDate) params.set('from_date', filterValues.fromDate.toISOString().split('T')[0]);
-      if (filterValues.toDate) params.set('to_date', filterValues.toDate.toISOString().split('T')[0]);
-      if (filterValues.batchId) params.set('batch_id', filterValues.batchId);
-      if (filterValues.taskStatuses.task1 !== 'all') params.set('task1_status', filterValues.taskStatuses.task1);
-      if (filterValues.taskStatuses.task2 !== 'all') params.set('task2_status', filterValues.taskStatuses.task2);
-      if (filterValues.taskStatuses.task3 !== 'all') params.set('task3_status', filterValues.taskStatuses.task3);
-      if (debouncedSearchQuery) params.set('search', debouncedSearchQuery);
-      
-      // Add pagination
-      params.set('page', pagination.page.toString());
-      params.set('per_page', pagination.per_page.toString());
-      
-      // Update URL without triggering navigation
-      const newUrl = `/discussions?${params.toString()}`;
-      if (window.location.pathname + window.location.search !== newUrl) {
-        console.log('🔗 Updating URL with current filters');
-        window.history.replaceState(null, '', newUrl);
-      }
-    }, 100); // 100ms delay
-    
-    return () => clearTimeout(timeoutId);
-  }, [filterValues, debouncedSearchQuery, pagination, user?.id, isMounted, isInitializing]);
-// Add these two effects to your component (after your existing effects):
-
-// SINGLE effect to handle sessionStorage restore  
-useEffect(() => {
-  // Only run during initialization, not after
-  if (!isAuthenticated || isMounted) return;
-  
-  console.log('🔍 Checking for saved filters...');
-  
-  // Check if URL has meaningful filters (not just defaults)
-  const urlParams = new URLSearchParams(location.search);
-  const hasActiveUrlFilters = (
-    (urlParams.get('status') && urlParams.get('status') !== 'all') ||
-    urlParams.get('search') ||
-    urlParams.get('user_id') ||
-    urlParams.get('repository_language') ||
-    urlParams.get('release_tag') ||
-    urlParams.get('from_date') ||
-    urlParams.get('to_date') ||
-    urlParams.get('batch_id') ||
-    (urlParams.get('task1_status') && urlParams.get('task1_status') !== 'all') ||
-    (urlParams.get('task2_status') && urlParams.get('task2_status') !== 'all') ||
-    (urlParams.get('task3_status') && urlParams.get('task3_status') !== 'all')
-  );
-  
-  // Only restore from sessionStorage if URL has no active filters
-  if (!hasActiveUrlFilters) {
-    const savedFilters = sessionStorage.getItem('discussions-filters');
-    console.log('📦 Saved filters:', savedFilters);
-    
-    if (savedFilters) {
-      try {
-        const parsed = JSON.parse(savedFilters);
-        const isRecent = (Date.now() - parsed.timestamp) < (30 * 60 * 1000);
-        
-        if (isRecent && parsed.filterValues) {
-          console.log('🔄 Restoring filters from sessionStorage');
-          
-          // CRITICAL: Set BOTH flags to prevent other effects from running
-          isUpdatingFromUrlRef.current = true;
-          setIsInitializing(true); // ← ADD THIS LINE
-          
-          // Restore filters
-          setFilterValues(parsed.filterValues);
-          if (parsed.searchQuery) {
-            setSearchQuery(parsed.searchQuery);
-          }
-          
-          // Restore pagination if saved
-          if (parsed.pagination) {
-            dispatch(setPaginationParams({
-              page: parsed.pagination.page || 1,
-              per_page: parsed.pagination.per_page || 10
-            }));
-          }
-          
-          // Build URL with ALL restored filters
-          const params = new URLSearchParams();
-          if (parsed.filterValues.status !== 'all') params.set('status', parsed.filterValues.status);
-          if (parsed.filterValues.showMyAnnotations && user?.id) params.set('user_id', user.id.toString());
-          if (parsed.filterValues.repositoryLanguage?.length > 0) params.set('repository_language', parsed.filterValues.repositoryLanguage.join(','));
-          if (parsed.filterValues.releaseTag?.length > 0) params.set('release_tag', parsed.filterValues.releaseTag.join(','));
-          if (parsed.filterValues.fromDate) params.set('from_date', parsed.filterValues.fromDate.toISOString().split('T')[0]);
-          if (parsed.filterValues.toDate) params.set('to_date', parsed.filterValues.toDate.toISOString().split('T')[0]);
-          if (parsed.filterValues.batchId) params.set('batch_id', parsed.filterValues.batchId);
-          if (parsed.filterValues.taskStatuses?.task1 !== 'all') params.set('task1_status', parsed.filterValues.taskStatuses.task1);
-          if (parsed.filterValues.taskStatuses?.task2 !== 'all') params.set('task2_status', parsed.filterValues.taskStatuses.task2);
-          if (parsed.filterValues.taskStatuses?.task3 !== 'all') params.set('task3_status', parsed.filterValues.taskStatuses.task3);
-          if (parsed.searchQuery) params.set('search', parsed.searchQuery);
-          
-          // Add pagination (restored or current)
-          const currentPage = parsed.pagination?.page || pagination.page || 1;
-          const currentPerPage = parsed.pagination?.per_page || pagination.per_page || 10;
-          params.set('page', currentPage.toString());
-          params.set('per_page', currentPerPage.toString());
-          
-          // Update URL
-          const newUrl = `/discussions?${params.toString()}`;
-          window.history.replaceState(null, '', newUrl);
-          
-          console.log('🔗 Updated URL with restored filters and pagination:', newUrl);
-          
-          // Make the API call directly here to avoid duplicate calls
-          dispatch(fetchDiscussions({
-            status: parsed.filterValues.status === 'all' ? undefined : parsed.filterValues.status,
-            search: parsed.searchQuery?.trim() || undefined,
-            repository_language: parsed.filterValues.repositoryLanguage?.length > 0 ? parsed.filterValues.repositoryLanguage.join(',') : undefined,
-            release_tag: parsed.filterValues.releaseTag?.length > 0 ? parsed.filterValues.releaseTag.join(',') : undefined,
-            from_date: parsed.filterValues.fromDate ? parsed.filterValues.fromDate.toISOString().split('T')[0] : undefined,
-            to_date: parsed.filterValues.toDate ? parsed.filterValues.toDate.toISOString().split('T')[0] : undefined,
-            batch_id: parsed.filterValues.batchId ? Number(parsed.filterValues.batchId) : undefined,
-            user_id: parsed.filterValues.showMyAnnotations && user?.id ? user.id.toString() : undefined,
-            task1_status: parsed.filterValues.taskStatuses?.task1 === 'all' ? undefined : parsed.filterValues.taskStatuses.task1,
-            task2_status: parsed.filterValues.taskStatuses?.task2 === 'all' ? undefined : parsed.filterValues.taskStatuses.task2,
-            task3_status: parsed.filterValues.taskStatuses?.task3 === 'all' ? undefined : parsed.filterValues.taskStatuses.task3,
-            page: currentPage,
-            per_page: currentPerPage,
-            forceRefresh: false
-          }));
-          
-          // Re-enable effects after a longer delay
-          setTimeout(() => {
-            setIsInitializing(false);
-            isUpdatingFromUrlRef.current = false;
-          }, 500); // ← LONGER DELAY
-        }
-      } catch (error) {
-        console.error('Failed to parse saved filters:', error);
-      }
-    }
-  }
-}, [isAuthenticated, location.search, user?.id, isMounted, pagination.page, pagination.per_page, dispatch]);
-
-
-// SAVE filters (including pagination)
-useEffect(() => {
-  if (!isMounted || isInitializing || isUpdatingFromUrlRef.current) return;
-  
-  const filtersToSave = {
-    filterValues,
-    searchQuery: debouncedSearchQuery,
-    pagination: {
+  const fetchDiscussionsWithCurrentState = useCallback(() => {
+    const params = {
+      status: filterValues.status === 'all' ? undefined : filterValues.status,
+      search: debouncedSearchQuery.trim() || undefined,
+      repository_language: filterValues.repositoryLanguage.join(',') || undefined,
+      release_tag: filterValues.releaseTag.join(',') || undefined,
+      from_date: filterValues.fromDate?.toISOString().split('T')[0],
+      to_date: filterValues.toDate?.toISOString().split('T')[0],
+      batch_id: filterValues.batchId ? Number(filterValues.batchId) : undefined,
+      user_id: filterValues.showMyAnnotations && user?.id ? user.id.toString() : undefined,
+      task1_status: filterValues.taskStatuses.task1 === 'all' ? undefined : filterValues.taskStatuses.task1,
+      task2_status: filterValues.taskStatuses.task2 === 'all' ? undefined : filterValues.taskStatuses.task2,
+      task3_status: filterValues.taskStatuses.task3 === 'all' ? undefined : filterValues.taskStatuses.task3,
       page: pagination.page,
       per_page: pagination.per_page
-    },
-    timestamp: Date.now()
-  };
+    };
+    const paramsString = JSON.stringify(params);
+    if (lastFetchParamsRef.current === paramsString) return;
+    lastFetchParamsRef.current = paramsString;
+    dispatch(fetchDiscussions(params));
+  }, [dispatch, filterValues, debouncedSearchQuery, pagination, user?.id]);
   
-  sessionStorage.setItem('discussions-filters', JSON.stringify(filtersToSave));
-  console.log('💾 Saved filters and pagination to sessionStorage');
-}, [filterValues, debouncedSearchQuery, pagination.page, pagination.per_page, isMounted, isInitializing]);
-
-
-
-const handleFilterChange = useCallback((newFilters: FilterValues) => {
-    if (isUpdatingFromUrlRef.current) {
-      console.log('⏭️ Ignoring filter change during URL update');
-      return;
-    }
-    
-    console.log('✅ Filter change received:', newFilters);
-    setFilterValues(newFilters);
-    dispatch(setPaginationParams({ page: 1 }));
-  }, [dispatch]);
-
-  // Enhanced discussions with user annotation status
-  const enhancedDiscussions = useMemo((): EnhancedDiscussion[] => {
-    if (!discussions || !user) return [];
-
-    return discussions.map(discussion => {
-      const userAnnotationStatus = getUserAnnotationStatus(discussion.id, user.id);
-      
-      const task1AnnotatorsCount = 
-        Array.isArray(discussion.annotations?.task1_annotations) 
-          ? discussion.annotations.task1_annotations.length 
-          : 0;
-      
-      const task2AnnotatorsCount = 
-        Array.isArray(discussion.annotations?.task2_annotations) 
-          ? discussion.annotations.task2_annotations.length 
-          : 0;
-      
-      const task3AnnotatorsCount = 
-        Array.isArray(discussion.annotations?.task3_annotations) 
-          ? discussion.annotations.task3_annotations.length 
-          : 0;
-
-      return {
-        ...discussion,
-        tasks: {
-          task1: {
-            ...discussion.tasks.task1,
-            userAnnotated: userAnnotationStatus.task1 === true,
-            annotators: task1AnnotatorsCount
-          },
-          task2: {
-            ...discussion.tasks.task2,
-            userAnnotated: userAnnotationStatus.task2 === true,
-            annotators: task2AnnotatorsCount
-          },
-          task3: {
-            ...discussion.tasks.task3,
-            userAnnotated: userAnnotationStatus.task3 === true,
-            annotators: task3AnnotatorsCount
-          },
-        },
-      } as EnhancedDiscussion;
-    });
-  }, [discussions, user, getUserAnnotationStatus]);
-
-  // OTHER HANDLERS - Direct dispatch to avoid cascading
-  const handleSearchSubmit = useCallback((e: React.FormEvent) => {
-    e.preventDefault();
-    dispatch(setPaginationParams({ page: 1 }));
-    fetchDiscussionsWithCurrentState();
-  }, [dispatch, fetchDiscussionsWithCurrentState]);
-
-  const handlePageChange = useCallback((newPage: number) => {
-    dispatch(setPaginationParams({ page: newPage }));
-    const params = {
-      status: filterValues.status === 'all' ? undefined : filterValues.status,
-      search: debouncedSearchQuery.trim() || undefined,
-      repository_language: filterValues.repositoryLanguage.length > 0 ? filterValues.repositoryLanguage.join(',') : undefined,
-      release_tag: filterValues.releaseTag.length > 0 ? filterValues.releaseTag.join(',') : undefined,
-      from_date: filterValues.fromDate ? filterValues.fromDate.toISOString().split('T')[0] : undefined,
-      to_date: filterValues.toDate ? filterValues.toDate.toISOString().split('T')[0] : undefined,
-      batch_id: filterValues.batchId ? Number(filterValues.batchId) : undefined,
-      user_id: filterValues.showMyAnnotations && user?.id ? user.id.toString() : undefined,
-      task1_status: filterValues.taskStatuses.task1 === 'all' ? undefined : filterValues.taskStatuses.task1,
-      task2_status: filterValues.taskStatuses.task2 === 'all' ? undefined : filterValues.taskStatuses.task2,
-      task3_status: filterValues.taskStatuses.task3 === 'all' ? undefined : filterValues.taskStatuses.task3,
-      page: newPage,
-      per_page: pagination.per_page,
-      forceRefresh: false
-    };
-    dispatch(fetchDiscussions(params));
-  }, [filterValues, debouncedSearchQuery, user?.id, pagination.per_page, dispatch]);
-
-  const handlePerPageChange = useCallback((newPerPage: number) => {
-    dispatch(setPaginationParams({ page: 1, per_page: newPerPage }));
-    const params = {
-      status: filterValues.status === 'all' ? undefined : filterValues.status,
-      search: debouncedSearchQuery.trim() || undefined,
-      repository_language: filterValues.repositoryLanguage.length > 0 ? filterValues.repositoryLanguage.join(',') : undefined,
-      release_tag: filterValues.releaseTag.length > 0 ? filterValues.releaseTag.join(',') : undefined,
-      from_date: filterValues.fromDate ? filterValues.fromDate.toISOString().split('T')[0] : undefined,
-      to_date: filterValues.toDate ? filterValues.toDate.toISOString().split('T')[0] : undefined,
-      batch_id: filterValues.batchId ? Number(filterValues.batchId) : undefined,
-      user_id: filterValues.showMyAnnotations && user?.id ? user.id.toString() : undefined,
-      task1_status: filterValues.taskStatuses.task1 === 'all' ? undefined : filterValues.taskStatuses.task1,
-      task2_status: filterValues.taskStatuses.task2 === 'all' ? undefined : filterValues.taskStatuses.task2,
-      task3_status: filterValues.taskStatuses.task3 === 'all' ? undefined : filterValues.taskStatuses.task3,
-      page: 1,
-      per_page: newPerPage,
-      forceRefresh: false
-    };
-    dispatch(fetchDiscussions(params));
-  }, [filterValues, debouncedSearchQuery, user?.id, dispatch]);
-
-  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(e.target.value);
-  }, []);
-
   const handleRetry = useCallback(() => {
     fetchDiscussionsWithCurrentState();
   }, [fetchDiscussionsWithCurrentState]);
-
+  
   const handleClearFilters = useCallback(() => {
     setSearchQuery('');
     setFilterValues({
@@ -558,11 +134,7 @@ const handleFilterChange = useCallback((newFilters: FilterValues) => {
       fromDate: undefined,
       toDate: undefined,
       batchId: '',
-      taskStatuses: {
-        task1: 'all',
-        task2: 'all',
-        task3: 'all'
-      }
+      taskStatuses: { task1: 'all', task2: 'all', task3: 'all' }
     });
     dispatch(setPaginationParams({ page: 1 }));
     dispatch(fetchDiscussions({
@@ -571,128 +143,159 @@ const handleFilterChange = useCallback((newFilters: FilterValues) => {
       forceRefresh: true
     }));
   }, [dispatch, pagination.per_page]);
+  
+  useEffect(() => {
+    if (!isAuthenticated || isMounted) return;
 
-  // Task navigation handler
-  const startTask = useCallback((discussionId: string, taskNumber: number) => {
-    console.log(`StartTask called with discussionId=${discussionId}, taskNumber=${taskNumber}`);
-    
-    if (!user) {
-      toast.error("You must be logged in to annotate");
-      navigate('/');
-      return;
-    }
-    
-    const discussion = discussions.find(d => d.id === discussionId);
-    
-    if (!discussion) {
-      toast.error("Discussion not found. Please refresh the page and try again.");
-      console.error(`Discussion with ID ${discussionId} not found in current discussions array.`);
-      return;
-    }
-    
-    const task = taskNumber === 1 ? discussion.tasks.task1 : 
-                 taskNumber === 2 ? discussion.tasks.task2 : 
-                 discussion.tasks.task3;
-                 
-    let actualAnnotationsCount = 0;
-    if (discussion.annotations) {
-      if (taskNumber === 1 && discussion.annotations.task1_annotations) {
-        actualAnnotationsCount = discussion.annotations.task1_annotations.length;
-      } else if (taskNumber === 2 && discussion.annotations.task2_annotations) {
-        actualAnnotationsCount = discussion.annotations.task2_annotations.length;
-      } else if (taskNumber === 3 && discussion.annotations.task3_annotations) {
-        actualAnnotationsCount = discussion.annotations.task3_annotations.length;
+    const params = new URLSearchParams(location.search);
+    const hasUrlFilters = Array.from(params.entries()).some(([k, v]) => v && k !== 'page' && k !== 'per_page');
+    let restored = false;
+
+    if (!hasUrlFilters) {
+      const saved = sessionStorage.getItem('discussions-filters');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Date.now() - parsed.timestamp < 30 * 60 * 1000) {
+            setFilterValues(parsed.filterValues);
+            setSearchQuery(parsed.searchQuery || '');
+            dispatch(setPaginationParams(parsed.pagination));
+            restored = true;
+          }
+        } catch {}
       }
     }
-    
-    const annotationsCount = Math.max(task.annotators, actualAnnotationsCount);
-    const userAnnotationStatus = getUserAnnotationStatus(discussionId, user.id);
-    
-    const hasAnnotated = taskNumber === 1 ? userAnnotationStatus.task1 : 
-                          taskNumber === 2 ? userAnnotationStatus.task2 : 
-                          userAnnotationStatus.task3;
-    
-    if (isPodLead || isAdmin) {
-      toast.info(`Opening task ${taskNumber} in pod lead mode`);
-      navigate(`/dashboard?discussionId=${discussionId}&taskId=${taskNumber}&mode=podlead&timestamp=${Date.now()}`);
-      return;
-    }
-    
-    if (task.status === 'locked' && !hasAnnotated) {
-      toast.error(`Task ${taskNumber} is currently locked.`);
-      return;
-    }
-    
-    const requiredAnnotators = taskNumber === 3 ? 5 : 3;
-    
-    if (annotationsCount >= requiredAnnotators && !hasAnnotated) {
-      toast.error(`This task already has the maximum number of annotators (${annotationsCount}/${requiredAnnotators}). Please choose another task.`);
-      return;
-    }
-    
-    if (hasAnnotated) {
-      toast.info(`Opening your existing annotation for task ${taskNumber}`);
-      navigate(`/dashboard?discussionId=${discussionId}&taskId=${taskNumber}&mode=edit&timestamp=${Date.now()}`);
-    } else {
-      toast.info(`Starting task ${taskNumber}`);
-      navigate(`/dashboard?discussionId=${discussionId}&taskId=${taskNumber}&mode=new&timestamp=${Date.now()}`);
-    }
-    
-  }, [discussions, getUserAnnotationStatus, isPodLead, isAdmin, navigate, user]);
 
-  // Utility functions
-  const getTaskStatusClass = useCallback((status: 'locked' | 'unlocked' | 'completed', userAnnotated?: boolean) => {
-    if (userAnnotated === true) {
-      return 'bg-purple-100 text-purple-800';
+    if (!restored && hasUrlFilters) {
+      const f = { ...filterValues };
+      if (params.get('status')) f.status = params.get('status');
+      if (params.get('user_id')) f.showMyAnnotations = params.get('user_id') === user?.id?.toString();
+      if (params.get('repository_language')) f.repositoryLanguage = params.get('repository_language').split(',');
+      if (params.get('release_tag')) f.releaseTag = params.get('release_tag').split(',');
+      if (params.get('from_date')) f.fromDate = new Date(params.get('from_date'));
+      if (params.get('to_date')) f.toDate = new Date(params.get('to_date'));
+      if (params.get('batch_id')) f.batchId = params.get('batch_id');
+      f.taskStatuses.task1 = params.get('task1_status') || 'all';
+      f.taskStatuses.task2 = params.get('task2_status') || 'all';
+      f.taskStatuses.task3 = params.get('task3_status') || 'all';
+      setFilterValues(f);
+      setSearchQuery(params.get('search') || '');
+      dispatch(setPaginationParams({
+        page: parseInt(params.get('page')) || 1,
+        per_page: parseInt(params.get('per_page')) || 10
+      }));
     }
-    
-    switch (status) {
-      case 'completed':
-        return 'bg-green-100 text-green-800';
-      case 'unlocked':
-        return 'bg-blue-100 text-blue-800';
-      case 'locked':
-        return 'bg-gray-100 text-gray-800';
+
+    setIsMounted(true);
+    setIsInitializing(false);
+  }, [isAuthenticated, location.search, user?.id]);
+
+  useEffect(() => {
+    if (!isMounted || isInitializing) return;
+    const params = {
+      status: filterValues.status === 'all' ? undefined : filterValues.status,
+      search: debouncedSearchQuery.trim() || undefined,
+      repository_language: filterValues.repositoryLanguage.join(',') || undefined,
+      release_tag: filterValues.releaseTag.join(',') || undefined,
+      from_date: filterValues.fromDate?.toISOString().split('T')[0],
+      to_date: filterValues.toDate?.toISOString().split('T')[0],
+      batch_id: filterValues.batchId ? Number(filterValues.batchId) : undefined,
+      user_id: filterValues.showMyAnnotations && user?.id ? user.id.toString() : undefined,
+      task1_status: filterValues.taskStatuses.task1 === 'all' ? undefined : filterValues.taskStatuses.task1,
+      task2_status: filterValues.taskStatuses.task2 === 'all' ? undefined : filterValues.taskStatuses.task2,
+      task3_status: filterValues.taskStatuses.task3 === 'all' ? undefined : filterValues.taskStatuses.task3,
+      page: pagination.page,
+      per_page: pagination.per_page
+    };
+    const paramsString = JSON.stringify(params);
+    if (lastFetchParamsRef.current === paramsString) return;
+    lastFetchParamsRef.current = paramsString;
+    dispatch(fetchDiscussions(params));
+  }, [filterValues, debouncedSearchQuery, pagination, user?.id, isMounted, isInitializing]);
+
+  useEffect(() => {
+    if (!isMounted || isInitializing) return;
+    const filtersToSave = {
+      filterValues,
+      searchQuery: debouncedSearchQuery,
+      pagination,
+      timestamp: Date.now()
+    };
+    sessionStorage.setItem('discussions-filters', JSON.stringify(filtersToSave));
+    const params = new URLSearchParams();
+    if (filterValues.status !== 'all') params.set('status', filterValues.status);
+    if (filterValues.showMyAnnotations && user?.id) params.set('user_id', user.id.toString());
+    if (filterValues.repositoryLanguage.length > 0) params.set('repository_language', filterValues.repositoryLanguage.join(','));
+    if (filterValues.releaseTag.length > 0) params.set('release_tag', filterValues.releaseTag.join(','));
+    if (filterValues.fromDate) params.set('from_date', filterValues.fromDate.toISOString().split('T')[0]);
+    if (filterValues.toDate) params.set('to_date', filterValues.toDate.toISOString().split('T')[0]);
+    if (filterValues.batchId) params.set('batch_id', filterValues.batchId);
+    if (filterValues.taskStatuses.task1 !== 'all') params.set('task1_status', filterValues.taskStatuses.task1);
+    if (filterValues.taskStatuses.task2 !== 'all') params.set('task2_status', filterValues.taskStatuses.task2);
+    if (filterValues.taskStatuses.task3 !== 'all') params.set('task3_status', filterValues.taskStatuses.task3);
+    if (debouncedSearchQuery) params.set('search', debouncedSearchQuery);
+    params.set('page', pagination.page.toString());
+    params.set('per_page', pagination.per_page.toString());
+    const newUrl = `/discussions?${params.toString()}`;
+    if (location.pathname + location.search !== newUrl) {
+      window.history.replaceState(null, '', newUrl);
     }
+  }, [filterValues, debouncedSearchQuery, pagination, user?.id, isMounted, isInitializing]);
+
+  const handleFilterChange = useCallback((newFilters: FilterValues) => {
+    setFilterValues(newFilters);
+    dispatch(setPaginationParams({ page: 1 }));
+  }, [dispatch]);
+
+  const handleSearchSubmit = useCallback((e: React.FormEvent) => {
+    e.preventDefault();
+    dispatch(setPaginationParams({ page: 1 }));
+  }, [dispatch]);
+
+  const handlePageChange = useCallback((newPage: number) => {
+    dispatch(setPaginationParams({ page: newPage }));
+  }, [dispatch]);
+
+  const handlePerPageChange = useCallback((newPerPage: number) => {
+    dispatch(setPaginationParams({ page: 1, per_page: newPerPage }));
+  }, [dispatch]);
+
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value);
   }, []);
 
-  const getTaskButtonState = useCallback((discussion: EnhancedDiscussion, taskNumber: number) => {
-    const task = taskNumber === 1 ? discussion.tasks.task1 : 
-                taskNumber === 2 ? discussion.tasks.task2 : discussion.tasks.task3;
-    
-    const userAnnotated = task.userAnnotated === true;
-    const requiredAnnotators = taskNumber === 3 ? 5 : 3;
-    const maxAnnotatorsReached = task.annotators >= requiredAnnotators && !isPodLead && !isAdmin && !userAnnotated;
-    
-    const isEnabled = (task.status === 'unlocked' || task.status === 'completed' || isPodLead || isAdmin || userAnnotated) && !maxAnnotatorsReached;
-    
-    let text = '';
-    if (maxAnnotatorsReached) {
-      text = `Maximum Annotators Reached (${task.annotators}/${requiredAnnotators})`;
-    } else if (userAnnotated) {
-      text = `View Your Annotation (${task.annotators}/${requiredAnnotators})`;
-    } else if ((isPodLead || isAdmin) && task.status === 'completed') {
-      text = `Create Consensus (${task.annotators}/${requiredAnnotators})`;
-    } else if (task.status === 'completed') {
-      text = `View Results (${task.annotators}/${requiredAnnotators})`;
-    } else if (task.status === 'unlocked') {
-      text = `Start Task (${task.annotators}/${requiredAnnotators})`;
-    } else {
-      text = `Locked (${task.annotators}/${requiredAnnotators})`;
-    }
-        
-    return { isEnabled, text };
-  }, [isPodLead, isAdmin]);
-
-  const openExternalLink = useCallback((url: string) => {
-    window.open(url, '_blank', 'noopener,noreferrer');
-  }, []);
+  // Enhanced discussions with user annotation status
+  const enhancedDiscussions = useMemo((): EnhancedDiscussion[] => {
+    if (!discussions || !user) return [];
+    return discussions.map(discussion => {
+      const status = getUserAnnotationStatus(discussion.id, user.id);
+      return {
+        ...discussion,
+        tasks: {
+          task1: {
+            ...discussion.tasks.task1,
+            userAnnotated: status.task1 === true,
+            annotators: discussion.annotations?.task1_annotations?.length || 0
+          },
+          task2: {
+            ...discussion.tasks.task2,
+            userAnnotated: status.task2 === true,
+            annotators: discussion.annotations?.task2_annotations?.length || 0
+          },
+          task3: {
+            ...discussion.tasks.task3,
+            userAnnotated: status.task3 === true,
+            annotators: discussion.annotations?.task3_annotations?.length || 0
+          }
+        }
+      };
+    });
+  }, [discussions, user, getUserAnnotationStatus]);
 
   const viewDiscussionDetails = useCallback((discussion: Discussion) => {
     dispatch(openModal(discussion));
   }, [dispatch]);
 
-  // Calculate statistics
   const stats = useMemo(() => {
     return {
       total: pagination.total,
@@ -701,6 +304,59 @@ const handleFilterChange = useCallback((newFilters: FilterValues) => {
       pages: pagination.pages
     };
   }, [pagination, discussions.length]);
+
+  const openExternalLink = useCallback((url: string) => {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }, []);
+
+  const getTaskStatusClass = useCallback((status: 'locked' | 'unlocked' | 'completed', userAnnotated?: boolean) => {
+  if (userAnnotated) return 'bg-purple-100 text-purple-800';
+  switch (status) {
+    case 'completed': return 'bg-green-100 text-green-800';
+    case 'unlocked': return 'bg-blue-100 text-blue-800';
+    case 'locked': return 'bg-gray-100 text-gray-800';
+  }
+}, []);
+
+const getTaskButtonState = useCallback((discussion: EnhancedDiscussion, taskNumber: number) => {
+  const task = discussion.tasks[`task${taskNumber}` as keyof EnhancedDiscussion['tasks']];
+  const userAnnotated = task.userAnnotated;
+  const required = taskNumber === 3 ? 5 : 3;
+  const maxed = task.annotators >= required && !isPodLead && !isAdmin && !userAnnotated;
+  const isEnabled = (task.status !== 'locked' || isPodLead || isAdmin || userAnnotated) && !maxed;
+
+  let text = '';
+  if (maxed) text = `Maximum Annotators Reached (${task.annotators}/${required})`;
+  else if (userAnnotated) text = `View Your Annotation (${task.annotators}/${required})`;
+  else if ((isPodLead || isAdmin) && task.status === 'completed') text = `Create Consensus (${task.annotators}/${required})`;
+  else if (task.status === 'completed') text = `View Results (${task.annotators}/${required})`;
+  else if (task.status === 'unlocked') text = `Start Task (${task.annotators}/${required})`;
+  else text = `Locked (${task.annotators}/${required})`;
+
+  return { isEnabled, text };
+}, [isPodLead, isAdmin]);
+
+const startTask = useCallback((discussionId: string, taskNumber: number) => {
+  const discussion = discussions.find(d => d.id === discussionId);
+  if (!user || !discussion) return toast.error("Discussion not found or user not authenticated");
+
+  const task = discussion.tasks[`task${taskNumber}` as keyof EnhancedDiscussion['tasks']];
+  const hasAnnotated = getUserAnnotationStatus(discussionId, user.id)[`task${taskNumber}` as keyof TaskStatus];
+  const annotationsCount = task.annotators;
+  const required = taskNumber === 3 ? 5 : 3;
+
+  if (isPodLead || isAdmin) {
+    return navigate(`/dashboard?discussionId=${discussionId}&taskId=${taskNumber}&mode=podlead&timestamp=${Date.now()}`);
+  }
+  if (task.status === 'locked' && !hasAnnotated) {
+    return toast.error(`Task ${taskNumber} is currently locked.`);
+  }
+  if (annotationsCount >= required && !hasAnnotated) {
+    return toast.error(`This task already has the maximum number of annotators.`);
+  }
+  const mode = hasAnnotated ? 'edit' : 'new';
+  navigate(`/dashboard?discussionId=${discussionId}&taskId=${taskNumber}&mode=${mode}&timestamp=${Date.now()}`);
+}, [user, discussions, getUserAnnotationStatus, isPodLead, isAdmin, navigate]);
 
   // Early returns for loading states
   if (!isAuthenticated) {

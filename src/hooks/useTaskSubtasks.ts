@@ -226,6 +226,7 @@ export function useTaskSubtasks() {
     textValues?: string[],
     supportingDocs?: SupportingDoc[],
     sectionIndex?: number,
+    weights?: number[],
     docDownloadLink?: string
   ) => {
     let updated: SubTask[] = [];

@@ -30,6 +30,7 @@ import AnalyticsDashboard from '@/components/admin/analytics/AnalyticsDashboard'
 import BulkTaskManager from '@/components/admin/bulk/BulkTaskManager';
 import AnnotationQuality from '@/components/admin/quality/AnnotationQuality';
 import { api, SystemSummary } from '@/services/api';
+import ConsensusReviewDashboard from '@/components/admin/ConsensusReviewDashboard';
 
 const Admin = () => {
   const { isAuthenticated, isPodLead, isAdmin, user } = useUser();
@@ -323,13 +324,8 @@ const Admin = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="text-center py-6">
-                    <p className="text-gray-500">Select a discussion from the dashboard to review consensus</p>
-                    <Button 
-                      className="mt-4" 
-                      onClick={() => navigate('/dashboard')}
-                    >
-                      Go to Dashboard
-                    </Button>
+                    <ConsensusReviewDashboard />
+                    
                   </div>
                 </CardContent>
               </Card>
