@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { SubTask, SubTaskStatus, SupportingDoc } from '@/components/dashboard/TaskCard';
 import { toast } from 'sonner';
+import { validateTask } from '@/utils/validation';
 
 // Clone a subtask array for creating new sections
 const cloneSubtasks = (subtasks: SubTask[]): SubTask[] => {
@@ -16,10 +17,13 @@ const cloneSubtasks = (subtasks: SubTask[]): SubTask[] => {
     textValue: '',
     textValues: task.multiline ? [''] : undefined,
     supportingDocs: task.structuredInput ? [{ link: '', paragraph: '' }] : undefined,
+    imageLinks: task.imageLinks ? [] : undefined,
     multiline: task.multiline,
     structuredInput: task.structuredInput,
     requiresRemarks: task.requiresRemarks,
-    placeholder: task.placeholder
+    placeholder: task.placeholder,
+    validation: task.validation, // Preserve validation rules
+    validationError: undefined // Reset validation error
   }));
 };
 
@@ -32,7 +36,16 @@ export function useTaskSubtasks() {
       status: 'pending' as SubTaskStatus,
       options: ['Yes', 'No'],
       description: 'Check if the question is relevant to the topic',
-      requiresRemarks: true
+      requiresRemarks: true,
+      validation: {
+        required: true,
+        custom: (task) => {
+          if (task.selectedOption === 'No' && (!task.textValue || task.textValue.trim().length < 10)) {
+            return 'Please provide a detailed explanation for why this is not relevant (minimum 10 characters)';
+          }
+          return null;
+        }
+      }
     },
     {
       id: 'learning',
@@ -40,7 +53,17 @@ export function useTaskSubtasks() {
       status: 'pending' as SubTaskStatus,
       options: ['Yes', 'No'],
       description: 'Check if the question has learning value',
-      requiresRemarks: true
+      requiresRemarks: true,
+      validation: {
+        required: true,
+        custom: (task) => {
+          if (!task.selectedOption) return 'Please select an option';
+          if (task.selectedOption === 'No' && (!task.textValue || task.textValue.trim().length < 10)) {
+            return 'Please provide a detailed explanation (minimum 10 characters)';
+          }
+          return null;
+        }
+      }
     },
     {
       id: 'clarity',
@@ -48,7 +71,17 @@ export function useTaskSubtasks() {
       status: 'pending' as SubTaskStatus,
       options: ['Yes', 'No'],
       description: 'Check if the question is clear',
-      requiresRemarks: true
+      requiresRemarks: true,
+      validation: {
+        required: true,
+        custom: (task) => {
+          if (!task.selectedOption) return 'Please select an option';
+          if (task.selectedOption === 'No' && (!task.textValue || task.textValue.trim().length < 10)) {
+            return 'Please provide a detailed explanation (minimum 10 characters)';
+          }
+          return null;
+        }
+      }
     },
     {
       id: 'grounded',
@@ -56,7 +89,17 @@ export function useTaskSubtasks() {
       status: 'pending' as SubTaskStatus,
       options: ['True', 'False', 'N/A'],
       description: 'Check if images are properly referenced (if any)',
-      requiresRemarks: true
+      requiresRemarks: true,
+      validation: {
+        required: true,
+        custom: (task) => {
+          if (!task.selectedOption) return 'Please select an option';
+          if (task.selectedOption === 'False' && (!task.textValue || task.textValue.trim().length < 10)) {
+            return 'Please explain why images are not properly grounded (minimum 10 characters)';
+          }
+          return null;
+        }
+      }
     }
   ]);
   
@@ -67,7 +110,10 @@ export function useTaskSubtasks() {
       title: 'Addresses All Aspects',
       status: 'pending' as SubTaskStatus,
       options: ['Yes', 'No'],
-      description: 'Check if the answer addresses all aspects of the question'
+      description: 'Check if the answer addresses all aspects of the question',
+      validation: {
+        required: true
+      }
     },
     {
       id: 'explanation',
@@ -75,7 +121,17 @@ export function useTaskSubtasks() {
       status: 'pending' as SubTaskStatus,
       options: ['Yes', 'No'],
       description: 'Check if the answer provides an explanation',
-      requiresRemarks: true
+      requiresRemarks: true,
+      validation: {
+        required: true,
+        custom: (task) => {
+          if (!task.selectedOption) return 'Please select an option';
+          if (task.selectedOption === 'No' && (!task.textValue || task.textValue.trim().length < 5)) {
+            return 'Please provide remarks explaining why explanation is missing';
+          }
+          return null;
+        }
+      }
     },
     {
       id: 'execution',
@@ -83,7 +139,17 @@ export function useTaskSubtasks() {
       status: 'pending' as SubTaskStatus,
       options: ['Executable', 'Not Executable', 'N/A'],
       description: 'Check if the provided code is executable',
-      requiresRemarks: true
+      requiresRemarks: true,
+      validation: {
+        required: true,
+        custom: (task) => {
+          if (!task.selectedOption) return 'Please select an option';
+          if (task.selectedOption === 'Not Executable' && (!task.textValue || task.textValue.trim().length < 10)) {
+            return 'Please explain why the code is not executable (minimum 10 characters)';
+          }
+          return null;
+        }
+      }
     },
     {
       id: 'download',
@@ -91,7 +157,10 @@ export function useTaskSubtasks() {
       status: 'pending' as SubTaskStatus,
       options: ['Provided', 'Not Provided', 'N/A'],
       description: 'Check if a code download link is provided',
-      requiresRemarks: true
+      requiresRemarks: true,
+      validation: {
+        required: true
+      }
     },
     {
       id: 'screenshot',
@@ -101,7 +170,18 @@ export function useTaskSubtasks() {
       description: 'Provide Google Drive URL for the screenshot',
       textInput: true,
       textValue: '',
-      placeholder: 'Enter Google Drive URL for the screenshot'
+      placeholder: 'Enter Google Drive URL for the screenshot',
+      validation: {
+        custom: (task) => {
+          if (task.selectedOption === 'Provided' && (!task.textValue || task.textValue.trim().length === 0)) {
+            return 'Please provide the Google Drive URL';
+          }
+          if (task.textValue && task.textValue.trim() && !task.textValue.includes('drive.google.com')) {
+            return 'Please provide a valid Google Drive URL';
+          }
+          return null;
+        }
+      }
     },
     {
       id: 'codeDownloadUrl',
@@ -113,7 +193,15 @@ export function useTaskSubtasks() {
       textValue: '',
       placeholder: 'https://github.com/owner/repo/archive/refs/tags/version.tar.gz',
       enableDocDownload: false,
-      docDownloadLink: ''
+      docDownloadLink: '',
+      validation: {
+        custom: (task) => {
+          if (task.selectedOption === 'Verified manually' && (!task.textValue || task.textValue.trim().length === 0)) {
+            return 'Please provide the code download URL';
+          }
+          return null;
+        }
+      }
     }
   ]);
   
@@ -126,7 +214,15 @@ export function useTaskSubtasks() {
       options: ['Completed', 'Not Needed'],
       description: 'Rewrite the question in a clear and concise manner',
       textInput: true,
-      textValue: ''
+      textValue: '',
+      validation: {
+        custom: (task) => {
+          if (task.selectedOption === 'Completed' && (!task.textValue || task.textValue.trim().length < 10)) {
+            return 'Please provide the rewritten question (minimum 10 characters)';
+          }
+          return null;
+        }
+      }
     },
     {
       id: 'short_answer_list',
@@ -138,7 +234,23 @@ export function useTaskSubtasks() {
       textValues: [''], // Initialize with one empty entry
       weights: [1], // Initialize with default weight
       multiline: true,
-      placeholder: 'Enter a short answer claim'
+      placeholder: 'Enter a short answer claim',
+      validation: {
+        custom: (task) => {
+          if (task.selectedOption === 'Completed') {
+            if (!task.textValues || task.textValues.filter(v => v.trim()).length === 0) {
+              return 'Please provide at least one short answer claim';
+            }
+            const nonEmptyValues = task.textValues.filter(v => v.trim());
+            for (const value of nonEmptyValues) {
+              if (value.trim().length < 5) {
+                return 'Each claim must be at least 5 characters long';
+              }
+            }
+          }
+          return null;
+        }
+      }
     },
     {
       id: 'longAnswer',
@@ -147,14 +259,25 @@ export function useTaskSubtasks() {
       options: ['Completed', 'Not Needed'],
       description: 'Combine claims, smooth language, add reasoning',
       textInput: true,
-      textValue: ''
+      textValue: '',
+      validation: {
+        custom: (task) => {
+          if (task.selectedOption === 'Completed' && (!task.textValue || task.textValue.trim().length < 20)) {
+            return 'Please provide a coherent long answer (minimum 20 characters)';
+          }
+          return null;
+        }
+      }
     },
     {
       id: 'classify',
       title: 'Classify Question Type',
       status: 'pending' as SubTaskStatus,
       options: ['Search', 'Reasoning'],
-      description: 'Classify the question as "Search" or "Reasoning"'
+      description: 'Classify the question as "Search" or "Reasoning"',
+      validation: {
+        required: true
+      }
     },
     {
       id: 'supporting_docs',
@@ -163,7 +286,25 @@ export function useTaskSubtasks() {
       options: ['Provided', 'Not Needed'],
       description: 'Add supporting documentation with links (must start with "downloads/") and paragraphs',
       structuredInput: true,
-      supportingDocs: [{ link: '', paragraph: '' }] // Initialize with one empty set
+      supportingDocs: [{ link: '', paragraph: '' }], // Initialize with one empty set
+      validation: {
+        custom: (task) => {
+          if (task.selectedOption === 'Provided') {
+            if (!task.supportingDocs || task.supportingDocs.filter(d => d.link.trim() && d.paragraph.trim()).length === 0) {
+              return 'Please provide at least one supporting document with both link and paragraph';
+            }
+            for (const doc of task.supportingDocs) {
+              if (doc.link.trim() && !doc.link.startsWith('downloads/')) {
+                return 'Supporting document links must start with "downloads/"';
+              }
+              if (doc.link.trim() && doc.paragraph.trim().length < 10) {
+                return 'Supporting paragraphs must be at least 10 characters long';
+              }
+            }
+          }
+          return null;
+        }
+      }
     },
     {
       id: 'doc_download_link',
@@ -172,7 +313,43 @@ export function useTaskSubtasks() {
       options: ['Needed', 'Not Needed'],
       description: 'Provide download link for external documentation if supporting docs are not directly from code',
       textInput: true,
-      textValue: ''
+      textValue: '',
+      validation: {
+        custom: (task) => {
+          if (task.selectedOption === 'Needed' && (!task.textValue || task.textValue.trim().length === 0)) {
+            return 'Please provide the document download link';
+          }
+          if (task.textValue && task.textValue.trim() && !task.textValue.startsWith('http')) {
+            return 'Please provide a valid URL starting with http:// or https://';
+          }
+          return null;
+        }
+      }
+    },
+    {
+      id: 'question_image_links',
+      title: 'Question Image Links (Optional)',
+      status: 'pending' as SubTaskStatus,
+      description: 'Add links to images related to the question',
+      options: ['Provided', 'Not Needed'],
+      structuredInput: true,
+      placeholder: 'Enter image URL...',
+      imageLinks: [''], // Initialize with one empty link
+      validation: {
+        custom: (task) => {
+          if (task.selectedOption === 'Provided') {
+            if (!task.imageLinks || task.imageLinks.filter(link => link.trim()).length === 0) {
+              return 'Please provide at least one image link';
+            }
+            for (const link of task.imageLinks) {
+              if (link.trim() && !link.startsWith('http')) {
+                return 'Image links must be valid URLs starting with http:// or https://';
+              }
+            }
+          }
+          return null;
+        }
+      }
     }
   ]);
 
@@ -227,10 +404,32 @@ export function useTaskSubtasks() {
     supportingDocs?: SupportingDoc[],
     sectionIndex?: number,
     weights?: number[],
-    docDownloadLink?: string
+    docDownloadLink?: string,
+    imageLinks?: string[]
   ) => {
-    let updated: SubTask[] = [];
-
+    const updateTaskWithValidation = (task: SubTask): SubTask => {
+      if (task.id === taskId) {
+        const updatedTask = {
+          ...task,
+          selectedOption,
+          textValue: textValue !== undefined ? textValue : task.textValue,
+          textValues: textValues !== undefined ? textValues : task.textValues,
+          supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
+          imageLinks: imageLinks !== undefined ? imageLinks : task.imageLinks,
+          weights: weights !== undefined ? weights : task.weights,
+          docDownloadLink: docDownloadLink !== undefined ? docDownloadLink : task.docDownloadLink,
+          status: (selectedOption || (textValue !== undefined) || (textValues !== undefined) || (supportingDocs !== undefined) || (imageLinks !== undefined)) ? 'completed' as SubTaskStatus : task.status
+        };
+        
+        // Validate the updated task
+        const validationError = validateTask(updatedTask);
+        updatedTask.validationError = validationError;
+        
+        return updatedTask;
+      }
+      return task;
+    };
+  
     // Skip changes to consensus fields as they're system-determined
     if (taskId === 'consensus') {
       return;
@@ -245,38 +444,13 @@ export function useTaskSubtasks() {
         }
         
         const updatedSections = [...task3Sections];
-        const originalSectionTasks = task3Sections[sectionIndex];
-        updatedSections[sectionIndex] = updatedSections[sectionIndex].map(task => {
-          if (task.id === taskId) {
-            const newTaskData = {
-              ...task,
-              selectedOption,
-              textValue: textValue !== undefined ? textValue : task.textValue,
-              textValues: textValues !== undefined ? textValues : task.textValues,
-              supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
-              status: selectedOption ? 'completed' as SubTaskStatus : task.status
-            };
-            return newTaskData;
-          }
-          return task;
-        });
+        updatedSections[sectionIndex] = updatedSections[sectionIndex].map(updateTaskWithValidation);
         setTask3Sections(updatedSections);
         return;
       }
       
       if (taskSet === 'task1') {
-        updated = task1SubTasks.map(task => 
-          task.id === taskId 
-            ? { 
-                ...task, 
-                selectedOption, 
-                textValue: textValue !== undefined ? textValue : task.textValue,
-                textValues: textValues !== undefined ? textValues : task.textValues,
-                supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
-                status: selectedOption ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
-              } 
-            : task
-        );
+        const updated = task1SubTasks.map(updateTaskWithValidation);
         setTask1SubTasks(updated);
         
         // Special logic for Task 1
@@ -284,7 +458,7 @@ export function useTaskSubtasks() {
         if (taskId === 'relevance' && selectedOption === 'No') {
           setTask1SubTasks(prev => prev.map(task => {
             if (task.id !== 'relevance' && task.id !== 'consensus') {
-              return { ...task, status: 'na' as SubTaskStatus, selectedOption: 'N/A' };
+              return { ...task, status: 'na' as SubTaskStatus, selectedOption: 'N/A', validationError: undefined };
             }
             return task;
           }));
@@ -294,82 +468,25 @@ export function useTaskSubtasks() {
         if (taskId === 'learning' && selectedOption === 'No') {
           setTask1SubTasks(prev => prev.map(task => {
             if (task.id !== 'relevance' && task.id !== 'learning' && task.id !== 'consensus') {
-              return { ...task, status: 'na' as SubTaskStatus, selectedOption: 'N/A' };
+              return { ...task, status: 'na' as SubTaskStatus, selectedOption: 'N/A', validationError: undefined };
             }
             return task;
           }));
         }
       } else if (taskSet === 'task2') {
-        updated = task2SubTasks.map(task => 
-          task.id === taskId 
-            ? { 
-                ...task, 
-                selectedOption, 
-                textValue: textValue !== undefined ? textValue : task.textValue,
-                textValues: textValues !== undefined ? textValues : task.textValues,
-                supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
-                status: selectedOption ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
-              } 
-            : task
-        );
+        const updated = task2SubTasks.map(updateTaskWithValidation);
         setTask2SubTasks(updated);
       } else if (taskSet === 'task3') {
-        updated = task3SubTasks.map(task => {
-          if (task.id === taskId) {
-            const newTaskData = {
-              ...task,
-              selectedOption,
-              textValue: textValue !== undefined ? textValue : task.textValue,
-              textValues: textValues !== undefined ? textValues : task.textValues,
-              supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
-              status: selectedOption ? 'completed' as SubTaskStatus : task.status // Potential: if selectedOption is undefined, status doesn't change to pending
-            };
-            return newTaskData;
-          }
-          return task;
-        });
+        const updated = task3SubTasks.map(updateTaskWithValidation);
         setTask3SubTasks(updated);
       } else if (taskSet === 'consensus1') {
-        updated = consensusTask1.map(task => 
-          task.id === taskId 
-            ? { 
-                ...task, 
-                selectedOption, 
-                textValue: textValue !== undefined ? textValue : task.textValue,
-                textValues: textValues !== undefined ? textValues : task.textValues,
-                supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
-                status: selectedOption ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
-              } 
-            : task
-        );
+        const updated = consensusTask1.map(updateTaskWithValidation);
         setConsensusTask1(updated);
       } else if (taskSet === 'consensus2') {
-        updated = consensusTask2.map(task => 
-          task.id === taskId 
-            ? { 
-                ...task, 
-                selectedOption, 
-                textValue: textValue !== undefined ? textValue : task.textValue,
-                textValues: textValues !== undefined ? textValues : task.textValues,
-                supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
-                status: selectedOption ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
-              } 
-            : task
-        );
+        const updated = consensusTask2.map(updateTaskWithValidation);
         setConsensusTask2(updated);
       } else if (taskSet === 'consensus3') {
-        updated = consensusTask3.map(task => 
-          task.id === taskId 
-            ? { 
-                ...task, 
-                selectedOption, 
-                textValue: textValue !== undefined ? textValue : task.textValue,
-                textValues: textValues !== undefined ? textValues : task.textValues,
-                supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
-                status: selectedOption ? 'completed' as SubTaskStatus : 'pending' as SubTaskStatus
-              } 
-            : task
-        );
+        const updated = consensusTask3.map(updateTaskWithValidation);
         setConsensusTask3(updated);
       }
     } catch (error) {

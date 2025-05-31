@@ -22,19 +22,45 @@ import { toast } from 'sonner';
 import { MOCK_USERS_DATA } from '@/contexts/UserContext';
 import { api } from '@/services/api';
 import { Textarea } from '@/components/ui/textarea';
+import { validateForm, validateTask } from '@/utils/validation';
+
 
 const computeCompleted = (
-    task: SubTask,
-    selectedOption?: string,
-    textValue?: string,
-    textValues?: string[],
-    supportingDocs?: any[]
+  task: SubTask,
+  selectedOption?: string,
+  textValue?: string,
+  textValues?: string[],
+  supportingDocs?: any[],
+  imageLinks?: string[] 
 ) => {
-  if (selectedOption) return true;
-  if (task.multiline && textValues?.some(v => v.trim())) return true;
-  if (task.structuredInput && supportingDocs?.every(d => d.link && d.paragraph)) return true;
-  if (textValue && textValue.trim()) return true;
-  return false;
+// Create a temporary task object for validation
+const tempTask = {
+  ...task,
+  selectedOption,
+  textValue: textValue !== undefined ? textValue : task.textValue,
+  textValues: textValues !== undefined ? textValues : task.textValues,
+  supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
+  imageLinks: imageLinks !== undefined ? imageLinks : task.imageLinks
+};
+
+// Basic completion check
+let hasBasicCompletion = false;
+if (selectedOption) hasBasicCompletion = true;
+if (task.multiline && textValues?.some(v => v.trim())) hasBasicCompletion = true;
+if (task.structuredInput && supportingDocs?.every(d => d.link && d.paragraph)) hasBasicCompletion = true;
+if (task.id === 'question_image_links') {
+  hasBasicCompletion = selectedOption === 'Not Needed' || 
+         (selectedOption === 'Provided' && imageLinks?.some(link => link.trim()));
+}
+if (textValue && textValue.trim()) hasBasicCompletion = true;
+
+// Check validation if there's basic completion
+if (hasBasicCompletion && task.validation) {
+  const validationError = validateTask(tempTask);
+  return !validationError; // Only completed if no validation errors
+}
+
+return hasBasicCompletion;
 };
 
 const Dashboard = () => {
@@ -229,19 +255,27 @@ const Dashboard = () => {
                 break;
               case TaskId.ANSWER_QUALITY:
                 setConsensusTask2(consensusViewData.tasks);
-
+        
                 const screenshotTask = consensusViewData.tasks.find(t => t.id === 'screenshot');
                 if (screenshotTask && screenshotTask.textValue && handleScreenshotUrlChange) {
                   handleScreenshotUrlChange(screenshotTask.textValue);
                 }
-
+        
                 const codeTask = consensusViewData.tasks.find(t => t.id === 'codeDownloadUrl');
                 if (codeTask && codeTask.textValue && handleCodeUrlChange) {
                   handleCodeUrlChange(codeTask.textValue);
                 }
                 break;
               case TaskId.REWRITE:
-                setConsensusTask3(consensusViewData.tasks);
+                // ✅ FIXED: Handle consensus with multiple forms
+                if (consensusViewData.forms && consensusViewData.forms.length > 0) {
+                  console.log('Loading consensus Task 3 forms:', consensusViewData.forms);
+                  setConsensusTask3Forms(consensusViewData.forms);
+                  setActiveConsensusTask3Form(0);
+                } else {
+                  // Fallback to single form
+                  setConsensusTask3(consensusViewData.tasks);
+                }
                 break;
             }
             setConsensusStars(consensusViewData.stars ?? null);
@@ -258,20 +292,68 @@ const Dashboard = () => {
 
   const getSummaryData = () => ({ task1Results: {}, task2Results: {}, task3Results: {} });
 
+
+
   const onSaveClick = async () => {
+    let hasErrors = false;
+    let errorTasks: string[] = [];
+    
+    if (currentStep === TaskId.QUESTION_QUALITY) {
+      const tasksToValidate = viewMode === 'consensus' ? consensusTask1 : task1SubTasks;
+      const errors = validateForm(tasksToValidate);
+      if (Object.keys(errors).length > 0) {
+        hasErrors = true;
+        errorTasks = Object.keys(errors);
+        toast.error(`Please fix validation errors in: ${errorTasks.join(', ')}`);
+      }
+    } else if (currentStep === TaskId.ANSWER_QUALITY) {
+      const tasksToValidate = viewMode === 'consensus' ? consensusTask2 : task2SubTasks;
+      const errors = validateForm(tasksToValidate);
+      if (Object.keys(errors).length > 0) {
+        hasErrors = true;
+        errorTasks = Object.keys(errors);
+        toast.error(`Please fix validation errors in: ${errorTasks.join(', ')}`);
+      }
+    } else if (currentStep === TaskId.REWRITE) {
+      if (viewMode === 'consensus' && consensusTask3Forms.length > 0) {
+        const currentForm = consensusTask3Forms[activeConsensusTask3Form];
+        if (currentForm) {
+          const errors = validateForm(currentForm.subTasks);
+          if (Object.keys(errors).length > 0) {
+            hasErrors = true;
+            errorTasks = Object.keys(errors);
+            toast.error(`Please fix validation errors in ${currentForm.name}: ${errorTasks.join(', ')}`);
+          }
+        }
+      } else if (task3Forms.length > 0) {
+        const currentForm = task3Forms[activeTask3Form];
+        if (currentForm) {
+          const errors = validateForm(currentForm.subTasks);
+          if (Object.keys(errors).length > 0) {
+            hasErrors = true;
+            errorTasks = Object.keys(errors);
+            toast.error(`Please fix validation errors in ${currentForm.name}: ${errorTasks.join(', ')}`);
+          }
+        }
+      }
+    }
+    
+    if (hasErrors) return;
+    
+    // Proceed with existing save logic
     await handleSaveAnnotation(
-        discussionId,
-        currentStep,
-        viewMode,
-        screenshotUrl,
-        codeDownloadUrl,
-        screenshotUrlText,
-        codeDownloadUrlText,
-        handleBackToGrid,
-        viewMode === 'consensus' ? consensusStars : null,
-        viewMode === 'consensus' ? consensusComment : '',
-        currentStep === TaskId.REWRITE ? task3Forms : undefined,
-        currentStep === TaskId.REWRITE ? consensusTask3Forms : undefined
+      discussionId,
+      currentStep,
+      viewMode,
+      screenshotUrl,
+      codeDownloadUrl,
+      screenshotUrlText,
+      codeDownloadUrlText,
+      handleBackToGrid,
+      viewMode === 'consensus' ? consensusStars : null,
+      viewMode === 'consensus' ? consensusComment : '',
+      currentStep === TaskId.REWRITE ? task3Forms : undefined,
+      currentStep === TaskId.REWRITE ? consensusTask3Forms : undefined
     );
   };
 
@@ -284,7 +366,7 @@ const Dashboard = () => {
       toast.error('Selected annotation has no data to use.');
       return;
     }
-
+  
     if (currentStep === TaskId.QUESTION_QUALITY) {
       // Task 1 - unchanged
       const baseSubTasks = JSON.parse(JSON.stringify(task1SubTasks));
@@ -296,10 +378,10 @@ const Dashboard = () => {
       const mappedSubTasks = baseSubTasks.map(task => {
         const savedValue = annotation.data[task.id];
         const savedTextValue = annotation.data[`${task.id}_text`];
-
+  
         if (savedValue !== undefined || savedTextValue) {
           let selectedOption = '';
-
+  
           if (typeof savedValue === 'boolean') {
             if (task.options && task.options.length > 0) {
               const trueOption = task.options.find(o => o.toLowerCase() === 'true' || o.toLowerCase() === 'yes');
@@ -316,34 +398,34 @@ const Dashboard = () => {
               selectedOption = savedValue;
             }
           }
-
+  
           const updatedTask = {
             ...task,
             selectedOption: selectedOption || savedValue,
             status: 'completed' as SubTaskStatus,
             textValue: typeof savedTextValue === 'string' ? savedTextValue : (task.textValue || '')
           };
-
+  
           // Special handling for codeDownloadUrl to enable download button
           if (task.id === 'codeDownloadUrl') {
             updatedTask.docDownloadLink = savedTextValue || '';
             updatedTask.enableDocDownload = !!(savedTextValue && savedTextValue.trim());
           }
-
+  
           return updatedTask;
         }
-
+  
         return task;
       });
-
+  
       setConsensusTask2(mappedSubTasks);
-
+  
       // Sync the external state
       if (annotation.data['screenshot']) {
-        handleScreenshotUrlChange(annotation.data['screenshot'], annotation.data['screenshot_text'] | '');
+        handleScreenshotUrlChange(annotation.data['screenshot'], annotation.data['screenshot_text'] || '');
       }
       if (annotation.data['codeDownloadUrl']) {
-        handleCodeUrlChange(annotation.data['codeDownloadUrl'], annotation.data['codeDownloadUrl_text'] | '');
+        handleCodeUrlChange(annotation.data['codeDownloadUrl'], annotation.data['codeDownloadUrl_text'] || '');
       }
     }
     else if (currentStep === TaskId.REWRITE) {
@@ -352,11 +434,11 @@ const Dashboard = () => {
         // Multi-form annotation - populate consensus forms
         const consensusForms = annotation.data.forms.map((formData: any, index: number) => {
           const baseSubTasks = JSON.parse(JSON.stringify(task3SubTasks));
-
+  
           const mappedSubTasks = baseSubTasks.map((task: SubTask) => {
             const savedValue = formData[task.id];
             const savedTextValue = formData[`${task.id}_text`];
-
+  
             // Handle short_answer_list with claim/weight structure
             if (task.id === 'short_answer_list' && Array.isArray(savedValue)) {
               const claims = savedValue.map((item: any) =>
@@ -365,7 +447,7 @@ const Dashboard = () => {
               const weights = savedValue.map((item: any) =>
                   typeof item === 'object' ? parseInt(item.weight) || 1 : 1
               );
-
+  
               return {
                 ...task,
                 selectedOption: 'Completed',
@@ -374,7 +456,7 @@ const Dashboard = () => {
                 weights: weights
               };
             }
-
+  
             // Handle supporting docs
             else if (task.id === 'supporting_docs' && Array.isArray(savedValue)) {
               return {
@@ -387,12 +469,42 @@ const Dashboard = () => {
                 }))
               };
             }
-
+  
+            // ✅ FIXED: Handle question_image_links
+            else if (task.id === 'question_image_links') {
+              const imageLinks = formData['question_image_links'];
+              const imageLinksOption = formData['question_image_links_option'];
+              
+              if (imageLinksOption === 'Not Needed' || savedValue === 'Not Needed') {
+                return {
+                  ...task,
+                  selectedOption: 'Not Needed',
+                  status: 'completed' as SubTaskStatus,
+                  imageLinks: []
+                };
+              } else if (Array.isArray(imageLinks) && imageLinks.length > 0) {
+                const validLinks = imageLinks.filter(link => typeof link === 'string' && link.trim() !== '');
+                return {
+                  ...task,
+                  selectedOption: 'Provided',
+                  status: 'completed' as SubTaskStatus,
+                  imageLinks: validLinks
+                };
+              } else if (imageLinksOption === 'Provided') {
+                return {
+                  ...task,
+                  selectedOption: 'Provided',
+                  status: 'completed' as SubTaskStatus,
+                  imageLinks: []
+                };
+              }
+            }
+  
             // Handle doc_download_link
             else if (task.id === 'doc_download_link') {
               const linkText = savedTextValue;
               const hasLink = linkText && typeof linkText === 'string' && linkText.trim() !== '';
-
+  
               return {
                 ...task,
                 selectedOption: typeof savedValue === 'string' ? savedValue : (hasLink ? 'Needed' : 'Not Needed'),
@@ -402,11 +514,11 @@ const Dashboard = () => {
                 enableDocDownload: hasLink
               };
             }
-
+  
             // Handle regular fields
             else if (savedValue !== undefined) {
               let selectedOption = '';
-
+  
               if (typeof savedValue === 'boolean') {
                 if (task.options && task.options.length > 0) {
                   const trueOption = task.options.find(o => o.toLowerCase() === 'true' || o.toLowerCase() === 'yes');
@@ -423,7 +535,7 @@ const Dashboard = () => {
                   selectedOption = savedValue;
                 }
               }
-
+  
               return {
                 ...task,
                 selectedOption,
@@ -431,20 +543,20 @@ const Dashboard = () => {
                 textValue: typeof savedTextValue === 'string' ? savedTextValue : (task.textValue || '')
               };
             }
-
+  
             return task;
           });
-
+  
           return {
             id: formData.formId || `consensus-form-${index + 1}`,
             name: formData.formName || `Form ${index + 1}`,
             subTasks: mappedSubTasks
           };
         });
-
+  
         setConsensusTask3Forms(consensusForms);
         setActiveConsensusTask3Form(0); // Set to first form
-
+  
         toast.success(`Populated ${consensusForms.length} consensus forms from selected annotation.`);
       }
       else {
@@ -452,11 +564,11 @@ const Dashboard = () => {
         const baseSubTasks = JSON.parse(JSON.stringify(task3SubTasks));
         const mappedSubTasks = mapAnnotationToSubTasksForTask3(baseSubTasks, annotation);
         setConsensusTask3(mappedSubTasks);
-
+  
         toast.success('Consensus form populated with selected annotation.');
       }
     }
-
+  
     setConsensusStars(null);
     setConsensusComment('');
     toast.success('Consensus populated with selected annotation. Please provide overall feedback.');
@@ -536,13 +648,13 @@ const Dashboard = () => {
     return baseSubTasks.map(task => {
       const savedValue = annotation.data[task.id];
       const savedTextValue = annotation.data[`${task.id}_text`];
-
+  
       // Handle short_answer_list with new format
       if (task.id === 'short_answer_list') {
         // Check for aggregated format first
         if (Array.isArray(annotation.data.short_answer_list)) {
           const shortAnswerData = annotation.data.short_answer_list;
-
+  
           // Handle nested array format (multiple forms)
           if (shortAnswerData.length > 0 && Array.isArray(shortAnswerData[0])) {
             // Use first form's data
@@ -553,7 +665,7 @@ const Dashboard = () => {
             const weights = firstFormData.map((item: any) =>
               typeof item === 'object' ? parseInt(item.weight) || 1 : 1
             );
-
+  
             return {
               ...task,
               selectedOption: 'Completed',
@@ -570,7 +682,7 @@ const Dashboard = () => {
             const weights = shortAnswerData.map((item: any) =>
               typeof item === 'object' ? parseInt(item.weight) || 1 : 1
             );
-
+  
             return {
               ...task,
               selectedOption: 'Completed',
@@ -581,7 +693,7 @@ const Dashboard = () => {
           }
         }
       }
-
+  
       // Handle supporting docs from aggregated data
       else if (task.id === 'supporting_docs') {
         const docsData = annotation.data['supporting_docs_data'];
@@ -597,12 +709,12 @@ const Dashboard = () => {
           };
         }
       }
-
+  
       // Handle doc_download_link from aggregated data
       else if (task.id === 'doc_download_link') {
         const linkValue = annotation.data['doc_download_link'] || annotation.data['doc_download_links']?.[0];
         const hasLink = linkValue && typeof linkValue === 'string' && linkValue.trim() !== '';
-
+  
         return {
           ...task,
           selectedOption: hasLink ? 'Needed' : 'Not Needed',
@@ -612,11 +724,48 @@ const Dashboard = () => {
           enableDocDownload: hasLink
         };
       }
-
+  
+      // ✅ FIXED: Handle question_image_links from aggregated data
+      else if (task.id === 'question_image_links') {
+        const imageLinks = annotation.data['question_image_links'];
+        const imageLinksOption = annotation.data['question_image_links_option'];
+        
+        // Check for explicit "Not Needed" option
+        if (imageLinksOption === 'Not Needed' || savedValue === 'Not Needed') {
+          return {
+            ...task,
+            selectedOption: 'Not Needed',
+            status: 'completed' as SubTaskStatus,
+            imageLinks: []
+          };
+        }
+        
+        // Check for provided image links
+        if (Array.isArray(imageLinks) && imageLinks.length > 0) {
+          const validLinks = imageLinks.filter(link => typeof link === 'string' && link.trim() !== '');
+          return {
+            ...task,
+            selectedOption: 'Provided',
+            status: 'completed' as SubTaskStatus,
+            imageLinks: validLinks
+          };
+        }
+        
+        // Check if "Provided" was selected but no valid links
+        if (imageLinksOption === 'Provided') {
+          return {
+            ...task,
+            selectedOption: 'Provided',
+            status: 'completed' as SubTaskStatus,
+            imageLinks: []
+          };
+        }
+      }
+  
       // Handle other fields using aggregated data
       else if (savedValue !== undefined) {
         let selectedOption = '';
-
+  
         if (typeof savedValue === 'boolean') {
           if (task.options && task.options.length > 0) {
             const trueOption = task.options.find(o => o.toLowerCase() === 'true' || o.toLowerCase() === 'yes');
@@ -633,7 +782,7 @@ const Dashboard = () => {
             selectedOption = savedValue;
           }
         }
-
+  
         // Handle aggregated text values
         let textValue = savedTextValue;
         if (!textValue) {
@@ -644,7 +793,7 @@ const Dashboard = () => {
             textValue = annotation.data.longAnswer_list[0];
           }
         }
-
+  
         return {
           ...task,
           selectedOption,
@@ -652,10 +801,11 @@ const Dashboard = () => {
           textValue: typeof textValue === 'string' ? textValue : (task.textValue || '')
         };
       }
-
+  
       return task;
     });
   };
+  
 
 // Simple duplication function
 const handleDuplicateForm = (type: string) => {
@@ -768,7 +918,7 @@ const handleDuplicateForm = (type: string) => {
                             }
                             handleSubTaskChange('task2', taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink);
                           } else {
-                            handleSubTaskChange('task2', taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights);
+                            handleSubTaskChange('task2', taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, undefined, undefined);
                           }
                         }}
                         active
@@ -797,7 +947,7 @@ const handleDuplicateForm = (type: string) => {
                               }
                               handleSubTaskChange('consensus2', taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink);
                             } else {
-                              handleSubTaskChange('consensus2', taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights);
+                              handleSubTaskChange('consensus2', taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, undefined, undefined);
                             }
                           }}
                           active
@@ -903,33 +1053,50 @@ const handleDuplicateForm = (type: string) => {
           if (completed > 0) return 'inProgress';
           return 'pending';
         })()}
-        onSubTaskChange={(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights) => {
+        onSubTaskChange={(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink, imageLinks) => {
           const updatedForms = [...task3Forms];
           const currentForm = updatedForms[activeTask3Form];
           currentForm.subTasks = currentForm.subTasks.map(task => {
             if (task.id === taskId) {
-              const isCompleted = computeCompleted(task, selectedOption, textValue, textValues, supportingDocs);
-              return {
+              const updatedTask = {
                 ...task,
                 selectedOption,
                 textValue: textValue !== undefined ? textValue : task.textValue,
                 textValues: textValues !== undefined ? textValues : task.textValues,
                 supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
                 weights: weights !== undefined ? weights : task.weights,
-                status: isCompleted ? 'completed' : 'pending'
+                imageLinks: imageLinks !== undefined ? imageLinks : task.imageLinks,
               };
+        
+              // Validate the updated task
+              const validationError = validateTask(updatedTask);
+              updatedTask.validationError = validationError;
+        
+              // Set status based on completion and validation
+              const isCompleted = computeCompleted(task, selectedOption, textValue, textValues, supportingDocs, imageLinks);
+              updatedTask.status = isCompleted ? 'completed' : 'pending';
+        
+              return updatedTask;
             }
             return task;
           });
           setTask3Forms(updatedForms);
         }}
-        active
+        
         customFieldRenderers={{
           short_answer_list: (task, onChange) => (
             <div className="space-y-3">
               <div className="text-sm font-medium text-gray-700 mb-2">
                 Short Answer Claims (with priority weights 1-3)
               </div>
+              
+              {/* Show validation error if exists */}
+              {task.validationError && (
+                <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs">
+                  {task.validationError}
+                </div>
+              )}
+              
               {task.textValues?.map((claim, index) => (
                 <div key={index} className="flex space-x-3 items-start p-3 border rounded-md bg-gray-50">
                   {/* Claim Input */}
@@ -942,38 +1109,30 @@ const handleDuplicateForm = (type: string) => {
                       onChange={e => {
                         const newValues = [...(task.textValues || [])];
                         newValues[index] = e.target.value;
-                        console.log('Claim changed:', index, 'to', e.target.value);
-                        // FIX: Call with proper parameter order
                         onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, task.weights);
                       }}
                       placeholder="Enter a short answer claim"
                       className="min-h-[80px] text-sm"
                     />
                   </div>
-
+        
                   {/* Weight Selection */}
                   <div className="flex flex-col items-center min-w-[80px]">
                     <label className="text-xs font-medium text-gray-600 mb-1">Weight</label>
                     <select
                       value={task.weights?.[index] || 1}
                       onChange={e => {
-                        // Create new weights array properly
                         const currentWeights = task.weights || task.textValues?.map(() => 1) || [];
                         const newWeights = [...currentWeights];
                         newWeights[index] = parseInt(e.target.value);
-
-                        console.log('Weight changed:', index, 'to', e.target.value, 'new weights:', newWeights);
-                        console.log('Current task:', task.id, 'textValues:', task.textValues);
-
-                        // FIX: Call with proper parameter order - weights is the 7th parameter
                         onChange(
-                          task.id,           // taskId
-                          task.selectedOption, // selectedOption
-                          undefined,         // textValue
-                          task.textValues,   // textValues
-                          undefined,         // supportingDocs
-                          undefined,         // sectionIndex
-                          newWeights         // weights
+                          task.id,
+                          task.selectedOption,
+                          undefined,
+                          task.textValues,
+                          undefined,
+                          undefined,
+                          newWeights
                         );
                       }}
                       className="w-16 px-2 py-2 border rounded-md text-center text-sm"
@@ -984,7 +1143,7 @@ const handleDuplicateForm = (type: string) => {
                     </select>
                     <span className="text-xs text-gray-500 mt-1">Priority</span>
                   </div>
-
+        
                   {/* Remove Button */}
                   <Button
                     variant="ghost"
@@ -992,7 +1151,6 @@ const handleDuplicateForm = (type: string) => {
                     onClick={() => {
                       const newValues = task.textValues?.filter((_, i) => i !== index) || [];
                       const newWeights = task.weights?.filter((_, i) => i !== index) || [];
-                      console.log('Removing claim:', index, 'newValues:', newValues, 'newWeights:', newWeights);
                       onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, newWeights);
                     }}
                     disabled={task.textValues?.length === 1}
@@ -1002,7 +1160,7 @@ const handleDuplicateForm = (type: string) => {
                   </Button>
                 </div>
               ))}
-
+        
               {/* Add New Claim Button */}
               <Button
                 variant="outline"
@@ -1010,7 +1168,6 @@ const handleDuplicateForm = (type: string) => {
                 onClick={() => {
                   const newValues = [...(task.textValues || []), ''];
                   const newWeights = [...(task.weights || []), 1];
-                  console.log('Adding new claim, newValues:', newValues, 'newWeights:', newWeights);
                   onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, newWeights);
                 }}
                 className="w-full"
@@ -1099,28 +1256,39 @@ const handleDuplicateForm = (type: string) => {
           if (completed > 0) return 'inProgress';
           return 'pending';
         })()}
-        onSubTaskChange={(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights) => {
+        onSubTaskChange={(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink, imageLinks) => {
           const updatedForms = [...consensusTask3Forms];
           const currentForm = updatedForms[activeConsensusTask3Form];
-
+          
           currentForm.subTasks = currentForm.subTasks.map(task => {
             if (task.id === taskId) {
-              const isCompleted = computeCompleted(task, selectedOption, textValue, textValues, supportingDocs);
-              return {
+              const updatedTask = {
                 ...task,
                 selectedOption,
                 textValue: textValue !== undefined ? textValue : task.textValue,
                 textValues: textValues !== undefined ? textValues : task.textValues,
                 supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
                 weights: weights !== undefined ? weights : task.weights,
-                status: isCompleted ? 'completed' : 'pending'
+                imageLinks: imageLinks !== undefined ? imageLinks : task.imageLinks,
               };
+        
+              // Validate the updated task
+              const validationError = validateTask(updatedTask);
+              updatedTask.validationError = validationError;
+        
+              // Set status based on completion and validation
+              const isCompleted = computeCompleted(task, selectedOption, textValue, textValues, supportingDocs, imageLinks);
+              updatedTask.status = isCompleted ? 'completed' : 'pending';
+        
+              return updatedTask;
             }
             return task;
           });
-
+          
           setConsensusTask3Forms(updatedForms);
         }}
+
+       
         active
         customFieldRenderers={{
           short_answer_list: (task, onChange) => (
@@ -1128,6 +1296,14 @@ const handleDuplicateForm = (type: string) => {
               <div className="text-sm font-medium text-gray-700 mb-2">
                 Short Answer Claims (with priority weights 1-3)
               </div>
+              
+              {/* Show validation error if exists */}
+              {task.validationError && (
+                <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs">
+                  {task.validationError}
+                </div>
+              )}
+              
               {task.textValues?.map((claim, index) => (
                 <div key={index} className="flex space-x-3 items-start p-3 border rounded-md bg-gray-50">
                   {/* Claim Input */}
@@ -1146,7 +1322,7 @@ const handleDuplicateForm = (type: string) => {
                       className="min-h-[80px] text-sm"
                     />
                   </div>
-
+        
                   {/* Weight Selection */}
                   <div className="flex flex-col items-center min-w-[80px]">
                     <label className="text-xs font-medium text-gray-600 mb-1">Weight</label>
@@ -1156,7 +1332,15 @@ const handleDuplicateForm = (type: string) => {
                         const currentWeights = task.weights || task.textValues?.map(() => 1) || [];
                         const newWeights = [...currentWeights];
                         newWeights[index] = parseInt(e.target.value);
-                        onChange(task.id, task.selectedOption, undefined, task.textValues, undefined, undefined, newWeights);
+                        onChange(
+                          task.id,
+                          task.selectedOption,
+                          undefined,
+                          task.textValues,
+                          undefined,
+                          undefined,
+                          newWeights
+                        );
                       }}
                       className="w-16 px-2 py-2 border rounded-md text-center text-sm"
                     >
@@ -1166,7 +1350,7 @@ const handleDuplicateForm = (type: string) => {
                     </select>
                     <span className="text-xs text-gray-500 mt-1">Priority</span>
                   </div>
-
+        
                   {/* Remove Button */}
                   <Button
                     variant="ghost"
@@ -1183,7 +1367,7 @@ const handleDuplicateForm = (type: string) => {
                   </Button>
                 </div>
               ))}
-
+        
               {/* Add New Claim Button */}
               <Button
                 variant="outline"
