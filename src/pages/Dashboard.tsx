@@ -832,657 +832,731 @@ const handleDuplicateForm = (type: string) => {
   setTask3Forms([...task3Forms, newForm]);
   setActiveTask3Form(task3Forms.length);
 };
-  return (
-      <div className="min-h-screen bg-gray-50 flex flex-col">
-        <Header />
-        <div className="container max-w-4xl mx-auto px-4 py-6 flex-grow">
-          {(url || discussionId) && <DashboardBreadcrumb discussionId={discussionId || undefined} currentStep={currentStep} discussionTitle={currentDiscussion?.title || 'Discussion'} />}
-          {currentStep === 0 && !discussionId && <UrlInput onSubmit={handleUrlSubmit} />}
-          {(url || discussionId) && viewMode === 'grid' && (
-              <>
-                <div className="mb-6">
-                  <h2 className="text-xl font-semibold mb-2">Annotation Tasks</h2>
-                  <p className="text-gray-600 text-sm">GitHub Discussion URL: <span className="text-dashboard-blue">{url}</span></p>
-                  {currentDiscussion && (
-                      <div className="mt-2">
-                        <Button variant="outline" className="flex items-center gap-2" onClick={handleViewDiscussion}>
-                          <Eye className="h-4 w-4" />
-                          <span>View Discussion Details</span>
-                        </Button>
-                      </div>
-                  )}
-                </div>
-                <TaskGrid tasks={tasks} onSelectTask={handleSelectTask} githubUrl={url} repositoryLanguage={currentDiscussion?.repositoryLanguage} releaseTag={currentDiscussion?.releaseTag} releaseDate={currentDiscussion?.releaseDate} />
-              </>
-          )}
-          {(url || discussionId) && (viewMode === 'detail' || viewMode === 'consensus') && (
-              <>
-                <ProgressStepper steps={steps} currentStep={currentStep} />
-                <div className="mb-4 flex justify-between items-center">
-                  {currentDiscussion && (
-                      <Button variant="outline" className="flex items-center gap-2" onClick={handleViewDiscussion}>
-                        <Eye className="h-4 w-4" />
-                        <span>View Discussion Details</span>
-                      </Button>
-                  )}
-                  {(isPodLead || isAdmin) && currentStep > 0 && (
-                      <Button onClick={toggleConsensusMode} variant="outline" className="flex items-center gap-2">
-                        <CheckCircle className="h-4 w-4" />
-                        {viewMode === 'detail' ? 'Create Consensus' : 'View Annotator Form'}
-                      </Button>
-                  )}
-                </div>
-                {currentStep === TaskId.QUESTION_QUALITY && viewMode === 'detail' && (
-                    <TaskCard title="Task 1: Question Quality Assessment" description="Evaluate the quality of the question based on relevance, learning value, clarity, and image grounding." subTasks={task1SubTasks} status={getTask1Progress()} onSubTaskChange={(taskId, selectedOption, textValue) => handleSubTaskChange('task1', taskId, selectedOption, textValue)} active />
-                )}
-                {currentStep === TaskId.QUESTION_QUALITY && viewMode === 'consensus' && (isPodLead || isAdmin) && (
-                    <>
-                      <TaskCard title="Task 1: Question Quality Consensus" description="Create a consensus based on annotator assessments of question quality." subTasks={consensusTask1} status={getTask1Progress(true)} onSubTaskChange={(taskId, selectedOption, textValue) => handleSubTaskChange('consensus1', taskId, selectedOption, textValue)} active />
-                      <div className="mt-4 p-4 border rounded bg-gray-50">
-                        <h3 className="text-lg font-semibold mb-2">Overall Consensus Feedback</h3>
-                        <div className="mb-2">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Rating (1-5 stars):</label>
-                          <div className="flex space-x-1">
-                            {[1, 2, 3, 4, 5].map(star => (
-                                <Button key={star} variant={consensusStars === star ? 'default' : 'outline'} size="sm" onClick={() => setConsensusStars(star)}>
-                                  {star}
-                                </Button>
-                            ))}
-                            {consensusStars && <Button variant="ghost" size="sm" onClick={() => setConsensusStars(null)}>Clear</Button>}
-                          </div>
-                        </div>
-                        <div>
-                          <label htmlFor="consensusCommentTask1" className="block text-sm font-medium text-gray-700 mb-1">Comment:</label>
-                          <Textarea id="consensusCommentTask1" value={consensusComment} onChange={e => setConsensusComment(e.target.value)} placeholder="Provide an overall comment for this consensus..." rows={3} />
-                        </div>
-                      </div>
-                      <AnnotatorView discussionId={discussionId || ''} currentStep={currentStep} getAnnotationsForTask={getAnnotationsForTask} onUseForConsensus={handleUseAnnotationForConsensus} getUserEmailById={getUserEmailById} />
-                    </>
-                )}
-                {currentStep === TaskId.ANSWER_QUALITY && viewMode === 'detail' && (
-                    <TaskCard
-                        title="Task 2: Answer Quality Assessment"
-                        description="Evaluate the quality of the answer based on comprehensiveness, explanation, code execution, and completeness."
-                        subTasks={task2SubTasks}
-                        status={getTask2Progress()}
-                        onSubTaskChange={(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink) => {
-                          // Handle screenshot_url and code_download_url fields
-                          if (taskId === 'screenshot') {
-                            if (textValue && handleScreenshotUrlChange) {
-                              handleScreenshotUrlChange(textValue, selectedOption);
-                            }
-                            handleSubTaskChange('task2', taskId, selectedOption, textValue);
-                          } else if (taskId === 'codeDownloadUrl') {
-                            if (textValue && handleCodeUrlChange) {
-                              handleCodeUrlChange(textValue, selectedOption);
-                            }
-                            handleSubTaskChange('task2', taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink);
-                          } else {
-                            handleSubTaskChange('task2', taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, undefined, undefined);
-                          }
-                        }}
-                        active
-                        currentDiscussion={currentDiscussion}
-                        onCodeUrlVerify={validateGitHubCodeUrl}
-                    />
-                )}
-
-                {currentStep === TaskId.ANSWER_QUALITY && viewMode === 'consensus' && (isPodLead || isAdmin) && (
-                    <>
-                      <TaskCard
-                          title="Task 2: Answer Quality Consensus"
-                          description="Create a consensus based on annotator assessments."
-                          subTasks={consensusTask2}
-                          status={getTask2Progress(true)}
-                          onSubTaskChange={(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink) => {
-                            // Handle screenshot_url and code_download_url fields in consensus mode
-                            if (taskId === 'screenshot') {
-                              if (textValue && handleScreenshotUrlChange) {
-                                handleScreenshotUrlChange(textValue, selectedOption);
-                              }
-                              handleSubTaskChange('consensus2', taskId, selectedOption, textValue);
-                            } else if (taskId === 'codeDownloadUrl') {
-                              if (textValue && handleCodeUrlChange) {
-                                handleCodeUrlChange(textValue, selectedOption);
-                              }
-                              handleSubTaskChange('consensus2', taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink);
-                            } else {
-                              handleSubTaskChange('consensus2', taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, undefined, undefined);
-                            }
-                          }}
-                          active
-                          currentDiscussion={currentDiscussion}
-                          onCodeUrlVerify={validateGitHubCodeUrl}
-                      />
-                      <div className="mt-4 p-4 border rounded bg-gray-50">
-                        <h3 className="text-lg font-semibold mb-2">Overall Consensus Feedback</h3>
-                        <div className="mb-2">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Rating (1-5 stars):</label>
-                          <div className="flex space-x-1">
-                            {[1, 2, 3, 4, 5].map(star => (
-                                <Button key={star} variant={consensusStars === star ? 'default' : 'outline'} size="sm" onClick={() => setConsensusStars(star)}>
-                                  {star}
-                                </Button>
-                            ))}
-                            {consensusStars && <Button variant="ghost" size="sm" onClick={() => setConsensusStars(null)}>Clear</Button>}
-                          </div>
-                        </div>
-                        <div>
-                          <label htmlFor="consensusComment" className="block text-sm font-medium text-gray-700 mb-1">Comment:</label>
-                          <Textarea id="consensusComment" value={consensusComment} onChange={e => setConsensusComment(e.target.value)} placeholder="Provide an overall comment for this consensus..." rows={3} />
-                        </div>
-                      </div>
-                      <AnnotatorView
-                          discussionId={discussionId || ''}
-                          currentStep={currentStep}
-                          getAnnotationsForTask={getAnnotationsForTask}
-                          onUseForConsensus={handleUseAnnotationForConsensus}
-                          getUserEmailById={getUserEmailById}
-                      />
-                    </>
-                )}
-
-{currentStep === TaskId.REWRITE && viewMode === 'detail' && (
-  <>
-    <div className="mb-4">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-lg font-semibold">Task 3 Forms</h3>
-        <div className="flex space-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleDuplicateForm('Q')}
-          >
-            + Question Form
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleDuplicateForm('A')}
-          >
-            + Answer Form
-          </Button>
-        </div>
-      </div>
-      <div className="flex space-x-2 border-b">
-        {task3Forms.map((form, index) => (
-          <div key={form.id} className="relative">
-            <Button
-              variant={activeTask3Form === index ? 'default' : 'ghost'}
-              size="sm"
-              className="rounded-b-none"
-              onClick={() => setActiveTask3Form(index)}
-            >
-              {form.name}
-            </Button>
-            {index > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="absolute -top-2 -right-2 h-6 w-6 p-0 rounded-full"
-                onClick={e => {
-                  e.stopPropagation();
-                  const updatedForms = task3Forms.filter((_, i) => i !== index);
-                  setTask3Forms(updatedForms);
-                  if (activeTask3Form >= updatedForms.length) setActiveTask3Form(updatedForms.length - 1);
-                }}
-              >
-                ×
-              </Button>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-    {task3Forms[activeTask3Form] && (
-      <TaskCard
-        title={`Task 3: Rewrite Question and Answer - ${task3Forms[activeTask3Form].name}`}
-        description="Rewrite the question and answer to improve clarity, conciseness, and coherence."
-        subTasks={task3Forms[activeTask3Form].subTasks}
-        // FIX: Calculate status based on the actual form being displayed
-        status={(() => {
-          const currentForm = task3Forms[activeTask3Form];
-          if (!currentForm || !currentForm.subTasks) return 'pending';
-
-          const completed = currentForm.subTasks.filter(t =>
-            t.status === 'completed' || t.status === 'na'
-          ).length;
-          const total = currentForm.subTasks.length;
-
-          if (completed === total) return 'completed';
-          if (completed > 0) return 'inProgress';
-          return 'pending';
-        })()}
-        onSubTaskChange={(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink, imageLinks) => {
-          const updatedForms = [...task3Forms];
-          const currentForm = updatedForms[activeTask3Form];
-          currentForm.subTasks = currentForm.subTasks.map(task => {
-            if (task.id === taskId) {
-              const updatedTask = {
-                ...task,
-                selectedOption,
-                textValue: textValue !== undefined ? textValue : task.textValue,
-                textValues: textValues !== undefined ? textValues : task.textValues,
-                supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
-                weights: weights !== undefined ? weights : task.weights,
-                imageLinks: imageLinks !== undefined ? imageLinks : task.imageLinks,
-              };
-        
-              // Validate the updated task
-              const validationError = validateTask(updatedTask);
-              updatedTask.validationError = validationError;
-        
-              // Set status based on completion and validation
-              const isCompleted = computeCompleted(task, selectedOption, textValue, textValues, supportingDocs, imageLinks);
-              updatedTask.status = isCompleted ? 'completed' : 'pending';
-        
-              return updatedTask;
-            }
-            return task;
-          });
-          setTask3Forms(updatedForms);
-        }}
-        
-        customFieldRenderers={{
-          short_answer_list: (task, onChange) => (
-            <div className="space-y-3">
-              <div className="text-sm font-medium text-gray-700 mb-2">
-                Short Answer Claims (with priority weights 1-3)
-              </div>
-              
-              {/* Show validation error if exists */}
-              {task.validationError && (
-                <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs">
-                  {task.validationError}
-                </div>
+return (
+  <div className="min-h-screen bg-gray-50 flex flex-col">
+    <Header />
+    <div className="container max-w-4xl mx-auto px-4 py-6 flex-grow">
+      {(url || discussionId) && <DashboardBreadcrumb discussionId={discussionId || undefined} currentStep={currentStep} discussionTitle={currentDiscussion?.title || 'Discussion'} />}
+      {currentStep === 0 && !discussionId && <UrlInput onSubmit={handleUrlSubmit} />}
+      {(url || discussionId) && viewMode === 'grid' && (
+          <>
+            <div className="mb-6">
+              <h2 className="text-xl font-semibold mb-2">Annotation Tasks</h2>
+              <p className="text-gray-600 text-sm">GitHub Discussion URL: <span className="text-dashboard-blue">{url}</span></p>
+              {currentDiscussion && (
+                  <div className="mt-2">
+                    <Button variant="outline" className="flex items-center gap-2" onClick={handleViewDiscussion}>
+                      <Eye className="h-4 w-4" />
+                      <span>View Discussion Details</span>
+                    </Button>
+                  </div>
               )}
-              
-              {task.textValues?.map((claim, index) => (
-                <div key={index} className="flex space-x-3 items-start p-3 border rounded-md bg-gray-50">
-                  {/* Claim Input */}
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Claim #{index + 1}
-                    </label>
-                    <Textarea
-                      value={claim}
-                      onChange={e => {
-                        const newValues = [...(task.textValues || [])];
-                        newValues[index] = e.target.value;
-                        onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, task.weights);
-                      }}
-                      placeholder="Enter a short answer claim"
-                      className="min-h-[80px] text-sm"
-                    />
-                  </div>
-        
-                  {/* Weight Selection */}
-                  <div className="flex flex-col items-center min-w-[80px]">
-                    <label className="text-xs font-medium text-gray-600 mb-1">Weight</label>
-                    <select
-                      value={task.weights?.[index] || 1}
-                      onChange={e => {
-                        const currentWeights = task.weights || task.textValues?.map(() => 1) || [];
-                        const newWeights = [...currentWeights];
-                        newWeights[index] = parseInt(e.target.value);
-                        onChange(
-                          task.id,
-                          task.selectedOption,
-                          undefined,
-                          task.textValues,
-                          undefined,
-                          undefined,
-                          newWeights
-                        );
-                      }}
-                      className="w-16 px-2 py-2 border rounded-md text-center text-sm"
-                    >
-                      <option value={1}>1</option>
-                      <option value={2}>2</option>
-                      <option value={3}>3</option>
-                    </select>
-                    <span className="text-xs text-gray-500 mt-1">Priority</span>
-                  </div>
-        
-                  {/* Remove Button */}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      const newValues = task.textValues?.filter((_, i) => i !== index) || [];
-                      const newWeights = task.weights?.filter((_, i) => i !== index) || [];
-                      onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, newWeights);
-                    }}
-                    disabled={task.textValues?.length === 1}
-                    className="mt-6"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-        
-              {/* Add New Claim Button */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const newValues = [...(task.textValues || []), ''];
-                  const newWeights = [...(task.weights || []), 1];
-                  onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, newWeights);
-                }}
-                className="w-full"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Short Answer Claim
-              </Button>
             </div>
-          )
-        }}
-      />
-    )}
-  </>
-)}
-{currentStep === TaskId.REWRITE && viewMode === 'consensus' && (isPodLead || isAdmin) && (
-  <>
-    <div className="mb-4">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-lg font-semibold">Task 3 Consensus Forms</h3>
-        <div className="flex space-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleDuplicateForm('Q')}
-          >
-            + Question Form
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleDuplicateForm('A')}
-          >
-            + Answer Form
-          </Button>
-        </div>
-      </div>
-      <div className="flex space-x-2 border-b">
-        {consensusTask3Forms.map((form, index) => (
-          <div key={form.id} className="relative">
-            <Button
-              variant={activeConsensusTask3Form === index ? 'default' : 'ghost'}
-              size="sm"
-              className="rounded-b-none"
-              onClick={() => setActiveConsensusTask3Form(index)}
-            >
-              {form.name}
-            </Button>
-            {index > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="absolute -top-2 -right-2 h-6 w-6 p-0 rounded-full"
-                onClick={e => {
-                  e.stopPropagation();
-                  const updatedForms = consensusTask3Forms.filter((_, i) => i !== index);
-                  setConsensusTask3Forms(updatedForms);
-                  if (activeConsensusTask3Form >= updatedForms.length) {
-                    setActiveConsensusTask3Form(updatedForms.length - 1);
-                  }
-                }}
-              >
-                ×
-              </Button>
+            <TaskGrid tasks={tasks} onSelectTask={handleSelectTask} githubUrl={url} repositoryLanguage={currentDiscussion?.repositoryLanguage} releaseTag={currentDiscussion?.releaseTag} releaseDate={currentDiscussion?.releaseDate} />
+          </>
+      )}
+      {(url || discussionId) && (viewMode === 'detail' || viewMode === 'consensus') && (
+          <>
+            <ProgressStepper steps={steps} currentStep={currentStep} />
+            <div className="mb-4 flex justify-between items-center">
+              {currentDiscussion && (
+                  <Button variant="outline" className="flex items-center gap-2" onClick={handleViewDiscussion}>
+                    <Eye className="h-4 w-4" />
+                    <span>View Discussion Details</span>
+                  </Button>
+              )}
+              {(isPodLead || isAdmin) && currentStep > 0 && (
+                  <Button onClick={toggleConsensusMode} variant="outline" className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4" />
+                    {viewMode === 'detail' ? 'Create Consensus' : 'View Annotator Form'}
+                  </Button>
+              )}
+            </div>
+
+            {/* Task 1: Question Quality Assessment */}
+            {currentStep === TaskId.QUESTION_QUALITY && viewMode === 'detail' && (
+                <TaskCard 
+                  title="Task 1: Question Quality Assessment" 
+                  description="Evaluate the quality of the question based on relevance, learning value, clarity, and image grounding." 
+                  subTasks={task1SubTasks} 
+                  status={getTask1Progress()} 
+                  onSubTaskChange={(taskId, selectedOption, textValue) => handleSubTaskChange('task1', taskId, selectedOption, textValue)} 
+                  active 
+                />
             )}
-          </div>
-        ))}
-      </div>
-    </div>
 
-    {consensusTask3Forms[activeConsensusTask3Form] && (
-      <TaskCard
-        title={`Task 3: Rewrite Consensus - ${consensusTask3Forms[activeConsensusTask3Form].name}`}
-        description="Create a consensus based on annotator assessments."
-        subTasks={consensusTask3Forms[activeConsensusTask3Form].subTasks}
-        // Calculate status based on the actual consensus form being displayed
-        status={(() => {
-          const currentForm = consensusTask3Forms[activeConsensusTask3Form];
-          if (!currentForm || !currentForm.subTasks) return 'pending';
+            {/* Task 1: Consensus Mode */}
+            {currentStep === TaskId.QUESTION_QUALITY && viewMode === 'consensus' && (isPodLead || isAdmin) && (
+                <>
+                  <TaskCard 
+                    title="Task 1: Question Quality Consensus" 
+                    description="Create a consensus based on annotator assessments of question quality." 
+                    subTasks={consensusTask1} 
+                    status={getTask1Progress(true)} 
+                    onSubTaskChange={(taskId, selectedOption, textValue) => handleSubTaskChange('consensus1', taskId, selectedOption, textValue)} 
+                    active 
+                  />
+                  <div className="mt-4 p-4 border rounded bg-gray-50">
+                    <h3 className="text-lg font-semibold mb-2">Overall Consensus Feedback</h3>
+                    <div className="mb-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Rating (1-5 stars):</label>
+                      <div className="flex space-x-1">
+                        {[1, 2, 3, 4, 5].map(star => (
+                            <Button key={star} variant={consensusStars === star ? 'default' : 'outline'} size="sm" onClick={() => setConsensusStars(star)}>
+                              {star}
+                            </Button>
+                        ))}
+                        {consensusStars && <Button variant="ghost" size="sm" onClick={() => setConsensusStars(null)}>Clear</Button>}
+                      </div>
+                    </div>
+                    <div>
+                      <label htmlFor="consensusCommentTask1" className="block text-sm font-medium text-gray-700 mb-1">Comment:</label>
+                      <Textarea id="consensusCommentTask1" value={consensusComment} onChange={e => setConsensusComment(e.target.value)} placeholder="Provide an overall comment for this consensus..." rows={3} />
+                    </div>
+                  </div>
+                  <AnnotatorView discussionId={discussionId || ''} currentStep={currentStep} getAnnotationsForTask={getAnnotationsForTask} onUseForConsensus={handleUseAnnotationForConsensus} getUserEmailById={getUserEmailById} />
+                </>
+            )}
 
-          const completed = currentForm.subTasks.filter(t =>
-            t.status === 'completed' || t.status === 'na'
-          ).length;
-          const total = currentForm.subTasks.length;
+            {/* Task 2: Answer Quality Assessment */}
+            {currentStep === TaskId.ANSWER_QUALITY && viewMode === 'detail' && (
+                <TaskCard
+                    title="Task 2: Answer Quality Assessment"
+                    description="Evaluate the quality of the answer based on comprehensiveness, explanation, code execution, and completeness."
+                    subTasks={task2SubTasks}
+                    status={getTask2Progress()}
+                    onSubTaskChange={(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink) => {
+                      // Handle screenshot_url and code_download_url fields
+                      if (taskId === 'screenshot') {
+                        if (textValue && handleScreenshotUrlChange) {
+                          handleScreenshotUrlChange(textValue, selectedOption);
+                        }
+                      } else if (taskId === 'codeDownloadUrl') {
+                        if (textValue && handleCodeUrlChange) {
+                          handleCodeUrlChange(textValue, selectedOption);
+                        }
+                      }
+                      
+                      // Always call the hook function for ALL fields (including screenshot and codeDownloadUrl)
+                      // This ensures validation runs for every field
+                      handleSubTaskChange('task2', taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink);
+                    }}
+                    active
+                    currentDiscussion={currentDiscussion}
+                    onCodeUrlVerify={validateGitHubCodeUrl}
+                />
+            )}
 
-          if (completed === total) return 'completed';
-          if (completed > 0) return 'inProgress';
-          return 'pending';
-        })()}
-        onSubTaskChange={(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink, imageLinks) => {
-          const updatedForms = [...consensusTask3Forms];
-          const currentForm = updatedForms[activeConsensusTask3Form];
-          
-          currentForm.subTasks = currentForm.subTasks.map(task => {
-            if (task.id === taskId) {
-              const updatedTask = {
-                ...task,
-                selectedOption,
-                textValue: textValue !== undefined ? textValue : task.textValue,
-                textValues: textValues !== undefined ? textValues : task.textValues,
-                supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
-                weights: weights !== undefined ? weights : task.weights,
-                imageLinks: imageLinks !== undefined ? imageLinks : task.imageLinks,
-              };
-        
-              // Validate the updated task
-              const validationError = validateTask(updatedTask);
-              updatedTask.validationError = validationError;
-        
-              // Set status based on completion and validation
-              const isCompleted = computeCompleted(task, selectedOption, textValue, textValues, supportingDocs, imageLinks);
-              updatedTask.status = isCompleted ? 'completed' : 'pending';
-        
-              return updatedTask;
-            }
-            return task;
-          });
-          
-          setConsensusTask3Forms(updatedForms);
-        }}
+            {/* Task 2: Consensus Mode */}
+            {currentStep === TaskId.ANSWER_QUALITY && viewMode === 'consensus' && (isPodLead || isAdmin) && (
+                <>
+                  <TaskCard
+                      title="Task 2: Answer Quality Consensus"
+                      description="Create a consensus based on annotator assessments."
+                      subTasks={consensusTask2}
+                      status={getTask2Progress(true)}
+                      onSubTaskChange={(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink) => {
+                        // Handle screenshot_url and code_download_url fields in consensus mode
+                        if (taskId === 'screenshot') {
+                          if (textValue && handleScreenshotUrlChange) {
+                            handleScreenshotUrlChange(textValue, selectedOption);
+                          }
+                        } else if (taskId === 'codeDownloadUrl') {
+                          if (textValue && handleCodeUrlChange) {
+                            handleCodeUrlChange(textValue, selectedOption);
+                          }
+                        }
+                        
+                        // Always call the hook function for ALL fields (including screenshot and codeDownloadUrl)
+                        // This ensures validation runs for every field in consensus mode
+                        handleSubTaskChange('consensus2', taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink);
+                      }}
+                      active
+                      currentDiscussion={currentDiscussion}
+                      onCodeUrlVerify={validateGitHubCodeUrl}
+                  />
+                  <div className="mt-4 p-4 border rounded bg-gray-50">
+                    <h3 className="text-lg font-semibold mb-2">Overall Consensus Feedback</h3>
+                    <div className="mb-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Rating (1-5 stars):</label>
+                      <div className="flex space-x-1">
+                        {[1, 2, 3, 4, 5].map(star => (
+                            <Button key={star} variant={consensusStars === star ? 'default' : 'outline'} size="sm" onClick={() => setConsensusStars(star)}>
+                              {star}
+                            </Button>
+                        ))}
+                        {consensusStars && <Button variant="ghost" size="sm" onClick={() => setConsensusStars(null)}>Clear</Button>}
+                      </div>
+                    </div>
+                    <div>
+                      <label htmlFor="consensusComment" className="block text-sm font-medium text-gray-700 mb-1">Comment:</label>
+                      <Textarea id="consensusComment" value={consensusComment} onChange={e => setConsensusComment(e.target.value)} placeholder="Provide an overall comment for this consensus..." rows={3} />
+                    </div>
+                  </div>
+                  <AnnotatorView
+                      discussionId={discussionId || ''}
+                      currentStep={currentStep}
+                      getAnnotationsForTask={getAnnotationsForTask}
+                      onUseForConsensus={handleUseAnnotationForConsensus}
+                      getUserEmailById={getUserEmailById}
+                  />
+                </>
+            )}
 
        
-        active
-        customFieldRenderers={{
-          short_answer_list: (task, onChange) => (
-            <div className="space-y-3">
-              <div className="text-sm font-medium text-gray-700 mb-2">
-                Short Answer Claims (with priority weights 1-3)
-              </div>
-              
-              {/* Show validation error if exists */}
-              {task.validationError && (
-                <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs">
-                  {task.validationError}
+
+
+            {/* Task 3: Rewrite Detail Mode */}
+            {currentStep === TaskId.REWRITE && viewMode === 'detail' && (
+              <>
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-lg font-semibold">Task 3 Forms</h3>
+                    <div className="flex space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDuplicateForm('Q')}
+                      >
+                        + Question Form
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDuplicateForm('A')}
+                      >
+                        + Answer Form
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="flex space-x-2 border-b">
+                    {task3Forms.map((form, index) => (
+                      <div key={form.id} className="relative">
+                        <Button
+                          variant={activeTask3Form === index ? 'default' : 'ghost'}
+                          size="sm"
+                          className="rounded-b-none"
+                          onClick={() => setActiveTask3Form(index)}
+                        >
+                          {form.name}
+                        </Button>
+                        {index > 0 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="absolute -top-2 -right-2 h-6 w-6 p-0 rounded-full"
+                            onClick={e => {
+                              e.stopPropagation();
+                              const updatedForms = task3Forms.filter((_, i) => i !== index);
+                              setTask3Forms(updatedForms);
+                              if (activeTask3Form >= updatedForms.length) setActiveTask3Form(updatedForms.length - 1);
+                            }}
+                          >
+                            ×
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              )}
-              
-              {task.textValues?.map((claim, index) => (
-                <div key={index} className="flex space-x-3 items-start p-3 border rounded-md bg-gray-50">
-                  {/* Claim Input */}
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Claim #{index + 1}
+                {task3Forms[activeTask3Form] && (
+                  <TaskCard
+                    title={`Task 3: Rewrite Question and Answer - ${task3Forms[activeTask3Form].name}`}
+                    description="Rewrite the question and answer to improve clarity, conciseness, and coherence."
+                    subTasks={task3Forms[activeTask3Form].subTasks}
+                    status={(() => {
+                      const currentForm = task3Forms[activeTask3Form];
+                      if (!currentForm || !currentForm.subTasks) return 'pending';
+
+                      const completed = currentForm.subTasks.filter(t =>
+                        t.status === 'completed' || t.status === 'na'
+                      ).length;
+                      const total = currentForm.subTasks.length;
+
+                      if (completed === total) return 'completed';
+                      if (completed > 0) return 'inProgress';
+                      return 'pending';
+                    })()}
+                    onSubTaskChange={(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink, imageLinks) => {
+                      // First, call the hook function for validation and state management
+                      handleSubTaskChange('task3', taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink, imageLinks);
+                      
+                      // Then update the forms for the UI
+                      const updatedForms = [...task3Forms];
+                      const currentForm = updatedForms[activeTask3Form];
+                      
+                      currentForm.subTasks = currentForm.subTasks.map(task => {
+                        if (task.id === taskId) {
+                          // Get the validated task from the hook
+                          const hookTask = task3SubTasks.find(t => t.id === taskId);
+                          
+                          if (hookTask) {
+                            // Use the hook's validated task but preserve form-specific properties
+                            return {
+                              ...hookTask,
+                              selectedOption,
+                              textValue: textValue !== undefined ? textValue : task.textValue,
+                              textValues: textValues !== undefined ? textValues : task.textValues,
+                              supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
+                              weights: weights !== undefined ? weights : task.weights,
+                              imageLinks: imageLinks !== undefined ? imageLinks : task.imageLinks,
+                              docDownloadLink: docDownloadLink !== undefined ? docDownloadLink : task.docDownloadLink,
+                              // The hook will have set the validation error and status
+                              validationError: hookTask.validationError,
+                              status: hookTask.status
+                            };
+                          } else {
+                            // Fallback to inline validation if hook task not found
+                            const updatedTask = {
+                              ...task,
+                              selectedOption,
+                              textValue: textValue !== undefined ? textValue : task.textValue,
+                              textValues: textValues !== undefined ? textValues : task.textValues,
+                              supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
+                              weights: weights !== undefined ? weights : task.weights,
+                              imageLinks: imageLinks !== undefined ? imageLinks : task.imageLinks,
+                              docDownloadLink: docDownloadLink !== undefined ? docDownloadLink : task.docDownloadLink,
+                            };
+                      
+                            const validationError = validateTask(updatedTask);
+                            updatedTask.validationError = validationError;
+                      
+                            const isCompleted = computeCompleted(task, selectedOption, textValue, textValues, supportingDocs, imageLinks);
+                            updatedTask.status = isCompleted ? 'completed' : 'pending';
+                      
+                            return updatedTask;
+                          }
+                        }
+                        return task;
+                      });
+                      
+                      setTask3Forms(updatedForms);
+                    }}
+                    
+                    customFieldRenderers={{
+                      short_answer_list: (task, onChange) => (
+                        <div className="space-y-3">
+                          <div className="text-sm font-medium text-gray-700 mb-2">
+                            Short Answer Claims (with priority weights 1-3)
+                          </div>
+                          
+                          {/* Show validation error if exists */}
+                          {task.validationError && (
+                            <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs">
+                              {task.validationError}
+                            </div>
+                          )}
+                          
+                          {task.textValues?.map((claim, index) => (
+                            <div key={index} className="flex space-x-3 items-start p-3 border rounded-md bg-gray-50">
+                              {/* Claim Input */}
+                              <div className="flex-1">
+                                <label className="block text-xs font-medium text-gray-600 mb-1">
+                                  Claim #{index + 1}
+                                </label>
+                                <Textarea
+                                  value={claim}
+                                  onChange={e => {
+                                    const newValues = [...(task.textValues || [])];
+                                    newValues[index] = e.target.value;
+                                    onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, task.weights);
+                                  }}
+                                  placeholder="Enter a short answer claim"
+                                  className="min-h-[80px] text-sm"
+                                />
+                              </div>
+                    
+                              {/* Weight Selection */}
+                              <div className="flex flex-col items-center min-w-[80px]">
+                                <label className="text-xs font-medium text-gray-600 mb-1">Weight</label>
+                                <select
+                                  value={task.weights?.[index] || 1}
+                                  onChange={e => {
+                                    const currentWeights = task.weights || task.textValues?.map(() => 1) || [];
+                                    const newWeights = [...currentWeights];
+                                    newWeights[index] = parseInt(e.target.value);
+                                    onChange(
+                                      task.id,
+                                      task.selectedOption,
+                                      undefined,
+                                      task.textValues,
+                                      undefined,
+                                      undefined,
+                                      newWeights
+                                    );
+                                  }}
+                                  className="w-16 px-2 py-2 border rounded-md text-center text-sm"
+                                >
+                                  <option value={1}>1</option>
+                                  <option value={2}>2</option>
+                                  <option value={3}>3</option>
+                                </select>
+                                <span className="text-xs text-gray-500 mt-1">Priority</span>
+                              </div>
+                    
+                              {/* Remove Button */}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  const newValues = task.textValues?.filter((_, i) => i !== index) || [];
+                                  const newWeights = task.weights?.filter((_, i) => i !== index) || [];
+                                  onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, newWeights);
+                                }}
+                                disabled={task.textValues?.length === 1}
+                                className="mt-6"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                    
+                          {/* Add New Claim Button */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const newValues = [...(task.textValues || []), ''];
+                              const newWeights = [...(task.weights || []), 1];
+                              onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, newWeights);
+                            }}
+                            className="w-full"
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add Short Answer Claim
+                          </Button>
+                        </div>
+                      )
+                    }}
+                  />
+                )}
+              </>
+            )}
+
+            {/* Task 3: Consensus Mode */}
+            {currentStep === TaskId.REWRITE && viewMode === 'consensus' && (isPodLead || isAdmin) && (
+              <>
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-lg font-semibold">Task 3 Consensus Forms</h3>
+                    <div className="flex space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDuplicateForm('Q')}
+                      >
+                        + Question Form
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDuplicateForm('A')}
+                      >
+                        + Answer Form
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="flex space-x-2 border-b">
+                    {consensusTask3Forms.map((form, index) => (
+                      <div key={form.id} className="relative">
+                        <Button
+                          variant={activeConsensusTask3Form === index ? 'default' : 'ghost'}
+                          size="sm"
+                          className="rounded-b-none"
+                          onClick={() => setActiveConsensusTask3Form(index)}
+                        >
+                          {form.name}
+                        </Button>
+                        {index > 0 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="absolute -top-2 -right-2 h-6 w-6 p-0 rounded-full"
+                            onClick={e => {
+                              e.stopPropagation();
+                              const updatedForms = consensusTask3Forms.filter((_, i) => i !== index);
+                              setConsensusTask3Forms(updatedForms);
+                              if (activeConsensusTask3Form >= updatedForms.length) {
+                                setActiveConsensusTask3Form(updatedForms.length - 1);
+                              }
+                            }}
+                          >
+                            ×
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {consensusTask3Forms[activeConsensusTask3Form] && (
+                  <TaskCard
+                    title={`Task 3: Rewrite Consensus - ${consensusTask3Forms[activeConsensusTask3Form].name}`}
+                    description="Create a consensus based on annotator assessments."
+                    subTasks={consensusTask3Forms[activeConsensusTask3Form].subTasks}
+                    status={(() => {
+                      const currentForm = consensusTask3Forms[activeConsensusTask3Form];
+                      if (!currentForm || !currentForm.subTasks) return 'pending';
+
+                      const completed = currentForm.subTasks.filter(t =>
+                        t.status === 'completed' || t.status === 'na'
+                      ).length;
+                      const total = currentForm.subTasks.length;
+
+                      if (completed === total) return 'completed';
+                      if (completed > 0) return 'inProgress';
+                      return 'pending';
+                    })()}
+                    onSubTaskChange={(taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink, imageLinks) => {
+                      // First, call the hook function for validation and state management
+                      handleSubTaskChange('consensus3', taskId, selectedOption, textValue, textValues, supportingDocs, sectionIndex, weights, docDownloadLink, imageLinks);
+                      
+                      // Then update the forms for the UI
+                      const updatedForms = [...consensusTask3Forms];
+                      const currentForm = updatedForms[activeConsensusTask3Form];
+                      
+                      currentForm.subTasks = currentForm.subTasks.map(task => {
+                        if (task.id === taskId) {
+                          // Get the validated task from the hook
+                          const hookTask = consensusTask3.find(t => t.id === taskId);
+                          
+                          if (hookTask) {
+                            // Use the hook's validated task but preserve form-specific properties
+                            return {
+                              ...hookTask,
+                              selectedOption,
+                              textValue: textValue !== undefined ? textValue : task.textValue,
+                              textValues: textValues !== undefined ? textValues : task.textValues,
+                              supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
+                              weights: weights !== undefined ? weights : task.weights,
+                              imageLinks: imageLinks !== undefined ? imageLinks : task.imageLinks,
+                              docDownloadLink: docDownloadLink !== undefined ? docDownloadLink : task.docDownloadLink,
+                              // The hook will have set the validation error and status
+                              validationError: hookTask.validationError,
+                              status: hookTask.status
+                            };
+                          } else {
+                            // Fallback to inline validation if hook task not found
+                            const updatedTask = {
+                              ...task,
+                              selectedOption,
+                              textValue: textValue !== undefined ? textValue : task.textValue,
+                              textValues: textValues !== undefined ? textValues : task.textValues,
+                              supportingDocs: supportingDocs !== undefined ? supportingDocs : task.supportingDocs,
+                              weights: weights !== undefined ? weights : task.weights,
+                              imageLinks: imageLinks !== undefined ? imageLinks : task.imageLinks,
+                              docDownloadLink: docDownloadLink !== undefined ? docDownloadLink : task.docDownloadLink,
+                            };
+                      
+                            const validationError = validateTask(updatedTask);
+                            updatedTask.validationError = validationError;
+                      
+                            const isCompleted = computeCompleted(task, selectedOption, textValue, textValues, supportingDocs, imageLinks);
+                            updatedTask.status = isCompleted ? 'completed' : 'pending';
+                      
+                            return updatedTask;
+                          }
+                        }
+                        return task;
+                      });
+                      
+                      setConsensusTask3Forms(updatedForms);
+                    }}
+
+                    active
+                    customFieldRenderers={{
+                      short_answer_list: (task, onChange) => (
+                        <div className="space-y-3">
+                          <div className="text-sm font-medium text-gray-700 mb-2">
+                            Short Answer Claims (with priority weights 1-3)
+                          </div>
+                          
+                          {/* Show validation error if exists */}
+                          {task.validationError && (
+                            <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs">
+                              {task.validationError}
+                            </div>
+                          )}
+                          
+                          {task.textValues?.map((claim, index) => (
+                            <div key={index} className="flex space-x-3 items-start p-3 border rounded-md bg-gray-50">
+                              {/* Claim Input */}
+                              <div className="flex-1">
+                                <label className="block text-xs font-medium text-gray-600 mb-1">
+                                  Claim #{index + 1}
+                                </label>
+                                <Textarea
+                                  value={claim}
+                                  onChange={e => {
+                                    const newValues = [...(task.textValues || [])];
+                                    newValues[index] = e.target.value;
+                                    onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, task.weights);
+                                  }}
+                                  placeholder="Enter a short answer claim"
+                                  className="min-h-[80px] text-sm"
+                                />
+                              </div>
+                    
+                              {/* Weight Selection */}
+                              <div className="flex flex-col items-center min-w-[80px]">
+                                <label className="text-xs font-medium text-gray-600 mb-1">Weight</label>
+                                <select
+                                  value={task.weights?.[index] || 1}
+                                  onChange={e => {
+                                    const currentWeights = task.weights || task.textValues?.map(() => 1) || [];
+                                    const newWeights = [...currentWeights];
+                                    newWeights[index] = parseInt(e.target.value);
+                                    onChange(
+                                      task.id,
+                                      task.selectedOption,
+                                      undefined,
+                                      task.textValues,
+                                      undefined,
+                                      undefined,
+                                      newWeights
+                                    );
+                                  }}
+                                  className="w-16 px-2 py-2 border rounded-md text-center text-sm"
+                                >
+                                  <option value={1}>1</option>
+                                  <option value={2}>2</option>
+                                  <option value={3}>3</option>
+                                </select>
+                                <span className="text-xs text-gray-500 mt-1">Priority</span>
+                              </div>
+                    
+                              {/* Remove Button */}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  const newValues = task.textValues?.filter((_, i) => i !== index) || [];
+                                  const newWeights = task.weights?.filter((_, i) => i !== index) || [];
+                                  onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, newWeights);
+                                }}
+                                disabled={task.textValues?.length === 1}
+                                className="mt-6"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                    
+                          {/* Add New Claim Button */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const newValues = [...(task.textValues || []), ''];
+                              const newWeights = [...(task.weights || []), 1];
+                              onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, newWeights);
+                            }}
+                            className="w-full"
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add Short Answer Claim
+                          </Button>
+                        </div>
+                      )
+                    }}
+                  />
+                )}
+
+                <div className="mt-4 p-4 border rounded bg-gray-50">
+                  <h3 className="text-lg font-semibold mb-2">Overall Consensus Feedback</h3>
+                  <div className="mb-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Rating (1-5 stars):</label>
+                    <div className="flex space-x-1">
+                      {[1, 2, 3, 4, 5].map(star => (
+                        <Button
+                          key={star}
+                          variant={consensusStars === star ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setConsensusStars(star)}
+                        >
+                          {star}
+                        </Button>
+                      ))}
+                      {consensusStars && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setConsensusStars(null)}
+                        >
+                          Clear
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <label htmlFor="consensusCommentTask3" className="block text-sm font-medium text-gray-700 mb-1">
+                      Comment:
                     </label>
                     <Textarea
-                      value={claim}
-                      onChange={e => {
-                        const newValues = [...(task.textValues || [])];
-                        newValues[index] = e.target.value;
-                        onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, task.weights);
-                      }}
-                      placeholder="Enter a short answer claim"
-                      className="min-h-[80px] text-sm"
+                      id="consensusCommentTask3"
+                      value={consensusComment}
+                      onChange={e => setConsensusComment(e.target.value)}
+                      placeholder="Provide an overall comment for this consensus..."
+                      rows={3}
                     />
                   </div>
-        
-                  {/* Weight Selection */}
-                  <div className="flex flex-col items-center min-w-[80px]">
-                    <label className="text-xs font-medium text-gray-600 mb-1">Weight</label>
-                    <select
-                      value={task.weights?.[index] || 1}
-                      onChange={e => {
-                        const currentWeights = task.weights || task.textValues?.map(() => 1) || [];
-                        const newWeights = [...currentWeights];
-                        newWeights[index] = parseInt(e.target.value);
-                        onChange(
-                          task.id,
-                          task.selectedOption,
-                          undefined,
-                          task.textValues,
-                          undefined,
-                          undefined,
-                          newWeights
-                        );
-                      }}
-                      className="w-16 px-2 py-2 border rounded-md text-center text-sm"
-                    >
-                      <option value={1}>1</option>
-                      <option value={2}>2</option>
-                      <option value={3}>3</option>
-                    </select>
-                    <span className="text-xs text-gray-500 mt-1">Priority</span>
-                  </div>
-        
-                  {/* Remove Button */}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      const newValues = task.textValues?.filter((_, i) => i !== index) || [];
-                      const newWeights = task.weights?.filter((_, i) => i !== index) || [];
-                      onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, newWeights);
-                    }}
-                    disabled={task.textValues?.length === 1}
-                    className="mt-6"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
                 </div>
-              ))}
-        
-              {/* Add New Claim Button */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const newValues = [...(task.textValues || []), ''];
-                  const newWeights = [...(task.weights || []), 1];
-                  onChange(task.id, task.selectedOption, undefined, newValues, undefined, undefined, newWeights);
-                }}
-                className="w-full"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Short Answer Claim
-              </Button>
-            </div>
-          )
-        }}
-      />
-    )}
 
-    <div className="mt-4 p-4 border rounded bg-gray-50">
-      <h3 className="text-lg font-semibold mb-2">Overall Consensus Feedback</h3>
-      <div className="mb-2">
-        <label className="block text-sm font-medium text-gray-700 mb-1">Rating (1-5 stars):</label>
-        <div className="flex space-x-1">
-          {[1, 2, 3, 4, 5].map(star => (
-            <Button
-              key={star}
-              variant={consensusStars === star ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setConsensusStars(star)}
-            >
-              {star}
-            </Button>
-          ))}
-          {consensusStars && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setConsensusStars(null)}
-            >
-              Clear
-            </Button>
-          )}
-        </div>
-      </div>
-      <div>
-        <label htmlFor="consensusCommentTask3" className="block text-sm font-medium text-gray-700 mb-1">
-          Comment:
-        </label>
-        <Textarea
-          id="consensusCommentTask3"
-          value={consensusComment}
-          onChange={e => setConsensusComment(e.target.value)}
-          placeholder="Provide an overall comment for this consensus..."
-          rows={3}
-        />
-      </div>
-    </div>
-
-    <AnnotatorView
-      discussionId={discussionId || ''}
-      currentStep={currentStep}
-      getAnnotationsForTask={getAnnotationsForTask}
-      onUseForConsensus={handleUseAnnotationForConsensus}
-      getUserEmailById={getUserEmailById}
-    />
-  </>
-)}
-                {currentStep === TaskId.SUMMARY && <Summary results={getSummaryData()} />}
+                <AnnotatorView
+                  discussionId={discussionId || ''}
+                  currentStep={currentStep}
+                  getAnnotationsForTask={getAnnotationsForTask}
+                  onUseForConsensus={handleUseAnnotationForConsensus}
+                  getUserEmailById={getUserEmailById}
+                />
               </>
-          )}
+            )}
 
-              <DashboardNavigation
-                viewMode={viewMode}
-                currentStep={currentStep}
-                // Update this line to pass form context
-                canProceed={(() => {
-                  if (currentStep === TaskId.REWRITE) {
-                    // For Task 3, check the current active form's completion
-                    if (viewMode === 'consensus') {
-                      return canProceed(
-                        currentStep,
-                        viewMode,
-                        undefined,
-                        undefined,
-                        activeConsensusTask3Form,
-                        consensusTask3Forms
-                      );
-                    } else {
-                      return canProceed(
-                        currentStep,
-                        viewMode,
-                        activeTask3Form,
-                        task3Forms
-                      );
-                    }
-                  }
-                  // For other tasks, use original logic
-                  return canProceed(currentStep, viewMode);
-                })()}
-                onBackToGrid={handleBackToGrid}
-                onSave={onSaveClick}
-                isConsensus={viewMode === 'consensus'}
-                screenshotUrl={screenshotUrl}
-                // onScreenshotUrlChange={handleScreenshotUrlChange}
-                codeDownloadUrl={codeDownloadUrl}
-                discussionId={discussionId ?? undefined}
-                // onCodeUrlChange={handleCodeUrlChange}
-                onCodeUrlVerify={validateGitHubCodeUrl}
-                currentDiscussion={currentDiscussion}
-              /></div>
-        <DiscussionDetailsModal discussion={null} />
-      </div>
-  );
+            {/* Summary */}
+            {currentStep === TaskId.SUMMARY && <Summary results={getSummaryData()} />}
+          </>
+      )}
+
+      <DashboardNavigation
+        viewMode={viewMode}
+        currentStep={currentStep}
+        canProceed={(() => {
+          if (currentStep === TaskId.REWRITE) {
+            // For Task 3, check the current active form's completion
+            if (viewMode === 'consensus') {
+              return canProceed(
+                currentStep,
+                viewMode,
+                undefined,
+                undefined,
+                activeConsensusTask3Form,
+                consensusTask3Forms
+              );
+            } else {
+              return canProceed(
+                currentStep,
+                viewMode,
+                activeTask3Form,
+                task3Forms
+              );
+            }
+          }
+          // For other tasks, use original logic
+          return canProceed(currentStep, viewMode);
+        })()}
+        onBackToGrid={handleBackToGrid}
+        onSave={onSaveClick}
+        isConsensus={viewMode === 'consensus'}
+        screenshotUrl={screenshotUrl}
+        codeDownloadUrl={codeDownloadUrl}
+        discussionId={discussionId ?? undefined}
+        onCodeUrlVerify={validateGitHubCodeUrl}
+        currentDiscussion={currentDiscussion}
+      />
+    </div>
+    <DiscussionDetailsModal discussion={null} />
+  </div>
+);
 };
 
 export default Dashboard;

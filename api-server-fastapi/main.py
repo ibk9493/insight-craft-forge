@@ -685,7 +685,10 @@ async def get_summary_report(
         for field in metadata_fields:
             processed_data.pop(field, None)
 
-        return [processed_data]  # Return array with single object  # Return array with single object  # Return array with single object
+        return [processed_data]  
+    
+    
+    # Return array with single object  # Return array with single object  # Return array with single object
     def has_annotation_data(annotation, task_id):
         """
         Check if an annotation has actual data for the given task
