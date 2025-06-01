@@ -41,7 +41,7 @@ export interface ApiError {
 }
 
 // Task status types
-export type TaskStatus = 'locked' | 'unlocked' | 'completed';
+export type TaskStatus = 'locked' | 'unlocked' | 'completed' | 'rework' | 'blocked' | 'ready_for_next';
 export type UserRole = 'annotator' | 'pod_lead' | 'admin';
 
 // Task state interface
@@ -225,4 +225,11 @@ export interface BulkActionResult {
   updatedCount: number;
   failedCount: number;
   results:[];
+}
+
+export interface BulkFlagTask {
+  discussionId: string;
+  taskId: number;
+  reason: string;
+  category?: string;
 }

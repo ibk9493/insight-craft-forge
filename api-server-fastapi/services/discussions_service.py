@@ -1008,3 +1008,104 @@ def extract_repository_from_url(url: str) -> str:
     """Legacy repository extraction (keep for compatibility)"""
     repository, _, _ = extract_repository_info_from_url(url)
     return repository
+def update_task_status_enhanced(
+    db: Session, 
+    discussion_id: str, 
+    task_id: int, 
+    status: str,
+    updated_by: str = "system"
+) -> schemas.TaskManagementResult:
+    """
+    Enhanced task status update that supports new status values
+    while maintaining backward compatibility with existing locked/unlocked/completed
+    """
+    try:
+        # Valid statuses - extends your existing ones
+        valid_statuses = [
+            'locked',           # Your existing
+            'unlocked',         # Your existing  
+            'completed',        # Your existing
+            'needs_rework',     # New: Task completed but needs fixes
+            'blocked',          # New: Task is blocked (flagged)
+            'ready_for_next'    # New: Task completed and ready to unlock next
+        ]
+        
+        if status not in valid_statuses:
+            raise Exception(f"Invalid status: {status}. Must be one of: {', '.join(valid_statuses)}")
+        
+        # Check if discussion exists
+        discussion = db.query(models.Discussion).filter(
+            models.Discussion.id == discussion_id
+        ).first()
+        if not discussion:
+            raise Exception(f"Discussion {discussion_id} not found")
+        
+        # Update task status in your existing table
+        result = db.execute(
+            models.discussion_task_association.update().where(
+                and_(
+                    models.discussion_task_association.c.discussion_id == discussion_id,
+                    models.discussion_task_association.c.task_number == task_id
+                )
+            ).values(
+                status=status
+            )
+        )
+        
+        # If task association doesn't exist, create it (your existing logic)
+        if result.rowcount == 0:
+            db.execute(
+                models.discussion_task_association.insert().values(
+                    discussion_id=discussion_id,
+                    task_number=task_id,
+                    status=status,
+                    annotators=0
+                )
+            )
+        
+        # Auto-unlock next task if status is 'ready_for_next'
+        if status == 'ready_for_next' and task_id < 3:
+            next_task_id = task_id + 1
+            # Check if next task exists and unlock it
+            next_task_result = db.execute(
+                models.discussion_task_association.update().where(
+                    and_(
+                        models.discussion_task_association.c.discussion_id == discussion_id,
+                        models.discussion_task_association.c.task_number == next_task_id,
+                        models.discussion_task_association.c.status == 'locked'
+                    )
+                ).values(
+                    status='unlocked'
+                )
+            )
+            
+            # If next task doesn't exist, create it as unlocked
+            if next_task_result.rowcount == 0:
+                db.execute(
+                    models.discussion_task_association.insert().values(
+                        discussion_id=discussion_id,
+                        task_number=next_task_id,
+                        status='unlocked',
+                        annotators=0
+                    )
+                )
+        
+        db.commit()
+        
+        # Get updated discussion for response (using your existing function)
+        updated_discussion = get_discussion_by_id(db, discussion_id)
+        
+        return schemas.TaskManagementResult(
+            success=True,
+            message=f"Task {task_id} status updated to {status}",
+            discussion=updated_discussion
+        )
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating task status: {str(e)}")
+        return schemas.TaskManagementResult(
+            success=False,
+            message=f"Failed to update task status: {str(e)}",
+            discussion=None
+        )

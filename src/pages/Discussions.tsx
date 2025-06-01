@@ -314,21 +314,61 @@ const handlePerPageChange = useCallback((newPerPage: number) => {
     window.open(url, '_blank', 'noopener,noreferrer');
   }, []);
 
-  const getTaskStatusClass = useCallback((status: 'locked' | 'unlocked' | 'completed', userAnnotated?: boolean) => {
-  if (userAnnotated) return 'bg-purple-100 text-purple-800';
-  switch (status) {
-    case 'completed': return 'bg-green-100 text-green-800';
-    case 'unlocked': return 'bg-blue-100 text-blue-800';
-    case 'locked': return 'bg-gray-100 text-gray-800';
-  }
-}, []);
+  const getTaskStatusClass = useCallback((status: TaskStatus, userAnnotated?: boolean) => {
+    // If user has annotated, show that first
+    if (userAnnotated) return 'bg-purple-100 text-purple-800';
+    
+    // Handle your existing statuses + new enhanced ones
+    switch (status) {
+      // Your existing statuses
+      case 'completed': 
+        return 'bg-green-100 text-green-800';
+      case 'unlocked': 
+        return 'bg-blue-100 text-blue-800';
+      case 'locked': 
+        return 'bg-gray-100 text-gray-800';
+      
+      // New enhanced statuses
+      case 'rework':
+        return 'bg-orange-100 text-orange-800';
+      case 'blocked':
+        return 'bg-red-100 text-red-800';
+      case 'ready_for_next':
+        return 'bg-purple-100 text-purple-800';
+      
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  }, []);
 
 const getTaskButtonState = useCallback((discussion: EnhancedDiscussion, taskNumber: number) => {
   const task = discussion.tasks[`task${taskNumber}` as keyof EnhancedDiscussion['tasks']];
   const userAnnotated = task.userAnnotated;
   const required = taskNumber === 3 ? 5 : 3;
   const maxed = task.annotators >= required && !isPodLead && !isAdmin && !userAnnotated;
+  if (task.status === 'rework') {
+    return {
+      isEnabled: isPodLead || isAdmin,
+      text: `Needs Rework (${task.annotators}/${required})`
+    };
+  }
+  
+  if (task.status === 'blocked') {
+    return {
+      isEnabled: isPodLead || isAdmin,
+      text: `Blocked - Contact Admin (${task.annotators}/${required})`
+    };
+  }
+  
+  if (task.status === 'ready_for_next') {
+    return {
+      isEnabled: isPodLead || isAdmin,
+      text: `Ready for Next Task (${task.annotators}/${required})`
+    };
+  }
   const isEnabled = (task.status !== 'locked' || isPodLead || isAdmin || userAnnotated) && !maxed;
+
+
 
   let text = '';
   if (maxed) text = `Maximum Annotators Reached (${task.annotators}/${required})`;
@@ -362,6 +402,21 @@ const startTask = useCallback((discussionId: string, taskNumber: number) => {
   const mode = hasAnnotated ? 'edit' : 'new';
   navigate(`/dashboard?discussionId=${discussionId}&taskId=${taskNumber}&mode=${mode}&timestamp=${Date.now()}`);
 }, [user, discussions, getUserAnnotationStatus, isPodLead, isAdmin, navigate]);
+
+
+const getStatusLabel = useCallback((status: string, userAnnotated: boolean) => {
+  if (userAnnotated) return 'Annotated';
+  
+  switch (status) {
+    case 'locked': return 'Locked';
+    case 'unlocked': return 'Unlocked';
+    case 'completed': return 'Completed';
+    case 'rework': return 'Needs Rework';
+    case 'blocked': return 'Blocked';
+    case 'ready_for_next': return 'Ready for Next';
+    default: return status;
+  }
+}, []);
 
   // Early returns for loading states
   if (!isAuthenticated) {
@@ -578,7 +633,7 @@ const startTask = useCallback((discussionId: string, taskNumber: number) => {
                       <div className="flex justify-between items-center mb-2">
                         <h3 className="font-medium">Task 1: Question Quality</h3>
                         <span className={`text-xs px-2 py-1 rounded-full ${getTaskStatusClass(discussion.tasks.task1.status, discussion.tasks.task1.userAnnotated)}`}>
-                          {discussion.tasks.task1.userAnnotated ? 'Annotated' : discussion.tasks.task1.status}
+                          {getStatusLabel(discussion.tasks.task1.status, discussion.tasks.task1.userAnnotated)}
                         </span>
                       </div>
                       <p className="text-xs text-gray-500 mb-4">
@@ -606,7 +661,7 @@ const startTask = useCallback((discussionId: string, taskNumber: number) => {
                       <div className="flex justify-between items-center mb-2">
                         <h3 className="font-medium">Task 2: Answer Quality</h3>
                         <span className={`text-xs px-2 py-1 rounded-full ${getTaskStatusClass(discussion.tasks.task2.status, discussion.tasks.task2.userAnnotated)}`}>
-                          {discussion.tasks.task2.userAnnotated ? 'Annotated' : discussion.tasks.task2.status}
+                          {getStatusLabel(discussion.tasks.task2.status, discussion.tasks.task2.userAnnotated)}
                         </span>
                       </div>
                       <p className="text-xs text-gray-500 mb-4">
@@ -634,7 +689,7 @@ const startTask = useCallback((discussionId: string, taskNumber: number) => {
                       <div className="flex justify-between items-center mb-2">
                         <h3 className="font-medium">Task 3: Rewrite</h3>
                         <span className={`text-xs px-2 py-1 rounded-full ${getTaskStatusClass(discussion.tasks.task3.status, discussion.tasks.task3.userAnnotated)}`}>
-                          {discussion.tasks.task3.userAnnotated ? 'Annotated' : discussion.tasks.task3.status}
+                          {getStatusLabel(discussion.tasks.task3.status, discussion.tasks.task3.userAnnotated)}
                         </span>
                       </div>
                       <p className="text-xs text-gray-500 mb-4">

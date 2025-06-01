@@ -414,7 +414,70 @@ export const api = {
       });
     }
   },
+ // Add these endpoints to your existing api object
 
+taskFlags: {
+  flagTask: (
+    discussionId: string, 
+    taskId: number, 
+    reason: string, 
+    category?: string,
+    flaggedFromTask?: number
+  ) => {
+    const payload = {
+      reason,
+      category: category || 'general',
+      flagged_from_task: flaggedFromTask || taskId,
+      actual_problem_task: taskId
+    };
+
+    return safeApiRequest<{
+      success: boolean;
+      message: string;
+      discussion_id: string;
+      task_id: number;
+      new_status: string;
+      flagged_by: string;
+      reason: string;
+    }>(`/api/discussions/${encodeURIComponent(discussionId)}/tasks/${taskId}/flag`, 'POST', payload);
+  },
+
+  updateTaskStatus: (discussionId: string, taskId: number, status: string) => {
+    return safeApiRequest<{
+      auto_unlocked_next: any;
+      success: boolean;
+      message: string;
+      discussion_id: string;
+      task_id: number;
+      old_status: string;
+      new_status: string;
+      updated_by: string;
+    }>(`/api/admin/discussions/${encodeURIComponent(discussionId)}/tasks/${taskId}/status`, 'PUT', { status });
+  }
+},
+
+github: {
+  getLatestCommit: (repoUrl: string, discussionDate: string) => {
+    const params = new URLSearchParams({
+      repo_url: repoUrl,
+      discussion_date: discussionDate
+    });
+    
+    return safeApiRequest<{
+      [x: string]: string;
+      success: boolean;
+      repository: string;
+      latest_commit: {
+        sha: string;
+        short_sha: string;
+        message: string;
+        author: { name: string; date: string };
+        url: string;
+        hours_before_discussion: number;
+      } | null;
+    }>(`/api/github/latest-commit?${params.toString()}`, 'GET');
+  }
+},
   discussions: {
     // Updated to support pagination parameters
     getFilterOptions: () => {

@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { api, Discussion, TaskStatus } from '@/services/api';
 import { 
@@ -33,10 +34,15 @@ import {
   ChevronLeft, 
   ChevronRight,
   Settings,
-  AlertCircle
+  AlertCircle,
+  Flag,
+  XCircle,
+  ArrowRight,
+  RotateCcw
 } from 'lucide-react';
 
-// No more props needed - TaskManager is fully independent!
+
+
 const TaskManager: React.FC = () => {
   const [discussions, setDiscussions] = useState<Discussion[]>([]);
   const [loading, setLoading] = useState(false);
@@ -52,6 +58,7 @@ const TaskManager: React.FC = () => {
   
   // Filter state
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [taskFilter, setTaskFilter] = useState<string>('all');
 
   // Debounced search
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
@@ -64,6 +71,54 @@ const TaskManager: React.FC = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  // Get status icon and styling
+  const getStatusDisplay = (status: TaskStatus) => {
+    switch (status) {
+      case 'locked':
+        return {
+          icon: <Lock className="w-4 h-4 text-gray-500" />,
+          label: 'Locked',
+          className: 'text-gray-600'
+        };
+      case 'unlocked':
+        return {
+          icon: <LockOpen className="w-4 h-4 text-blue-500" />,
+          label: 'Unlocked',
+          className: 'text-blue-600'
+        };
+      case 'completed':
+        return {
+          icon: <Check className="w-4 h-4 text-green-500" />,
+          label: 'Completed',
+          className: 'text-green-600'
+        };
+      case 'rework':
+        return {
+          icon: <RotateCcw className="w-4 h-4 text-orange-500" />,
+          label: 'Needs Rework',
+          className: 'text-orange-600'
+        };
+      case 'blocked':
+        return {
+          icon: <XCircle className="w-4 h-4 text-red-500" />,
+          label: 'Blocked',
+          className: 'text-red-600'
+        };
+      case 'ready_for_next':
+        return {
+          icon: <ArrowRight className="w-4 h-4 text-purple-500" />,
+          label: 'Ready for Next',
+          className: 'text-purple-600'
+        };
+      default:
+        return {
+          icon: <AlertCircle className="w-4 h-4 text-gray-400" />,
+          label: status,
+          className: 'text-gray-500'
+        };
+    }
+  };
+
   // Fetch discussions with current filters/search/pagination
   const fetchDiscussions = useCallback(async (resetPage = false) => {
     setLoading(true);
@@ -72,12 +127,16 @@ const TaskManager: React.FC = () => {
     try {
       const page = resetPage ? 1 : currentPage;
       
-      const params = {
+      const params: any = {
         page,
         per_page: perPage,
         search: debouncedSearchQuery.trim() || undefined,
-        status: statusFilter === 'all' ? undefined : statusFilter,
       };
+
+      // Add status filter for specific task
+      if (statusFilter !== 'all' && taskFilter !== 'all') {
+        params[`task${taskFilter}_status`] = statusFilter;
+      }
       
       console.log('Fetching discussions for TaskManager:', params);
       
@@ -100,33 +159,21 @@ const TaskManager: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, perPage, debouncedSearchQuery, statusFilter]);
+  }, [currentPage, perPage, debouncedSearchQuery, statusFilter, taskFilter]);
 
   // Initial load and refresh when filters change
   useEffect(() => {
-    fetchDiscussions(true); // Reset to page 1 when filters change
-  }, [debouncedSearchQuery, statusFilter, perPage]);
+    fetchDiscussions(true);
+  }, [debouncedSearchQuery, statusFilter, taskFilter, perPage]);
 
-  // Fetch when page changes (but don't reset page)
+  // Fetch when page changes
   useEffect(() => {
     if (currentPage > 1) {
       fetchDiscussions(false);
     }
   }, [currentPage]);
 
-  // Helper function to get status icon
-  const getStatusIcon = (status: TaskStatus) => {
-    switch (status) {
-      case 'locked':
-        return <Lock className="w-4 h-4 text-gray-500" />;
-      case 'unlocked':
-        return <LockOpen className="w-4 h-4 text-blue-500" />;
-      case 'completed':
-        return <Check className="w-4 h-4 text-green-500" />;
-    }
-  };
-
-  // Function to update task status
+  // Function to update task status using new API
   const updateTaskStatus = async (discussionId: string, taskId: number, status: TaskStatus) => {
     const updateKey = `${discussionId}-${taskId}`;
     setIsUpdating(updateKey);
@@ -134,19 +181,31 @@ const TaskManager: React.FC = () => {
     try {
       console.log('🔄 Updating task status:', { discussionId, taskId, status });
       
-      const result = await api.admin.updateTaskStatus(discussionId, taskId, status);
+      const result = await api.taskFlags.updateTaskStatus(discussionId, taskId, status);
       
-      if (result.success && result.discussion) {
+      if (result.success) {
         toast.success(result.message || 'Task status updated successfully');
         
         // Update the local discussion in the current list
         setDiscussions(prevDiscussions => 
-          prevDiscussions.map(disc => 
-            disc.id === discussionId ? result.discussion : disc
-          )
+          prevDiscussions.map(disc => {
+            if (disc.id === discussionId) {
+              const updated = { ...disc };
+              if (taskId === 1) updated.tasks.task1.status = status;
+              else if (taskId === 2) updated.tasks.task2.status = status;
+              else if (taskId === 3) updated.tasks.task3.status = status;
+              return updated;
+            }
+            return disc;
+          })
         );
         
         console.log('Task status updated successfully');
+        
+        // Show additional info for special statuses
+        if (result.auto_unlocked_next) {
+          toast.success(`Next task automatically unlocked!`);
+        }
       } else {
         toast.error(result.message || 'Failed to update task status');
         console.error('Task update failed:', result.message);
@@ -159,12 +218,6 @@ const TaskManager: React.FC = () => {
     }
   };
 
-  // Handle search form submission
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Search will be triggered by useEffect when debouncedSearchQuery changes
-  };
-
   // Handle page navigation
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
@@ -175,7 +228,7 @@ const TaskManager: React.FC = () => {
   // Handle per page change
   const handlePerPageChange = (newPerPage: number) => {
     setPerPage(newPerPage);
-    setCurrentPage(1); // Reset to first page
+    setCurrentPage(1);
   };
 
   // Refresh data
@@ -222,8 +275,8 @@ const TaskManager: React.FC = () => {
           </div>
 
           {/* Search and Filters */}
-          <div className="flex flex-col sm:flex-row gap-4">
-            <form onSubmit={handleSearchSubmit} className="flex gap-2 flex-1">
+          <div className="flex flex-col lg:flex-row gap-4">
+            <div className="flex gap-2 flex-1">
               <div className="relative flex-1">
                 <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
@@ -234,14 +287,23 @@ const TaskManager: React.FC = () => {
                   className="pl-8"
                 />
               </div>
-              <Button type="submit" variant="outline" disabled={loading}>
-                Search
-              </Button>
-            </form>
+            </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
+              <Select value={taskFilter} onValueChange={setTaskFilter}>
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue placeholder="Filter task" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Tasks</SelectItem>
+                  <SelectItem value="1">Task 1</SelectItem>
+                  <SelectItem value="2">Task 2</SelectItem>
+                  <SelectItem value="3">Task 3</SelectItem>
+                </SelectContent>
+              </Select>
+
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[140px]">
+                <SelectTrigger className="w-[160px]">
                   <SelectValue placeholder="Filter by status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -249,6 +311,9 @@ const TaskManager: React.FC = () => {
                   <SelectItem value="locked">Locked</SelectItem>
                   <SelectItem value="unlocked">Unlocked</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="rework">Needs Rework</SelectItem>
+                  <SelectItem value="blocked">Blocked</SelectItem>
+                  <SelectItem value="ready_for_next">Ready for Next</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -270,7 +335,8 @@ const TaskManager: React.FC = () => {
           <div className="text-sm text-gray-500">
             Showing {discussions.length} of {totalDiscussions} discussions 
             {searchQuery && ` (filtered by "${searchQuery}")`}
-            {statusFilter !== 'all' && ` (${statusFilter} tasks only)`}
+            {statusFilter !== 'all' && ` (${statusFilter} status only)`}
+            {taskFilter !== 'all' && ` (Task ${taskFilter} only)`}
             • Page {currentPage} of {totalPages}
           </div>
         </div>
@@ -283,9 +349,18 @@ const TaskManager: React.FC = () => {
               <TableRow>
                 <TableHead>Discussion</TableHead>
                 <TableHead>Repository</TableHead>
-                <TableHead className="w-[120px] text-center">Task 1</TableHead>
-                <TableHead className="w-[120px] text-center">Task 2</TableHead>
-                <TableHead className="w-[120px] text-center">Task 3</TableHead>
+                <TableHead className="w-[140px] text-center">
+                  Task 1
+                  <div className="text-xs text-gray-500 font-normal">Question Quality</div>
+                </TableHead>
+                <TableHead className="w-[140px] text-center">
+                  Task 2
+                  <div className="text-xs text-gray-500 font-normal">Answer Quality</div>
+                </TableHead>
+                <TableHead className="w-[140px] text-center">
+                  Task 3
+                  <div className="text-xs text-gray-500 font-normal">Rewrite</div>
+                </TableHead>
                 <TableHead className="w-[100px] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -301,7 +376,7 @@ const TaskManager: React.FC = () => {
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-8 text-gray-500">
                     No discussions found
-                    {searchQuery && (
+                    {(searchQuery || statusFilter !== 'all' || taskFilter !== 'all') && (
                       <p className="mt-2 text-sm">
                         Try adjusting your search term or filters
                       </p>
@@ -311,10 +386,15 @@ const TaskManager: React.FC = () => {
               ) : (
                 discussions.map((discussion) => (
                   <TableRow key={discussion.id}>
-                    <TableCell className="font-medium max-w-[200px] truncate">
-                      {discussion.title}
+                    <TableCell className="font-medium max-w-[200px]">
+                      <div className="truncate">
+                        {discussion.title}
+                      </div>
                       {isUpdating?.includes(discussion.id) && (
-                        <RefreshCw className="inline w-3 h-3 ml-2 animate-spin text-blue-500" />
+                        <div className="flex items-center mt-1">
+                          <RefreshCw className="w-3 h-3 animate-spin text-blue-500 mr-1" />
+                          <span className="text-xs text-blue-500">Updating...</span>
+                        </div>
                       )}
                     </TableCell>
                     <TableCell>{discussion.repository}</TableCell>
@@ -348,8 +428,29 @@ const TaskManager: React.FC = () => {
                               <span>Completed</span>
                             </div>
                           </SelectItem>
+                          <SelectItem value="rework">
+                            <div className="flex items-center">
+                              <RotateCcw className="w-4 h-4 mr-2 text-orange-500" />
+                              <span>Needs Rework</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="blocked">
+                            <div className="flex items-center">
+                              <XCircle className="w-4 h-4 mr-2 text-red-500" />
+                              <span>Blocked</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="ready_for_next">
+                            <div className="flex items-center">
+                              <ArrowRight className="w-4 h-4 mr-2 text-purple-500" />
+                              <span>Ready for Next</span>
+                            </div>
+                          </SelectItem>
                         </SelectContent>
                       </Select>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {discussion.tasks.task1.annotators} annotators
+                      </div>
                     </TableCell>
                     
                     {/* Task 2 Status */}
@@ -381,8 +482,29 @@ const TaskManager: React.FC = () => {
                               <span>Completed</span>
                             </div>
                           </SelectItem>
+                          <SelectItem value="rework">
+                            <div className="flex items-center">
+                              <RotateCcw className="w-4 h-4 mr-2 text-orange-500" />
+                              <span>Needs Rework</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="blocked">
+                            <div className="flex items-center">
+                              <XCircle className="w-4 h-4 mr-2 text-red-500" />
+                              <span>Blocked</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="ready_for_next">
+                            <div className="flex items-center">
+                              <ArrowRight className="w-4 h-4 mr-2 text-purple-500" />
+                              <span>Ready for Next</span>
+                            </div>
+                          </SelectItem>
                         </SelectContent>
                       </Select>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {discussion.tasks.task2.annotators} annotators
+                      </div>
                     </TableCell>
                     
                     {/* Task 3 Status */}
@@ -414,8 +536,29 @@ const TaskManager: React.FC = () => {
                               <span>Completed</span>
                             </div>
                           </SelectItem>
+                          <SelectItem value="rework">
+                            <div className="flex items-center">
+                              <RotateCcw className="w-4 h-4 mr-2 text-orange-500" />
+                              <span>Needs Rework</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="blocked">
+                            <div className="flex items-center">
+                              <XCircle className="w-4 h-4 mr-2 text-red-500" />
+                              <span>Blocked</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="ready_for_next">
+                            <div className="flex items-center">
+                              <ArrowRight className="w-4 h-4 mr-2 text-purple-500" />
+                              <span>Ready for Next</span>
+                            </div>
+                          </SelectItem>
                         </SelectContent>
                       </Select>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {discussion.tasks.task3.annotators} annotators
+                      </div>
                     </TableCell>
                     
                     <TableCell className="text-right">
@@ -432,6 +575,33 @@ const TaskManager: React.FC = () => {
               )}
             </TableBody>
           </Table>
+        </div>
+
+        {/* Enhanced Status Legend */}
+        <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+          <h4 className="text-sm font-medium text-gray-700 mb-3">Status Legend</h4>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            {[
+              { status: 'locked', label: 'Locked', description: 'Cannot be started' },
+              { status: 'unlocked', label: 'Unlocked', description: 'Can be worked on' },
+              { status: 'completed', label: 'Completed', description: 'Finished successfully' },
+              { status: 'rework', label: 'Needs Rework', description: 'Flagged for issues' },
+              { status: 'blocked', label: 'Blocked', description: 'Has serious problems' },
+              { status: 'ready_for_next', label: 'Ready for Next', description: 'Will unlock next task' }
+            ].map((item) => {
+              const display = getStatusDisplay(item.status as TaskStatus);
+              return (
+                <div key={item.status} className="flex items-start gap-2">
+                  <div className="flex items-center gap-1">
+                    {display.icon}
+                    <span className={`text-xs font-medium ${display.className}`}>
+                      {item.label}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Pagination */}
@@ -457,7 +627,6 @@ const TaskManager: React.FC = () => {
             </Button>
             
             <div className="flex items-center gap-1">
-              {/* Show page numbers around current page */}
               {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                 const startPage = Math.max(1, currentPage - 2);
                 const pageNum = startPage + i;

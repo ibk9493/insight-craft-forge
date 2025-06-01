@@ -8,7 +8,7 @@ import Summary from '@/components/dashboard/Summary';
 import DashboardNavigation from '@/components/dashboard/DashboardNavigation';
 import DashboardBreadcrumb from '@/components/dashboard/DashboardBreadcrumb';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, FileText, Eye, Plus, X } from 'lucide-react';
+import { CheckCircle, FileText, Eye, Plus, X, Flag } from 'lucide-react';
 import AnnotatorView from '@/components/dashboard/AnnotatorView';
 import { useDashboardState } from '@/hooks/useDashboardState';
 import { useTaskSubtasks } from '@/hooks/useTaskSubtasks';
@@ -23,7 +23,7 @@ import { MOCK_USERS_DATA } from '@/contexts/UserContext';
 import { api } from '@/services/api';
 import { Textarea } from '@/components/ui/textarea';
 import { validateForm, validateTask } from '@/utils/validation';
-
+import TaskFlagModal from '@/components/discussions/TaskFlagModal';
 
 const computeCompleted = (
   task: SubTask,
@@ -70,6 +70,8 @@ const Dashboard = () => {
   const [activeTask3Form, setActiveTask3Form] = useState(0);
   const [consensusTask3Forms, setConsensusTask3Forms] = useState<Array<{ id: string; name: string; subTasks: SubTask[] }>>([]);
   const [activeConsensusTask3Form, setActiveConsensusTask3Form] = useState(0);
+  const [showFlagModal, setShowFlagModal] = useState(false);
+
 
   const {
     url,
@@ -159,6 +161,17 @@ const Dashboard = () => {
   });
 
   const userEmailCache = useRef<{ [userId: string]: string }>({});
+
+
+  const handleFlagSubmitted = useCallback(() => {
+    // Refresh the current step status or reload data
+    // This depends on your existing data fetching pattern
+    toast.success('Task flagged successfully. Admins have been notified.');
+    
+    // You might want to refresh the task status here
+    // For example, if you have a function to reload task data:
+    // loadTaskData();
+  }, []);
 
   const getUserEmailById = useCallback(async (userId: string): Promise<string> => {
     if (!userId) return 'Unknown User';
@@ -835,6 +848,19 @@ const handleDuplicateForm = (type: string) => {
 return (
   <div className="min-h-screen bg-gray-50 flex flex-col">
     <Header />
+    <TaskFlagModal
+      isOpen={showFlagModal}
+      onClose={() => setShowFlagModal(false)}
+      discussionId={discussionId || ''}
+      taskId={currentStep}
+      taskName={`Task ${currentStep}: ${
+        currentStep === 1 ? 'Question Quality Assessment' :
+        currentStep === 2 ? 'Answer Quality Assessment' :
+        currentStep === 3 ? 'Rewrite Question and Answer' :
+        'Unknown Task'
+      }`}
+      onFlagSubmitted={handleFlagSubmitted}
+    />
     <div className="container max-w-4xl mx-auto px-4 py-6 flex-grow">
       {(url || discussionId) && <DashboardBreadcrumb discussionId={discussionId || undefined} currentStep={currentStep} discussionTitle={currentDiscussion?.title || 'Discussion'} />}
       {currentStep === 0 && !discussionId && <UrlInput onSubmit={handleUrlSubmit} />}
@@ -857,22 +883,36 @@ return (
       )}
       {(url || discussionId) && (viewMode === 'detail' || viewMode === 'consensus') && (
           <>
-            <ProgressStepper steps={steps} currentStep={currentStep} />
             <div className="mb-4 flex justify-between items-center">
-              {currentDiscussion && (
-                  <Button variant="outline" className="flex items-center gap-2" onClick={handleViewDiscussion}>
-                    <Eye className="h-4 w-4" />
-                    <span>View Discussion Details</span>
-                  </Button>
+            {currentDiscussion && (
+              <Button variant="outline" className="flex items-center gap-2" onClick={handleViewDiscussion}>
+                <Eye className="h-4 w-4" />
+                <span>View Discussion Details</span>
+              </Button>
+            )}
+            
+            <div className="flex items-center gap-2">
+              {/* Flag button - show for any authenticated user on active tasks */}
+              {currentStep > 0 && currentStep <= 3 && (
+                <Button 
+                  variant="outline" 
+                  className="flex items-center gap-2 text-orange-600 border-orange-300 hover:bg-orange-50"
+                  onClick={() => setShowFlagModal(true)}
+                >
+                  <Flag className="h-4 w-4" />
+                  Flag Task {currentStep}
+                </Button>
               )}
+              
+              {/* Existing consensus button */}
               {(isPodLead || isAdmin) && currentStep > 0 && (
-                  <Button onClick={toggleConsensusMode} variant="outline" className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4" />
-                    {viewMode === 'detail' ? 'Create Consensus' : 'View Annotator Form'}
-                  </Button>
+                <Button onClick={toggleConsensusMode} variant="outline" className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4" />
+                  {viewMode === 'detail' ? 'Create Consensus' : 'View Annotator Form'}
+                </Button>
               )}
             </div>
-
+          </div>
             {/* Task 1: Question Quality Assessment */}
             {currentStep === TaskId.QUESTION_QUALITY && viewMode === 'detail' && (
                 <TaskCard 

@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timezone, timedelta
+from operator import and_
 from fastapi import FastAPI, Depends, HTTPException, Query, Response, Body, status, Request, APIRouter, Path
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -2007,4 +2008,318 @@ async def get_all_pod_leads_breakdown(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get pod leads breakdown: {str(e)}"
+        )
+@app.post("/api/discussions/{discussion_id}/tasks/{task_id}/flag")
+async def flag_discussion_task(
+    discussion_id: str = Path(..., description="Discussion ID"),
+    task_id: int = Path(..., description="Task ID (1, 2, or 3)"),
+    flag_data: dict = Body(..., description="Flag reason"),
+    current_user: schemas.AuthorizedUser = Depends(jwt_auth_service.require_authentication),
+    db: Session = Depends(get_db)
+):
+    """Flag a task by changing its status to 'rework'."""
+    try:
+        reason = flag_data.get("reason", "").strip()
+        category = flag_data.get("category", "general")
+        flagged_from_task = flag_data.get("flagged_from_task", task_id)
+        
+        if not reason or len(reason) < 10:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Please provide a detailed reason (minimum 10 characters)"
+            )
+        
+        if task_id not in [1, 2, 3]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="task_id must be 1, 2, or 3"
+            )
+        
+        # Check if discussion exists
+        discussion = db.query(models.Discussion).filter(
+            models.Discussion.id == discussion_id
+        ).first()
+        if not discussion:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Discussion not found"
+            )
+        
+        # Update status to 'rework' in existing table
+        result = db.execute(
+            models.discussion_task_association.update().where(
+                and_(
+                    models.discussion_task_association.c.discussion_id == discussion_id,
+                    models.discussion_task_association.c.task_number == task_id
+                )
+            ).values(status='rework')
+        )
+        
+        # If task association doesn't exist, create it
+        if result.rowcount == 0:
+            db.execute(
+                models.discussion_task_association.insert().values(
+                    discussion_id=discussion_id,
+                    task_number=task_id,
+                    status='rework',
+                    annotators=0
+                )
+            )
+        
+        db.commit()
+        
+        # Enhanced logging
+        log_message = f"Task {task_id} flagged for rework by {current_user.email}"
+        if flagged_from_task != task_id:
+            log_message += f" (discovered while working on Task {flagged_from_task})"
+        log_message += f": [{category}] {reason}"
+        logger.info(log_message)
+        
+        return {
+            "success": True,
+            "message": f"Task {task_id} flagged for rework. Status updated.",
+            "discussion_id": discussion_id,
+            "task_id": task_id,
+            "new_status": "rework",
+            "flagged_by": current_user.email,
+            "reason": reason,
+            "category": category,
+            "upstream_flag": flagged_from_task != task_id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error flagging task: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to flag task"
+        )
+
+
+@app.put("/api/admin/discussions/{discussion_id}/tasks/{task_id}/status")
+async def update_task_status_simple(
+    discussion_id: str = Path(..., description="Discussion ID"),
+    task_id: int = Path(..., description="Task ID"),
+    status_data: dict = Body(..., description="New status"),
+    admin_user: schemas.AuthorizedUser = Depends(jwt_auth_service.get_admin),
+    db: Session = Depends(get_db)
+):
+    """Update task status in existing system."""
+    try:
+        new_status = status_data.get("status")
+        
+        valid_statuses = ['locked', 'unlocked', 'completed', 'rework', 'blocked', 'ready_for_next']
+        
+        if not new_status or new_status not in valid_statuses:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+            )
+        
+        if task_id not in [1, 2, 3]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="task_id must be 1, 2, or 3"
+            )
+        
+        # Get current status
+        current_status_result = db.execute(
+            models.discussion_task_association.select().where(
+                and_(
+                    models.discussion_task_association.c.discussion_id == discussion_id,
+                    models.discussion_task_association.c.task_number == task_id
+                )
+            )
+        ).first()
+        
+        old_status = current_status_result.status if current_status_result else "none"
+        
+        # Update status
+        result = db.execute(
+            models.discussion_task_association.update().where(
+                and_(
+                    models.discussion_task_association.c.discussion_id == discussion_id,
+                    models.discussion_task_association.c.task_number == task_id
+                )
+            ).values(status=new_status)
+        )
+        
+        # Create if doesn't exist
+        if result.rowcount == 0:
+            db.execute(
+                models.discussion_task_association.insert().values(
+                    discussion_id=discussion_id,
+                    task_number=task_id,
+                    status=new_status,
+                    annotators=0
+                )
+            )
+            old_status = "none"
+        
+        # Auto-unlock next task if ready_for_next
+        auto_unlocked = False
+        if new_status == 'ready_for_next' and task_id < 3:
+            next_task_id = task_id + 1
+            
+            # Unlock next task if locked
+            db.execute(
+                models.discussion_task_association.update().where(
+                    and_(
+                        models.discussion_task_association.c.discussion_id == discussion_id,
+                        models.discussion_task_association.c.task_number == next_task_id,
+                        models.discussion_task_association.c.status == 'locked'
+                    )
+                ).values(status='unlocked')
+            )
+            
+            # Create next task if doesn't exist
+            next_task_exists = db.execute(
+                models.discussion_task_association.select().where(
+                    and_(
+                        models.discussion_task_association.c.discussion_id == discussion_id,
+                        models.discussion_task_association.c.task_number == next_task_id
+                    )
+                )
+            ).first()
+            
+            if not next_task_exists:
+                db.execute(
+                    models.discussion_task_association.insert().values(
+                        discussion_id=discussion_id,
+                        task_number=next_task_id,
+                        status='unlocked',
+                        annotators=0
+                    )
+                )
+            
+            auto_unlocked = True
+        
+        db.commit()
+        
+        logger.info(f"Task {task_id} status updated from '{old_status}' to '{new_status}' by {admin_user.email}")
+        
+        return {
+            "success": True,
+            "message": f"Task {task_id} status updated to {new_status}",
+            "discussion_id": discussion_id,
+            "task_id": task_id,
+            "old_status": old_status,
+            "new_status": new_status,
+            "updated_by": admin_user.email,
+            "auto_unlocked_next": auto_unlocked
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating task status: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update task status"
+        )
+
+
+@app.get("/api/github/latest-commit")
+async def get_latest_commit_before_discussion(
+    repo_url: str = Query(..., description="GitHub repository URL"),
+    discussion_date: str = Query(..., description="Discussion creation date in ISO format"),
+    current_user: schemas.AuthorizedUser = Depends(jwt_auth_service.require_authentication)
+):
+    """Find the latest commit just before the discussion was created."""
+    try:
+        import re
+        import requests
+        from datetime import datetime
+        
+        # Parse GitHub URL
+        github_pattern = r'github\.com/([^/]+)/([^/]+)'
+        match = re.search(github_pattern, repo_url)
+        if not match:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid GitHub repository URL"
+            )
+        
+        owner, repo = match.groups()
+        repo = repo.replace('.git', '')
+        
+        # Parse discussion date
+        try:
+            discussion_dt = datetime.fromisoformat(discussion_date.replace('Z', '+00:00'))
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid date format. Use ISO format"
+            )
+        
+        # Get commits until discussion date
+        commits_url = f"https://api.github.com/repos/{owner}/{repo}/commits"
+        params = {
+            'until': discussion_dt.isoformat(),
+            'per_page': 1
+        }
+        
+        response = requests.get(commits_url, params=params, timeout=10)
+        
+        if response.status_code == 404:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Repository not found"
+            )
+        elif response.status_code == 403:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="GitHub API rate limit exceeded"
+            )
+        elif not response.ok:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"GitHub API error: {response.status_code}"
+            )
+        
+        commits_data = response.json()
+        
+        if not commits_data:
+            return {
+                'success': True,
+                'repository': f"{owner}/{repo}",
+                'discussion_date': discussion_date,
+                'latest_commit': None,
+                'message': 'No commits found before discussion date'
+            }
+        
+        # Get the latest commit
+        latest_commit = commits_data[0]
+        commit_date = datetime.fromisoformat(latest_commit['commit']['author']['date'].replace('Z', '+00:00'))
+        hours_diff = (discussion_dt - commit_date).total_seconds() / 3600
+        
+        commit_info = {
+            'sha': latest_commit['sha'],
+            'short_sha': latest_commit['sha'][:7],
+            'message': latest_commit['commit']['message'].split('\n')[0],
+            'author': {
+                'name': latest_commit['commit']['author']['name'],
+                'date': latest_commit['commit']['author']['date']
+            },
+            'url': latest_commit['html_url'],
+            'hours_before_discussion': round(hours_diff, 1)
+        }
+        
+        return {
+            'success': True,
+            'repository': f"{owner}/{repo}",
+            'discussion_date': discussion_date,
+            'latest_commit': commit_info
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error finding latest commit: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch latest commit"
         )
