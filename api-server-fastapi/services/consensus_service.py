@@ -108,11 +108,19 @@ def create_or_update_consensus_annotation(
     there can only be one consensus per discussion-task combination.
     """
     # Find existing consensus annotation based on discussion_id and task_id only
+
+    task_assoc = db.query(models.discussion_task_association).filter(
+        models.discussion_task_association.c.discussion_id == consensus_input.discussion_id,
+        models.discussion_task_association.c.task_id == consensus_input.task_id
+    ).first()
+    if task_assoc and task_assoc.status == 'rework':
+        raise ValueError(f"Cannot create consensus for task {consensus_input.task_id} - task is marked for rework")
+    
+    
     db_annotation = db.query(models.ConsensusAnnotation).filter(
         models.ConsensusAnnotation.discussion_id == consensus_input.discussion_id,
         models.ConsensusAnnotation.task_id == consensus_input.task_id
     ).first()
-
     current_time = datetime.utcnow()
     iso_current_time = current_time.isoformat()
 
@@ -255,6 +263,7 @@ def _should_task_be_completed(db: Session, discussion_id: str, task_id: int, con
 def _update_task_statuses_after_consensus(db: Session, discussion_id: str, completed_task_id: int, consensus_data: dict):
     """
     Enhanced task status update logic that considers true/false field criteria.
+    Only marks tasks as 'completed' when ALL three tasks have consensus created.
     """
     import logging
     logger = logging.getLogger(__name__)
@@ -265,26 +274,59 @@ def _update_task_statuses_after_consensus(db: Session, discussion_id: str, compl
         # Import here to avoid circular imports
         from services import discussions_service
         
-        # 1. Check if the current task should actually be marked as completed
+        # 1. Check if the current task should actually be marked as consensus_created
         should_complete = _should_task_be_completed(db, discussion_id, completed_task_id, consensus_data)
         
         if should_complete:
-            # Mark as completed and unlock next task
-            logger.info(f"Task {completed_task_id} meets completion criteria - marking as completed")
+            # Mark as consensus_created (not completed yet)
+            logger.info(f"Task {completed_task_id} meets completion criteria - marking as consensus_created")
             discussions_service.update_task_status_enhanced(
-                db, discussion_id, completed_task_id, "completed", "consensus_system"
+                db, discussion_id, completed_task_id, "consensus_created", "consensus_system"
             )
         else:
-            # Consensus exists but doesn't meet criteria
+            # Consensus exists but doesn't meet criteria - keep as consensus_created but with note
             logger.info(f"Task {completed_task_id} consensus exists but criteria not met - marking as consensus_created")
             discussions_service.update_task_status_enhanced(
                 db, discussion_id, completed_task_id, "consensus_created", "consensus_system"
             )
         
+        # 2. Check if ALL three tasks now have consensus_created status
+        all_tasks_have_consensus = _check_all_tasks_have_consensus(db, discussion_id)
+        
+        if all_tasks_have_consensus:
+            logger.info(f"All tasks for discussion {discussion_id} have consensus - marking all as completed")
+            # Mark all three tasks as completed (this overwrites the consensus_created status)
+            for task_id in [1, 2, 3]:
+                discussions_service.update_task_status_enhanced(
+                    db, discussion_id, task_id, "completed", "consensus_system"
+                )
+        
         logger.info(f"Successfully updated task statuses after consensus evaluation")
         
     except Exception as e:
         logger.error(f"Error updating task statuses after consensus: {str(e)}")
+
+
+def _check_all_tasks_have_consensus(db: Session, discussion_id: str) -> bool:
+    """
+    Check if all three tasks (1, 2, 3) have consensus annotations created.
+    """
+    try:
+        for task_id in [1, 2, 3]:
+            consensus = db.query(models.ConsensusAnnotation).filter(
+                models.ConsensusAnnotation.discussion_id == discussion_id,
+                models.ConsensusAnnotation.task_id == task_id
+            ).first()
+            
+            if not consensus:
+                return False
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error checking consensus status for all tasks: {str(e)}")
+        return False
+    
 
 def _get_task_completion_status(consensus_data: dict, task_id: int) -> dict:
     """

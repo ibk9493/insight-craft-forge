@@ -39,9 +39,34 @@ export interface ApiError {
   message: string;
   status?: number;
 }
-
+// This would work just fine too:
+export const parseTaskStatus = (statusData) => {
+  if (!statusData) return { status: 'locked' };
+  
+  if (typeof statusData === 'string' && statusData.startsWith('{')) {
+    try {
+      return JSON.parse(statusData);
+    } catch (error) {
+      console.warn('Failed to parse status JSON:', statusData);
+      return { status: statusData };
+    }
+  }
+  
+  return { status: statusData };
+};
 // Task status types
-export type TaskStatus = 'locked' | 'unlocked' | 'completed' | 'rework' | 'blocked' | 'ready_for_next';
+export type TaskStatus = 
+  | 'locked' 
+  | 'unlocked' 
+  | 'completed' 
+  | 'rework' 
+  | 'blocked' 
+  | 'ready_for_next'
+  | 'ready_for_consensus'  // When enough annotations are collected
+  | 'consensus_created'    // After consensus process is complete
+  | 'general'
+  | 'flagged';
+
 export type UserRole = 'annotator' | 'pod_lead' | 'admin';
 
 // Task state interface

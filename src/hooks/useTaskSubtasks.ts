@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { SubTask, SubTaskStatus, SupportingDoc } from '@/components/dashboard/TaskCard';
 import { toast } from 'sonner';
 import { validateTask } from '@/utils/validation';
+import { parseTaskStatus } from '@/services/api';
 
 // Clone a subtask array for creating new sections
 const cloneSubtasks = (subtasks: SubTask[]): SubTask[] => {
@@ -487,7 +488,7 @@ const [task3SubTasks, setTask3SubTasks] = useState<SubTask[]>([
           imageLinks: imageLinks !== undefined ? imageLinks : task.imageLinks,
           weights: weights !== undefined ? weights : task.weights,
           docDownloadLink: docDownloadLink !== undefined ? docDownloadLink : task.docDownloadLink,
-          status: (selectedOption || (textValue !== undefined) || (textValues !== undefined) || (supportingDocs !== undefined) || (imageLinks !== undefined)) ? 'completed' as SubTaskStatus : task.status
+          status: (selectedOption || (textValue !== undefined) || (textValues !== undefined) || (supportingDocs !== undefined) || (imageLinks !== undefined)) ? 'completed' as SubTaskStatus : parseTaskStatus(task.status).status
         };
         
         // Validate the updated task

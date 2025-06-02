@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { parseTaskStatus } from '@/services/api';
 
 export type SubTaskStatus = 'pending' | 'completed' | 'failed' | 'na';
 
@@ -161,7 +162,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
 
   const getProgressPercentage = () => {
     if (subTasks.length === 0) return 0;
-    const completedCount = subTasks.filter(task => task.status === 'completed' || task.status === 'na').length;
+    const completedCount = subTasks.filter(task => parseTaskStatus(task.status).status === 'completed' || parseTaskStatus(task.status).status === 'na').length;
     return Math.round((completedCount / subTasks.length) * 100);
   };
 
@@ -271,7 +272,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
       {tasks.map(task => (
           <div key={task.id + (sectionIndex !== undefined ? `-section-${sectionIndex}` : '')} className="bg-white border rounded-md p-3">
             <div className="flex items-center mb-2">
-              {getStatusIcon(task.status)}
+              {getStatusIcon(parseTaskStatus(task.status).status)}
               <span className="ml-2 font-medium text-sm">{task.title}</span>
             </div>
             {task.description && <p className="text-gray-500 text-xs mb-2">{task.description}</p>}
@@ -710,7 +711,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
         <div className="px-4 pb-2">
           <div className="flex items-center justify-between mb-1">
             <span className="text-xs text-gray-500">{progressPercentage}% complete</span>
-            <span className="text-xs text-gray-500">{subTasks.filter(task => task.status === 'completed' || task.status === 'na').length}/{subTasks.length} tasks</span>
+            <span className="text-xs text-gray-500">{subTasks.filter(task => parseTaskStatus(task.status).status === 'completed' || parseTaskStatus(task.status).status === 'na').length}/{subTasks.length} tasks</span>
           </div>
           <Progress value={progressPercentage} className="h-2" />
         </div>

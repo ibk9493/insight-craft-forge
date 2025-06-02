@@ -127,7 +127,6 @@ def _get_existing_annotation(
     except exc.SQLAlchemyError as e:
         logger.error(f"Database error in _get_existing_annotation: {str(e)}")
         raise DatabaseError(f"Failed to retrieve existing annotation: {str(e)}")
-
 def _increment_task_annotators(
     db: Session, 
     discussion_id: str, 
@@ -143,6 +142,18 @@ def _increment_task_annotators(
         ).first()
         
         if task_assoc:
+            new_annotator_count = task_assoc.annotators + 1
+            
+            # Check if we need to update status to ready_for_consensus
+            new_status = task_assoc.status
+            if task_id == 1 and new_annotator_count >= 3:
+                new_status = 'ready_for_consensus'
+            elif task_id == 2 and new_annotator_count >= 3:
+                new_status = 'ready_for_consensus'
+            elif task_id == 3 and new_annotator_count >= 5:
+                new_status = 'ready_for_consensus'
+            
+
             db.execute(
                 models.discussion_task_association.update().where(
                     and_(
@@ -150,10 +161,12 @@ def _increment_task_annotators(
                         models.discussion_task_association.c.task_number == task_id
                     )
                 ).values(
-                    annotators=task_assoc.annotators + 1
+                    annotators=new_annotator_count,
+                    status=new_status
                 )
             )
-            logger.info(f"Incremented annotators count for discussion {discussion_id}, task {task_id}")
+            logger.info(f"Updated task {task_id} annotators to {new_annotator_count}, status: {new_status}")
+            
     except exc.SQLAlchemyError as e:
         logger.error(f"Database error in _increment_task_annotators: {str(e)}")
         raise DatabaseError(f"Failed to update task annotators count: {str(e)}")
@@ -301,8 +314,13 @@ def override_annotation(db: Session, annotation: schemas.AnnotationOverride) -> 
                 db.add(existing)
                 logger.info(f"Created new annotation via override for discussion {annotation.discussion_id}, "
                            f"user {annotation.user_id}, task {annotation.task_id}")
+                
+                # ADD THIS LINE: Update discussion task annotators count
+                _increment_task_annotators(db, annotation.discussion_id, annotation.task_id)
             
             db.flush()
+        
+        
         
         # Refresh outside the transaction to avoid holding locks
         db.refresh(existing)
@@ -390,6 +408,9 @@ def pod_lead_override_annotation(
                 logger.info(f"Pod lead {pod_lead_id} created new annotation for "
                            f"discussion {annotation_override.discussion_id}, "
                            f"user {annotation_override.annotator_id}, task {annotation_override.task_id}")
+                
+                # ADD THIS LINE: Update discussion task annotators count
+                _increment_task_annotators(db, annotation_override.discussion_id, annotation_override.task_id)
             else:
                 # Update existing annotation
                 existing.data = override_data

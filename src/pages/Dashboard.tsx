@@ -20,7 +20,7 @@ import { useAppDispatch } from '@/hooks';
 import { openModal } from '@/store/discussionModalSlice';
 import { toast } from 'sonner';
 import { MOCK_USERS_DATA } from '@/contexts/UserContext';
-import { api } from '@/services/api';
+import { api, parseTaskStatus } from '@/services/api';
 import { Textarea } from '@/components/ui/textarea';
 import { validateForm, validateTask } from '@/utils/validation';
 import TaskFlagModal from '@/components/discussions/TaskFlagModal';

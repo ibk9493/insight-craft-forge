@@ -53,6 +53,16 @@ const FLAG_CATEGORIES = [
     icon: AlertTriangle,
     allowedRoles: ['annotator', 'pod_lead', 'admin'],
     upstreamFlag: true
+  },
+  ,
+  {
+    id: 'general',
+    label: 'Other Issue',
+    description: 'General issue that doesn\'t fit other categories',
+    color: 'bg-gray-100 text-gray-800',
+    icon: Flag,
+    allowedRoles: ['annotator', 'pod_lead', 'admin'],
+    upstreamFlag: false
   }
 ];
 
@@ -352,7 +362,7 @@ const TaskFlagModal: React.FC<TaskFlagModalProps> = ({
               <div className="text-sm text-amber-800">
                 <div className="font-medium mb-1">Impact of flagging:</div>
                 <ul className="text-xs space-y-1 list-disc list-inside">
-                  <li>Task {flaggedTaskId} will be marked for rework</li>
+                <li>Task {flaggedTaskId} will be marked for {selectedCategory === 'quality_issue' ? 'rework' : 'review'}</li>
                   {flaggedTaskId !== taskId && (
                     <li>This may block progression to downstream tasks</li>
                   )}

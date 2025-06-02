@@ -1212,8 +1212,13 @@ async def create_or_update_consensus_annotation_endpoint(
         db: Session = Depends(get_db)
 ):
     """Create or update a consensus annotation."""
-    result = consensus_service.create_or_update_consensus_annotation(db, consensus_data, current_user.email)
-    return result
+    try:
+        result = consensus_service.create_or_update_consensus_annotation(db, consensus_data, current_user.email)
+        return result
+    except ValueError as e:
+        if "marked for rework" in str(e):
+            raise HTTPException(status_code=400, detail=str(e))
+        raise
 
 # Calculate consensus (operates on regular annotations)
 @app.get("/api/consensus/{discussion_id}/{task_id}/calculate",
@@ -2044,49 +2049,37 @@ async def flag_discussion_task(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Discussion not found"
             )
-        if category == "quality_issue":
-        # Update status to 'rework' in existing table
-            result = db.execute(
-                models.discussion_task_association.update().where(
-                    and_(
-                        models.discussion_task_association.c.discussion_id == discussion_id,
-                        models.discussion_task_association.c.task_number == task_id
-                    )
-                ).values(status='rework')
+        # Determine status based on category
+        new_status = 'rework' if category == "quality_issue" else 'flagged'
+        
+        result = db.execute(
+            models.discussion_task_association.update().where(
+                and_(
+                    models.discussion_task_association.c.discussion_id == discussion_id,
+                    models.discussion_task_association.c.task_number == task_id
+                )
+            )).values(
+            status=json.dumps({
+                "status": new_status,
+                "reason": reason,
+                "category": category,
+                "flagged_by": current_user.email,
+                "flagged_at": datetime.utcnow().isoformat()
+            }) if new_status in ['rework', 'flagged'] else new_status
+        )
+    
+        # If task association doesn't exist, create it
+        if result.rowcount == 0:
+            db.execute(
+                models.discussion_task_association.insert().values(
+                    discussion_id=discussion_id,
+                    task_number=task_id,
+                    status=new_status,
+                    annotators=0
+                )
             )
         
-            # If task association doesn't exist, create it
-            if result.rowcount == 0:
-                db.execute(
-                    models.discussion_task_association.insert().values(
-                        discussion_id=discussion_id,
-                        task_number=task_id,
-                        status='rework',
-                        annotators=0
-                    )
-                )
-            
-            db.commit()
-        else:
-            result = db.execute(
-                models.discussion_task_association.update().where(
-                    and_(
-                        models.discussion_task_association.c.discussion_id == discussion_id,
-                        models.discussion_task_association.c.task_number == task_id
-                    )
-                ).values(status='flagged')
-            )
-        
-            # If task association doesn't exist, create it
-            if result.rowcount == 0:
-                db.execute(
-                    models.discussion_task_association.insert().values(
-                        discussion_id=discussion_id,
-                        task_number=task_id,
-                        status='flagged',
-                        annotators=0
-                    )
-                )
+        db.commit()
             
         # Enhanced logging
         log_message = f"Task {task_id} flagged for rework by {current_user.email}"
@@ -2100,7 +2093,7 @@ async def flag_discussion_task(
             "message": f"Task {task_id} flagged for rework. Status updated.",
             "discussion_id": discussion_id,
             "task_id": task_id,
-            "new_status": "rework",
+            "new_status": new_status,
             "flagged_by": current_user.email,
             "reason": reason,
             "category": category,
@@ -2115,130 +2108,6 @@ async def flag_discussion_task(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to flag task"
-        )
-
-
-@app.put("/api/admin/discussions/{discussion_id}/tasks/{task_id}/status")
-async def update_task_status_simple(
-    discussion_id: str = Path(..., description="Discussion ID"),
-    task_id: int = Path(..., description="Task ID"),
-    status_data: dict = Body(..., description="New status"),
-    admin_user: schemas.AuthorizedUser = Depends(jwt_auth_service.get_admin),
-    db: Session = Depends(get_db)
-):
-    """Update task status in existing system."""
-    try:
-        new_status = status_data.get("status")
-        
-        valid_statuses = ['locked', 'unlocked', 'completed', 'rework', 'blocked', 'ready_for_next', 'flagged','in_progress', 'ready_for_consensus', 'consensus_created']
-        
-        if not new_status or new_status not in valid_statuses:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
-            )
-        
-        if task_id not in [1, 2, 3]:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="task_id must be 1, 2, or 3"
-            )
-        
-        # Get current status
-        current_status_result = db.execute(
-            models.discussion_task_association.select().where(
-                and_(
-                    models.discussion_task_association.c.discussion_id == discussion_id,
-                    models.discussion_task_association.c.task_number == task_id
-                )
-            )
-        ).first()
-        
-        old_status = current_status_result.status if current_status_result else "none"
-        
-        # Update status
-        result = db.execute(
-            models.discussion_task_association.update().where(
-                and_(
-                    models.discussion_task_association.c.discussion_id == discussion_id,
-                    models.discussion_task_association.c.task_number == task_id
-                )
-            ).values(status=new_status)
-        )
-        
-        # Create if doesn't exist
-        if result.rowcount == 0:
-            db.execute(
-                models.discussion_task_association.insert().values(
-                    discussion_id=discussion_id,
-                    task_number=task_id,
-                    status=new_status,
-                    annotators=0
-                )
-            )
-            old_status = "none"
-        
-        # Auto-unlock next task if ready_for_next
-        auto_unlocked = False
-        if new_status == 'ready_for_next' and task_id < 3:
-            next_task_id = task_id + 1
-            
-            # Unlock next task if locked
-            db.execute(
-                models.discussion_task_association.update().where(
-                    and_(
-                        models.discussion_task_association.c.discussion_id == discussion_id,
-                        models.discussion_task_association.c.task_number == next_task_id,
-                        models.discussion_task_association.c.status == 'locked'
-                    )
-                ).values(status='unlocked')
-            )
-            
-            # Create next task if doesn't exist
-            next_task_exists = db.execute(
-                models.discussion_task_association.select().where(
-                    and_(
-                        models.discussion_task_association.c.discussion_id == discussion_id,
-                        models.discussion_task_association.c.task_number == next_task_id
-                    )
-                )
-            ).first()
-            
-            if not next_task_exists:
-                db.execute(
-                    models.discussion_task_association.insert().values(
-                        discussion_id=discussion_id,
-                        task_number=next_task_id,
-                        status='unlocked',
-                        annotators=0
-                    )
-                )
-            
-            auto_unlocked = True
-        
-        db.commit()
-        
-        logger.info(f"Task {task_id} status updated from '{old_status}' to '{new_status}' by {admin_user.email}")
-        
-        return {
-            "success": True,
-            "message": f"Task {task_id} status updated to {new_status}",
-            "discussion_id": discussion_id,
-            "task_id": task_id,
-            "old_status": old_status,
-            "new_status": new_status,
-            "updated_by": admin_user.email,
-            "auto_unlocked_next": auto_unlocked
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Error updating task status: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update task status"
         )
 
 
@@ -2510,7 +2379,7 @@ async def flag_task_enhanced(
                 detail="task_id must be 1, 2, or 3"
             )
         
-        valid_categories = ['workflow_misrouting', 'quality_issue', 'consensus_mismatch', 'data_error']
+        valid_categories = ['workflow_misrouting', 'quality_issue', 'consensus_mismatch', 'data_error', 'general']
         if category not in valid_categories:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -2542,9 +2411,52 @@ async def flag_task_enhanced(
         else:
             new_status = 'flagged'
         
-        # Update task status using existing function
-        result = discussions_service.update_task_status(
-            db, discussion_id, flagged_task_id, new_status
+
+        # Create the flag details object
+        flag_details = {
+            "status": new_status,
+            "reason": reason,
+            "category": category,
+            "flagged_by": current_user.email,
+            "flagged_by_role": flagged_by_role,
+            "flagged_from_task": flagged_from_task,
+            "workflow_scenario": workflow_scenario,
+            "flagged_at": datetime.utcnow().isoformat()
+        }
+        
+        # Store as JSON for flagged tasks, simple string for others
+        status_to_store = json.dumps(flag_details) if new_status in ['rework', 'flagged'] else new_status
+        
+ # Update task status directly
+        update_result = db.execute(
+            models.discussion_task_association.update().where(
+                and_(
+                    models.discussion_task_association.c.discussion_id == discussion_id,
+                    models.discussion_task_association.c.task_number == flagged_task_id
+                )
+            ).values(status=status_to_store)
+        )
+        
+        # Create task association if it doesn't exist
+        if update_result.rowcount == 0:
+            db.execute(
+                models.discussion_task_association.insert().values(
+                    discussion_id=discussion_id,
+                    task_number=flagged_task_id,
+                    status=status_to_store,
+                    annotators=0
+                )
+            )
+        
+        db.commit()
+        
+        # Get updated discussion for response
+        updated_discussion = discussions_service.get_discussion_by_id(db, discussion_id)
+        
+        task_result = schemas.TaskManagementResult(
+            success=True,
+            message=f"Task {flagged_task_id} flagged successfully",
+            discussion=updated_discussion
         )
         
         # Create flag record for logging
@@ -2572,7 +2484,7 @@ async def flag_task_enhanced(
             "success": True,
             "message": f"Task {flagged_task_id} flagged successfully",
             "flag_record": flag_record,
-            "task_update_result": result
+            "task_update_result": task_result
         }
         
     except HTTPException:
@@ -2598,11 +2510,14 @@ def _handle_workflow_misrouting(
     """
     if workflow_scenario == 'stop_at_task1':
         # Mark task 1 for rework, lock tasks 2 and 3
+        discussions_service.update_task_status_enhanced(db, discussion_id, 3, 'locked')  
+        discussions_service.update_task_status_enhanced(db, discussion_id, 2, 'locked')  
         discussions_service.update_task_status_enhanced(db, discussion_id, 1, 'rework')
         return 1
         
     elif workflow_scenario == 'stop_at_task2':
         # Mark task 2 for rework, lock task 3
+        discussions_service.update_task_status_enhanced(db, discussion_id, 3, 'locked')  
         discussions_service.update_task_status_enhanced(db, discussion_id, 2, 'rework')
         return 2
         

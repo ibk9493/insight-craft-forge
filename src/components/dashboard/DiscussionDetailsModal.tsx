@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Github, ExternalLink, Code, Calendar, Box, Hash, FileCode, GitBranch } from 'lucide-react';
-import { Discussion } from '@/services/api/types';
+import { Discussion, parseTaskStatus } from '@/services/api';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -76,9 +76,9 @@ const DiscussionDetailsModal: React.FC<DiscussionDetailsModalProps> = ({
     
     if (discussion.tasks) {
       Object.values(discussion.tasks).forEach(task => {
-        if (task.status === 'completed') statuses.completed++;
-        else if (task.status === 'unlocked') statuses.unlocked++;
-        else if (task.status === 'locked') statuses.locked++;
+        if (parseTaskStatus(task.status).status === 'completed') statuses.completed++;
+        else if (parseTaskStatus(task.status).status === 'unlocked') statuses.unlocked++;
+        else if (parseTaskStatus(task.status).status === 'locked') statuses.locked++;
       });
     }
     
@@ -202,14 +202,14 @@ const DiscussionDetailsModal: React.FC<DiscussionDetailsModalProps> = ({
                         <div className="flex justify-between text-xs">
                           <span>Status:</span>
                           <Badge 
-                            variant={task.status === 'completed' ? 'default' : 'outline'} 
+                            variant={parseTaskStatus(task.status).status === 'completed' ? 'default' : 'outline'} 
                             className={cn(
                               "text-[10px] h-5",
-                              task.status === 'completed' && "bg-green-500",
-                              task.status === 'unlocked' && "border-blue-500 text-blue-500"
+                              parseTaskStatus(task.status).status === 'completed' && "bg-green-500",
+                              parseTaskStatus(task.status).status === 'unlocked' && "border-blue-500 text-blue-500"
                             )}
                           >
-                            {task.status.charAt(0).toUpperCase() + task.status.slice(1)}
+                            {parseTaskStatus(task.status).status.charAt(0).toUpperCase() + parseTaskStatus(task.status).status.slice(1)}
                           </Badge>
                         </div>
                         <div className="flex justify-between text-xs">

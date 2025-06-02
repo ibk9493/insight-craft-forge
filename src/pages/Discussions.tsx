@@ -16,7 +16,7 @@ import { openModal } from '@/store/discussionModalSlice';
 import { fetchDiscussions, setPaginationParams } from '@/store/discussionsSlice';
 import DiscussionFilters from '@/components/discussions/DiscussionFilters';
 import { api } from '@/services/api/endpoints';
-import { Discussion, TaskState, TaskStatus } from '@/services/api';
+import { Discussion, parseTaskStatus, TaskState, TaskStatus } from '@/services/api';
 
 interface EnhancedDiscussion extends Discussion {
   tasks: {
@@ -314,6 +314,20 @@ const handlePerPageChange = useCallback((newPerPage: number) => {
     window.open(url, '_blank', 'noopener,noreferrer');
   }, []);
 
+
+  
+  const getCategoryLabel = useCallback((category) => {
+    const categoryMap = {
+      'workflow_misrouting': 'Wrong Task Stage',
+      'quality_issue': 'Quality Issue',
+      'consensus_mismatch': 'Consensus Problem',
+      'data_error': 'Data Error',
+      'general': 'Other Issue'
+    };
+    return categoryMap[category] || category;
+  }, []);
+
+
   const getTaskStatusClass = useCallback((status: TaskStatus, userAnnotated?: boolean) => {
     // If user has annotated, show that first
     if (userAnnotated) return 'bg-purple-100 text-purple-800';
@@ -335,6 +349,12 @@ const handlePerPageChange = useCallback((newPerPage: number) => {
         return 'bg-red-100 text-red-800';
       case 'ready_for_next':
         return 'bg-purple-100 text-purple-800';
+      case 'ready_for_consensus':
+        return 'bg-amber-100 text-amber-800';
+      case 'consensus_created':
+        return 'bg-indigo-100 text-indigo-800';
+      case 'flagged':
+        return 'bg-yellow-100 text-yellow-800';
       
       default:
         return 'bg-gray-100 text-gray-800';
@@ -346,40 +366,71 @@ const getTaskButtonState = useCallback((discussion: EnhancedDiscussion, taskNumb
   const userAnnotated = task.userAnnotated;
   const required = taskNumber === 3 ? 5 : 3;
   const maxed = task.annotators >= required && !isPodLead && !isAdmin && !userAnnotated;
-  if (task.status === 'rework') {
+  
+  // Handle special statuses first
+  if (parseTaskStatus(task.status).status === 'rework') {
     return {
       isEnabled: isPodLead || isAdmin,
       text: `Needs Rework (${task.annotators}/${required})`
     };
   }
   
-  if (task.status === 'blocked') {
+  if (parseTaskStatus(task.status).status === 'flagged') {
+    return {
+      isEnabled: isPodLead || isAdmin,
+      text: `Flagged for Review (${task.annotators}/${required})`
+    };
+  }
+  
+  if (parseTaskStatus(task.status).status === 'ready_for_consensus') {
+    return {
+      isEnabled: isPodLead || isAdmin,
+      text: `Ready for Consensus (${task.annotators}/${required})`
+    };
+  }
+
+  if (parseTaskStatus(task.status).status === 'blocked') {
     return {
       isEnabled: isPodLead || isAdmin,
       text: `Blocked - Contact Admin (${task.annotators}/${required})`
     };
   }
   
-  if (task.status === 'ready_for_next') {
+  if (parseTaskStatus(task.status).status === 'consensus_created') {
+    return {
+      isEnabled: isPodLead || isAdmin,
+      text: `Consensus Created (${task.annotators}/${required})`
+    };
+  }
+  
+  if (parseTaskStatus(task.status).status === 'ready_for_next') {
     return {
       isEnabled: isPodLead || isAdmin,
       text: `Ready for Next Task (${task.annotators}/${required})`
     };
   }
-  const isEnabled = (task.status !== 'locked' || isPodLead || isAdmin || userAnnotated) && !maxed;
 
-
+  // Standard enablement logic
+  const isEnabled = (parseTaskStatus(task.status).status !== 'locked' || isPodLead || isAdmin || userAnnotated) && !maxed;
 
   let text = '';
-  if (maxed) text = `Maximum Annotators Reached (${task.annotators}/${required})`;
-  else if (userAnnotated) text = `View Your Annotation (${task.annotators}/${required})`;
-  else if ((isPodLead || isAdmin) && task.status === 'completed') text = `Create Consensus (${task.annotators}/${required})`;
-  else if (task.status === 'completed') text = `View Results (${task.annotators}/${required})`;
-  else if (task.status === 'unlocked') text = `Start Task (${task.annotators}/${required})`;
-  else text = `Locked (${task.annotators}/${required})`;
+  if (maxed) {
+    text = `Maximum Annotators Reached (${task.annotators}/${required})`;
+  } else if (userAnnotated) {
+    text = `View Your Annotation (${task.annotators}/${required})`;
+  } else if ((isPodLead || isAdmin) && parseTaskStatus(task.status).status === 'completed') {
+    text = `Create Consensus (${task.annotators}/${required})`;
+  } else if (parseTaskStatus(task.status).status === 'completed') {
+    text = `View Results (${task.annotators}/${required})`;
+  } else if (parseTaskStatus(task.status).status === 'unlocked') {
+    text = `Start Task (${task.annotators}/${required})`;
+  } else {
+    text = `Locked (${task.annotators}/${required})`;
+  }
 
   return { isEnabled, text };
 }, [isPodLead, isAdmin]);
+
 
 const startTask = useCallback((discussionId: string, taskNumber: number) => {
   const discussion = discussions.find(d => d.id === discussionId);
@@ -390,19 +441,53 @@ const startTask = useCallback((discussionId: string, taskNumber: number) => {
   const annotationsCount = task.annotators;
   const required = taskNumber === 3 ? 5 : 3;
 
+  // Pod leads and admins can always access tasks
   if (isPodLead || isAdmin) {
     return navigate(`/dashboard?discussionId=${discussionId}&taskId=${taskNumber}&mode=podlead&timestamp=${Date.now()}`);
   }
-  if (task.status === 'locked' && !hasAnnotated) {
+
+  // Handle special status types for regular users
+  // Handle special status types for regular users
+  if (parseTaskStatus(task.status).status === 'rework') {
+    // Rework tasks should be accessible to regular annotators for re-annotation
+    // Show a special message indicating this is a rework
+    toast.info(`This task was flagged for rework. Please review updated guidelines before annotating.`);
+    // Continue to allow access (don't return early)
+  }
+  
+  if (parseTaskStatus(task.status).status === 'flagged') {
+    return toast.error(`Task ${taskNumber} is flagged and requires pod lead review.`);
+  }
+  
+  if (parseTaskStatus(task.status).status === 'blocked') {
+    return toast.error(`Task ${taskNumber} is blocked. Please contact an administrator.`);
+  }
+  
+  if (parseTaskStatus(task.status).status === 'ready_for_consensus') {
+    return toast.error(`Task ${taskNumber} is ready for consensus creation by a pod lead.`);
+  }
+  
+  if (parseTaskStatus(task.status).status === 'consensus_created') {
+    return toast.error(`Task ${taskNumber} consensus has been created. Contact a pod lead for next steps.`);
+  }
+  
+  if (parseTaskStatus(task.status).status === 'ready_for_next') {
+    return toast.error(`Task ${taskNumber} is complete and ready for next task unlock by a pod lead.`);
+  }
+
+  // Standard status checks
+  if (parseTaskStatus(task.status).status === 'locked' && !hasAnnotated) {
     return toast.error(`Task ${taskNumber} is currently locked.`);
   }
+  
   if (annotationsCount >= required && !hasAnnotated) {
     return toast.error(`This task already has the maximum number of annotators.`);
   }
+
+  // Allow access for unlocked tasks or if user has already annotated
   const mode = hasAnnotated ? 'edit' : 'new';
   navigate(`/dashboard?discussionId=${discussionId}&taskId=${taskNumber}&mode=${mode}&timestamp=${Date.now()}`);
 }, [user, discussions, getUserAnnotationStatus, isPodLead, isAdmin, navigate]);
-
 
 const getStatusLabel = useCallback((status: string, userAnnotated: boolean) => {
   if (userAnnotated) return 'Annotated';
@@ -413,6 +498,9 @@ const getStatusLabel = useCallback((status: string, userAnnotated: boolean) => {
     case 'completed': return 'Completed';
     case 'rework': return 'Needs Rework';
     case 'blocked': return 'Blocked';
+    case 'flagged': return 'Flagged';
+    case 'ready_for_consensus': return 'Ready for Consensus';
+    case 'consensus_created': return 'Consensus Created';   
     case 'ready_for_next': return 'Ready for Next';
     default: return status;
   }
@@ -632,13 +720,23 @@ const getStatusLabel = useCallback((status: string, userAnnotated: boolean) => {
                     <div className="border rounded-md p-4">
                       <div className="flex justify-between items-center mb-2">
                         <h3 className="font-medium">Task 1: Question Quality</h3>
-                        <span className={`text-xs px-2 py-1 rounded-full ${getTaskStatusClass(discussion.tasks.task1.status, discussion.tasks.task1.userAnnotated)}`}>
-                          {getStatusLabel(discussion.tasks.task1.status, discussion.tasks.task1.userAnnotated)}
+                        <span className={`text-xs px-2 py-1 rounded-full ${getTaskStatusClass(parseTaskStatus(discussion.tasks.task1.status).status, discussion.tasks.task1.userAnnotated)}`}>
+                          {getStatusLabel(parseTaskStatus(discussion.tasks.task1.status).status, discussion.tasks.task1.userAnnotated)}
                         </span>
                       </div>
                       <p className="text-xs text-gray-500 mb-4">
                         Evaluate question relevance, learning value, clarity, and image grounding.
                       </p>
+                      {parseTaskStatus(discussion.tasks.task1.status).status === 'rework' && (() => {
+                        const statusData = parseTaskStatus(discussion.tasks.task1.status);
+                        return statusData.reason ? (
+                          <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded text-xs">
+                            <div className="font-medium text-orange-800">Flagged: {getCategoryLabel(statusData.category)}</div>
+                            <div className="text-orange-700 mt-1">{statusData.reason.length > 80 ? `${statusData.reason.substring(0, 80)}...` : statusData.reason}</div>
+                            <div className="text-orange-600 mt-1">By: {statusData.flagged_by}</div>
+                          </div>
+                        ) : null;
+                      })()}
                       {discussion.tasks.task1.annotators >= 3 && !(isPodLead || isAdmin) && !discussion.tasks.task1.userAnnotated ? (
                         <div className="flex items-center justify-center space-x-2 text-amber-600 text-xs py-2">
                           <AlertCircle className="h-4 w-4" />
@@ -649,7 +747,12 @@ const getStatusLabel = useCallback((status: string, userAnnotated: boolean) => {
                           onClick={() => startTask(discussion.id, 1)}
                           disabled={!getTaskButtonState(discussion, 1).isEnabled}
                           className="w-full text-xs h-8"
-                          variant={discussion.tasks.task1.userAnnotated ? "secondary" : (discussion.tasks.task1.status === 'completed' ? "outline" : "default")}
+                          variant={
+                            discussion.tasks.task1.userAnnotated ? "secondary" :
+                            ['rework', 'flagged', 'blocked'].includes(parseTaskStatus(discussion.tasks.task1.status).status) ? "destructive" :
+                            ['ready_for_consensus', 'consensus_created'].includes(parseTaskStatus(discussion.tasks.task1.status).status) ? "outline" :
+                            parseTaskStatus(discussion.tasks.task1.status).status === 'completed' ? "outline" : "default"
+                          }
                         >
                           {getTaskButtonState(discussion, 1).text}
                         </Button>
@@ -660,13 +763,23 @@ const getStatusLabel = useCallback((status: string, userAnnotated: boolean) => {
                     <div className="border rounded-md p-4">
                       <div className="flex justify-between items-center mb-2">
                         <h3 className="font-medium">Task 2: Answer Quality</h3>
-                        <span className={`text-xs px-2 py-1 rounded-full ${getTaskStatusClass(discussion.tasks.task2.status, discussion.tasks.task2.userAnnotated)}`}>
-                          {getStatusLabel(discussion.tasks.task2.status, discussion.tasks.task2.userAnnotated)}
+                        <span className={`text-xs px-2 py-1 rounded-full ${getTaskStatusClass(parseTaskStatus(discussion.tasks.task2.status).status, discussion.tasks.task2.userAnnotated)}`}>
+                          {getStatusLabel(parseTaskStatus(discussion.tasks.task2.status).status, discussion.tasks.task2.userAnnotated)}
                         </span>
                       </div>
                       <p className="text-xs text-gray-500 mb-4">
                         Evaluate answer completeness, explanation, code execution.
                       </p>
+                      {parseTaskStatus(discussion.tasks.task2.status).status === 'rework' && (() => {
+                        const statusData = parseTaskStatus(discussion.tasks.task2.status);
+                        return statusData.reason ? (
+                          <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded text-xs">
+                            <div className="font-medium text-orange-800">Flagged: {getCategoryLabel(statusData.category)}</div>
+                            <div className="text-orange-700 mt-1">{statusData.reason.length > 80 ? `${statusData.reason.substring(0, 80)}...` : statusData.reason}</div>
+                            <div className="text-orange-600 mt-1">By: {statusData.flagged_by}</div>
+                          </div>
+                        ) : null;
+                      })()}
                       {discussion.tasks.task2.annotators >= 3 && !(isPodLead || isAdmin) && !discussion.tasks.task2.userAnnotated ? (
                         <div className="flex items-center justify-center space-x-2 text-amber-600 text-xs py-2">
                           <AlertCircle className="h-4 w-4" />
@@ -677,7 +790,12 @@ const getStatusLabel = useCallback((status: string, userAnnotated: boolean) => {
                           onClick={() => startTask(discussion.id, 2)}
                           disabled={!getTaskButtonState(discussion, 2).isEnabled}
                           className="w-full text-xs h-8"
-                          variant={discussion.tasks.task2.userAnnotated ? "secondary" : (discussion.tasks.task2.status === 'completed' ? "outline" : "default")}
+                          variant={
+                            discussion.tasks.task2.userAnnotated ? "secondary" :
+                            ['rework', 'flagged', 'blocked'].includes(parseTaskStatus(discussion.tasks.task2.status).status) ? "destructive" :
+                            ['ready_for_consensus', 'consensus_created'].includes(parseTaskStatus(discussion.tasks.task2.status).status) ? "outline" :
+                            parseTaskStatus(discussion.tasks.task2.status).status === 'completed' ? "outline" : "default"
+                          }
                         >
                           {getTaskButtonState(discussion, 2).text}
                         </Button>
@@ -688,13 +806,23 @@ const getStatusLabel = useCallback((status: string, userAnnotated: boolean) => {
                     <div className="border rounded-md p-4">
                       <div className="flex justify-between items-center mb-2">
                         <h3 className="font-medium">Task 3: Rewrite</h3>
-                        <span className={`text-xs px-2 py-1 rounded-full ${getTaskStatusClass(discussion.tasks.task3.status, discussion.tasks.task3.userAnnotated)}`}>
-                          {getStatusLabel(discussion.tasks.task3.status, discussion.tasks.task3.userAnnotated)}
+                        <span className={`text-xs px-2 py-1 rounded-full ${getTaskStatusClass(parseTaskStatus(discussion.tasks.task3.status).status, discussion.tasks.task3.userAnnotated)}`}>
+                          {getStatusLabel(parseTaskStatus(discussion.tasks.task3.status).status, discussion.tasks.task3.userAnnotated)}
                         </span>
                       </div>
                       <p className="text-xs text-gray-500 mb-4">
                         Rewrite question & answer, classify, provide supporting docs.
                       </p>
+                      {parseTaskStatus(discussion.tasks.task3.status).status === 'rework' && (() => {
+                        const statusData = parseTaskStatus(discussion.tasks.task3.status);
+                        return statusData.reason ? (
+                          <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded text-xs">
+                            <div className="font-medium text-orange-800">Flagged: {getCategoryLabel(statusData.category)}</div>
+                            <div className="text-orange-700 mt-1">{statusData.reason.length > 80 ? `${statusData.reason.substring(0, 80)}...` : statusData.reason}</div>
+                            <div className="text-orange-600 mt-1">By: {statusData.flagged_by}</div>
+                          </div>
+                        ) : null;
+                      })()}
                       {discussion.tasks.task3.annotators >= 5 && !(isPodLead || isAdmin) && !discussion.tasks.task3.userAnnotated ? (
                         <div className="flex items-center justify-center space-x-2 text-amber-600 text-xs py-2">
                           <AlertCircle className="h-4 w-4" />
@@ -705,7 +833,12 @@ const getStatusLabel = useCallback((status: string, userAnnotated: boolean) => {
                           onClick={() => startTask(discussion.id, 3)}
                           disabled={!getTaskButtonState(discussion, 3).isEnabled}
                           className="w-full text-xs h-8"
-                          variant={discussion.tasks.task3.userAnnotated ? "secondary" : (discussion.tasks.task3.status === 'completed' ? "outline" : "default")}
+                          variant={
+                            discussion.tasks.task3.userAnnotated ? "secondary" :
+                            ['rework', 'flagged', 'blocked'].includes(parseTaskStatus(discussion.tasks.task3.status).status) ? "destructive" :
+                            ['ready_for_consensus', 'consensus_created'].includes(parseTaskStatus(discussion.tasks.task3.status).status) ? "outline" :
+                            parseTaskStatus(discussion.tasks.task3.status).status === 'completed' ? "outline" : "default"
+                          }
                         >
                           {getTaskButtonState(discussion, 3).text}
                         </Button>
