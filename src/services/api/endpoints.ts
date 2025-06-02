@@ -420,17 +420,16 @@ taskFlags: {
   flagTask: (
     discussionId: string, 
     taskId: number, 
-    reason: string, 
-    category?: string,
-    flaggedFromTask?: number
+    flagData: {
+      reason: string;
+      category: string;
+      flagged_from_task: number;
+      workflow_scenario?: string;
+      flagged_by_role: string;
+    }
   ) => {
-    const payload = {
-      reason,
-      category: category || 'general',
-      flagged_from_task: flaggedFromTask || taskId,
-      actual_problem_task: taskId
-    };
-
+    console.log(`[TaskFlags] Flagging task ${taskId} for discussion ${discussionId}`);
+    
     return safeApiRequest<{
       success: boolean;
       message: string;
@@ -439,7 +438,17 @@ taskFlags: {
       new_status: string;
       flagged_by: string;
       reason: string;
-    }>(`/api/discussions/${encodeURIComponent(discussionId)}/tasks/${taskId}/flag`, 'POST', payload);
+      category: string;
+    }>(`/api/discussions/${encodeURIComponent(discussionId)}/tasks/${taskId}/flag-enhanced`, 'POST', flagData, undefined, {
+      success: false,
+      message: 'Failed to flag task',
+      discussion_id: discussionId,
+      task_id: taskId,
+      new_status: 'failed',
+      flagged_by: '',
+      reason: flagData.reason,
+      category: flagData.category
+    });
   },
 
   updateTaskStatus: (discussionId: string, taskId: number, status: string) => {
@@ -476,6 +485,27 @@ github: {
         hours_before_discussion: number;
       } | null;
     }>(`/api/github/latest-commit?${params.toString()}`, 'GET');
+  },
+  getLatestTag: (repoUrl: string, discussionDate: string) => {
+    const params = new URLSearchParams({
+      repo_url: repoUrl,
+      discussion_date: discussionDate
+    });
+    
+    return safeApiRequest<{
+      [x: string]: string;
+      success: boolean;
+      repository: string;
+      latest_tag: {
+        name: string;
+        sha: string;
+        short_sha: string;
+        url: string;
+        date: string;
+        hours_before_discussion: number;
+        message?: string;
+      } | null;
+    }>(`/api/github/latest-tag?${params.toString()}`, 'GET');
   }
 },
   discussions: {

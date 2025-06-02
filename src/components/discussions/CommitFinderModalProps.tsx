@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { GitBranch, Calendar, ExternalLink, AlertCircle, Search, GitCommit } from 'lucide-react';
+import { GitBranch, Calendar, ExternalLink, AlertCircle, Search, GitCommit, Clock, Tag } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 
@@ -14,6 +14,7 @@ interface CommitFinderModalProps {
   discussionCreatedAt: string;
   discussionTitle: string;
   onCommitSelect?: (commit: CommitInfo) => void;
+  onTagSelect?: (tag: TagInfo) => void;
 }
 
 interface CommitInfo {
@@ -28,19 +29,62 @@ interface CommitInfo {
   hours_before_discussion: number;
 }
 
+interface TagInfo {
+  name: string;
+  sha: string;
+  short_sha: string;
+  url: string;
+  date: string;
+  hours_before_discussion: number;
+  message?: string;
+}
+
 const CommitFinderModal: React.FC<CommitFinderModalProps> = ({
   isOpen,
   onClose,
   discussionCreatedAt,
   discussionTitle,
-  onCommitSelect
+  onCommitSelect,
+  onTagSelect
 }) => {
   const [repositoryUrl, setRepositoryUrl] = useState('');
   const [commit, setCommit] = useState<CommitInfo | null>(null);
+  const [tag, setTag] = useState<TagInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [useCustomDate, setUseCustomDate] = useState(false);
+  const [customDate, setCustomDate] = useState('');
+  const [customTime, setCustomTime] = useState('');
+  const [searchType, setSearchType] = useState<'commit' | 'tag'>('commit');
 
   const discussionDate = new Date(discussionCreatedAt);
+
+  // Get the effective date to use for search
+  const getEffectiveDate = () => {
+    if (useCustomDate && customDate) {
+      const timeValue = customTime || '23:59'; // Default to end of day if no time specified
+      const dateTimeString = `${customDate}T${timeValue}:00`;
+      return new Date(dateTimeString).toISOString();
+    }
+    return discussionCreatedAt;
+  };
+
+  // Get the display date info
+  const getDateInfo = () => {
+    if (useCustomDate && customDate) {
+      const effectiveDate = new Date(getEffectiveDate());
+      return {
+        date: effectiveDate,
+        label: 'Custom Date',
+        description: `Find the latest ${searchType} before this custom date`
+      };
+    }
+    return {
+      date: discussionDate,
+      label: 'Discussion Created',
+      description: `Find the latest ${searchType} before this discussion was created`
+    };
+  };
 
   const fetchLatestCommit = async () => {
     if (!repositoryUrl.trim()) {
@@ -54,30 +98,55 @@ const CommitFinderModal: React.FC<CommitFinderModalProps> = ({
       return;
     }
 
+    // Validate custom date if being used
+    if (useCustomDate && customDate) {
+      const effectiveDate = new Date(getEffectiveDate());
+      if (isNaN(effectiveDate.getTime())) {
+        toast.error('Please enter a valid date and time');
+        return;
+      }
+    }
+
     setLoading(true);
     setError('');
     setCommit(null);
+    setTag(null);
 
     try {
-      // Use the new API endpoint
-      const result = await api.github.getLatestCommit(
-        repositoryUrl,
-        discussionCreatedAt
-      );
-
-      if (!result.success) {
-        throw new Error(result.message || 'Failed to fetch commit information');
+      // Use the effective date for the API call
+      const searchDate = getEffectiveDate();
+      
+      let result;
+      if (searchType === 'commit') {
+        result = await api.github.getLatestCommit(repositoryUrl, searchDate);
+      } else {
+        result = await api.github.getLatestTag(repositoryUrl, searchDate);
       }
 
-      if (!result.latest_commit) {
-        setError('No commits found before the discussion creation date');
+      if (!result.success) {
+        throw new Error(result.message || `Failed to fetch ${searchType} information`);
+      }
+
+      if (searchType === 'commit' && !result.latest_commit) {
+        const dateInfo = getDateInfo();
+        setError(`No commits found before ${dateInfo.date.toLocaleDateString()} ${dateInfo.date.toLocaleTimeString()}`);
         return;
       }
 
-      setCommit(result.latest_commit);
+      if (searchType === 'tag' && !result.latest_tag) {
+        const dateInfo = getDateInfo();
+        setError(`No tags found before ${dateInfo.date.toLocaleDateString()} ${dateInfo.date.toLocaleTimeString()}`);
+        return;
+      }
+
+      if (searchType === 'commit') {
+        setCommit(result.latest_commit);
+      } else {
+        setTag(result.latest_tag);
+      }
 
     } catch (err: any) {
-      const errorMessage = err.message || 'Failed to fetch repository data';
+      const errorMessage = err.message || `Failed to fetch repository data`;
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
@@ -88,6 +157,12 @@ const CommitFinderModal: React.FC<CommitFinderModalProps> = ({
   const handleCommitSelect = (selectedCommit: CommitInfo) => {
     onCommitSelect?.(selectedCommit);
     toast.success(`Selected commit: ${selectedCommit.short_sha}`);
+    onClose();
+  };
+
+  const handleTagSelect = (selectedTag: TagInfo) => {
+    onTagSelect?.(selectedTag);
+    toast.success(`Selected tag: ${selectedTag.name}`);
     onClose();
   };
 
@@ -103,29 +178,123 @@ const CommitFinderModal: React.FC<CommitFinderModalProps> = ({
     return hours <= 24; // Within 24 hours
   };
 
+  // Initialize custom date with discussion date when toggling
+  const handleToggleCustomDate = (checked: boolean) => {
+    setUseCustomDate(checked);
+    if (checked && !customDate) {
+      // Initialize with discussion date
+      const discussionDateOnly = discussionDate.toISOString().split('T')[0];
+      const discussionTimeOnly = discussionDate.toTimeString().slice(0, 5);
+      setCustomDate(discussionDateOnly);
+      setCustomTime(discussionTimeOnly);
+    }
+    // Clear any existing results when switching
+    setCommit(null);
+    setTag(null);
+    setError('');
+  };
+
+  // Handle search type toggle
+  const handleSearchTypeChange = (newType: 'commit' | 'tag') => {
+    setSearchType(newType);
+    // Clear any existing results when switching
+    setCommit(null);
+    setTag(null);
+    setError('');
+  };
+
+  const dateInfo = getDateInfo();
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Search className="h-5 w-5 text-blue-500" />
-            Find Latest Commit
+            Find Latest {searchType === 'commit' ? 'Commit' : 'Tag'}
           </DialogTitle>
           <DialogDescription>
-            Find the latest commit before this discussion was created
+            {dateInfo.description}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 flex-1 overflow-hidden flex flex-col">
-          {/* Discussion Info */}
+          {/* Search Type Toggle */}
+          <div className="flex items-center justify-center gap-1 p-1 bg-gray-100 rounded-lg">
+            <Button
+              variant={searchType === 'commit' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => handleSearchTypeChange('commit')}
+              className="flex items-center gap-2"
+            >
+              <GitCommit className="h-4 w-4" />
+              Commit
+            </Button>
+            <Button
+              variant={searchType === 'tag' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => handleSearchTypeChange('tag')}
+              className="flex items-center gap-2"
+            >
+              <Tag className="h-4 w-4" />
+              Tag
+            </Button>
+          </div>
+          {/* Date Selection */}
           <div className="p-3 bg-blue-50 rounded-lg">
-            <div className="flex items-center gap-2 mb-1">
-              <Badge variant="outline" className="bg-white">
-                <Calendar className="h-3 w-3 mr-1" />
-                {discussionDate.toLocaleDateString()} {discussionDate.toLocaleTimeString()}
-              </Badge>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="bg-white">
+                  <Calendar className="h-3 w-3 mr-1" />
+                  {dateInfo.label}
+                </Badge>
+                <span className="text-sm text-blue-700">
+                  {dateInfo.date.toLocaleDateString()} {dateInfo.date.toLocaleTimeString()}
+                </span>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-2 text-sm text-blue-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={useCustomDate}
+                    onChange={(e) => handleToggleCustomDate(e.target.checked)}
+                    className="rounded"
+                  />
+                  <Clock className="h-3 w-3" />
+                  Use custom date
+                </label>
+              </div>
             </div>
-            <p className="text-sm text-blue-700 font-medium">{discussionTitle}</p>
+            
+            {/* Custom Date Inputs */}
+            {useCustomDate && (
+              <div className="flex gap-2 mt-2">
+                <div className="flex-1">
+                  <label className="block text-xs text-blue-600 mb-1">Date</label>
+                  <Input
+                    type="date"
+                    value={customDate}
+                    onChange={(e) => setCustomDate(e.target.value)}
+                    className="text-sm"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs text-blue-600 mb-1">Time (optional)</label>
+                  <Input
+                    type="time"
+                    value={customTime}
+                    onChange={(e) => setCustomTime(e.target.value)}
+                    placeholder="23:59"
+                    className="text-sm"
+                  />
+                </div>
+              </div>
+            )}
+            
+            {!useCustomDate && (
+              <p className="text-sm text-blue-700 font-medium">{discussionTitle}</p>
+            )}
           </div>
 
           {/* Repository URL Input */}
@@ -149,7 +318,7 @@ const CommitFinderModal: React.FC<CommitFinderModalProps> = ({
           {loading && (
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
-              <span className="ml-3 text-gray-600">Finding latest commit...</span>
+              <span className="ml-3 text-gray-600">Finding latest {searchType}...</span>
             </div>
           )}
 
@@ -161,11 +330,11 @@ const CommitFinderModal: React.FC<CommitFinderModalProps> = ({
             </div>
           )}
 
-          {/* Result */}
-          {!loading && commit && (
+          {/* Result - Commit */}
+          {!loading && commit && searchType === 'commit' && (
             <div className="flex-1 overflow-y-auto">
               <h3 className="text-sm font-medium text-gray-700 mb-3">
-                Latest commit before discussion:
+                Latest commit before {useCustomDate ? 'custom date' : 'discussion'}:
               </h3>
               
               <Card className={`cursor-pointer transition-colors hover:bg-gray-50 ${
@@ -190,7 +359,7 @@ const CommitFinderModal: React.FC<CommitFinderModalProps> = ({
                             <span className="text-xs text-gray-500">by {commit.author.name}</span>
                             {isCloseToDiscussion(commit.hours_before_discussion) && (
                               <Badge variant="default" className="bg-green-600 text-xs">
-                                Close to discussion
+                                Close to target date
                               </Badge>
                             )}
                           </div>
@@ -226,22 +395,103 @@ const CommitFinderModal: React.FC<CommitFinderModalProps> = ({
             </div>
           )}
 
+          {/* Result - Tag */}
+          {!loading && tag && searchType === 'tag' && (
+            <div className="flex-1 overflow-y-auto">
+              <h3 className="text-sm font-medium text-gray-700 mb-3">
+                Latest tag before {useCustomDate ? 'custom date' : 'discussion'}:
+              </h3>
+              
+              <Card className={`cursor-pointer transition-colors hover:bg-gray-50 ${
+                isCloseToDiscussion(tag.hours_before_discussion) ? 'ring-2 ring-green-200 bg-green-50' : ''
+              }`}>
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
+                      <Tag className="h-5 w-5 text-purple-600" />
+                    </div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {tag.name}
+                          </p>
+                          {tag.message && (
+                            <p className="text-xs text-gray-600 mt-1 truncate">
+                              {tag.message}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            <Badge variant="outline" className="text-xs">
+                              {tag.short_sha}
+                            </Badge>
+                            {isCloseToDiscussion(tag.hours_before_discussion) && (
+                              <Badge variant="default" className="bg-green-600 text-xs">
+                                Close to target date
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="text-xs text-gray-500">
+                            {formatRelativeTime(tag.hours_before_discussion)}
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => window.open(tag.url, '_blank')}
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => handleTagSelect(tag)}
+                          >
+                            Select
+                          </Button>
+                        </div>
+                      </div>
+                      
+                      <p className="text-xs text-gray-600 mt-1">
+                        {new Date(tag.date).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
           {/* Empty State */}
-          {!loading && !error && !commit && repositoryUrl && (
+          {!loading && !error && !commit && !tag && repositoryUrl && (
             <div className="text-center py-8 text-gray-500">
-              <GitCommit className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-              <p>Enter a repository URL and click search to find the latest commit</p>
+              {searchType === 'commit' ? (
+                <GitCommit className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+              ) : (
+                <Tag className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+              )}
+              <p>Enter a repository URL and click search to find the latest {searchType}</p>
             </div>
           )}
         </div>
 
         <div className="flex justify-end gap-3 pt-4">
-          {commit && (
+          {commit && searchType === 'commit' && (
             <Button 
               variant="outline"
               onClick={() => handleCommitSelect(commit)}
             >
               Use This Commit
+            </Button>
+          )}
+          {tag && searchType === 'tag' && (
+            <Button 
+              variant="outline"
+              onClick={() => handleTagSelect(tag)}
+            >
+              Use This Tag
             </Button>
           )}
           <Button variant="outline" onClick={onClose}>

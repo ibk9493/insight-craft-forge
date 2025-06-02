@@ -1,3 +1,4 @@
+from fastapi import logger
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 import models  # Assuming models.py contains the updated ConsensusAnnotation model
@@ -261,6 +262,7 @@ def _update_task_statuses_after_consensus(db: Session, discussion_id: str, compl
     try:
         logger.info(f"Auto-updating task statuses for discussion {discussion_id} after task {completed_task_id} consensus")
         
+        # Import here to avoid circular imports
         from services import discussions_service
         
         # 1. Check if the current task should actually be marked as completed
@@ -269,33 +271,20 @@ def _update_task_statuses_after_consensus(db: Session, discussion_id: str, compl
         if should_complete:
             # Mark as completed and unlock next task
             logger.info(f"Task {completed_task_id} meets completion criteria - marking as completed")
-            discussions_service.update_task_status(db, discussion_id, completed_task_id, "completed")
-            
-            # 2. Unlock the next task
-            next_task_id = completed_task_id + 1
-            if next_task_id <= 3:
-                next_task_assoc = db.query(models.discussion_task_association).filter(
-                    models.discussion_task_association.c.discussion_id == discussion_id,
-                    models.discussion_task_association.c.task_number == next_task_id
-                ).first()
-                
-                if next_task_assoc and next_task_assoc.status == "locked":
-                    logger.info(f"Unlocking task {next_task_id}")
-                    discussions_service.update_task_status(db, discussion_id, next_task_id, "unlocked")
-        
+            discussions_service.update_task_status_enhanced(
+                db, discussion_id, completed_task_id, "completed", "consensus_system"
+            )
         else:
-            # Consensus exists but criteria not met - keep task unlocked for further work
-            logger.info(f"Task {completed_task_id} consensus exists but criteria not met - keeping as unlocked")
-            discussions_service.update_task_status(db, discussion_id, completed_task_id, "unlocked")
-            
-            # Don't unlock next task since current task isn't truly complete
-            logger.info("Not unlocking next task since current task criteria not met")
+            # Consensus exists but doesn't meet criteria
+            logger.info(f"Task {completed_task_id} consensus exists but criteria not met - marking as consensus_created")
+            discussions_service.update_task_status_enhanced(
+                db, discussion_id, completed_task_id, "consensus_created", "consensus_system"
+            )
         
         logger.info(f"Successfully updated task statuses after consensus evaluation")
         
     except Exception as e:
         logger.error(f"Error updating task statuses after consensus: {str(e)}")
-
 
 def _get_task_completion_status(consensus_data: dict, task_id: int) -> dict:
     """
@@ -483,3 +472,199 @@ def override_consensus(db: Session, override_data: schemas.ConsensusOverride) ->
     # This function appears to work with the old Annotation model for consensus
     # You may want to update this to use ConsensusAnnotation instead
     pass
+def _determine_consensus_phase(annotations_count: int, required: int, consensus, agreement_analysis) -> str:
+    """
+    Determine what phase the consensus process is in
+    """
+    if annotations_count < required:
+        return "collecting_annotations"
+    
+    if not consensus:
+        if agreement_analysis and agreement_analysis.get("overall_agreement_rate", 0) >= 80:
+            return "ready_for_consensus"
+        else:
+            return "needs_pod_lead_review"
+    
+    # Consensus exists, check if it meets criteria
+    return "consensus_created"
+
+
+def _get_recommended_action(consensus_phase: str, completion_status: Dict = None) -> str:
+    """
+    Get recommended next action based on consensus phase
+    """
+    if consensus_phase == "collecting_annotations":
+        return "Collect more annotations"
+    elif consensus_phase == "ready_for_consensus":
+        return "Create consensus annotation"
+    elif consensus_phase == "needs_pod_lead_review":
+        return "Pod lead should review for low agreement"
+    elif consensus_phase == "consensus_created":
+        if completion_status and completion_status.get("can_complete", False):
+            return "Mark task as completed"
+        else:
+            return "Review consensus criteria"
+    else:
+        return "Review task status"
+def get_discussions_ready_for_consensus(db: Session, task_id: Optional[int] = None) -> List[Dict[str, Any]]:
+    """
+    Get discussions that are ready for consensus creation
+    """
+    try:
+        ready_discussions = []
+        
+        # Get all discussions
+        discussions = db.query(models.Discussion).all()
+        
+        for discussion in discussions:
+            for check_task_id in ([task_id] if task_id else [1, 2, 3]):
+                consensus_status = get_consensus_status(db, discussion.id, check_task_id)
+                
+                if consensus_status.get("consensus_phase") == "ready_for_consensus":
+                    agreement_rate = consensus_status.get("agreement_analysis", {}).get("overall_agreement_rate", 0)
+                    
+                    ready_discussions.append({
+                        "discussion_id": discussion.id,
+                        "discussion_title": discussion.title,
+                        "task_id": check_task_id,
+                        "task_name": f"Task {check_task_id}",
+                        "annotations_count": consensus_status.get("annotations_count"),
+                        "agreement_rate": agreement_rate,
+                        "recommended_consensus": _build_recommended_consensus(
+                            consensus_status.get("agreement_analysis", {})
+                        )
+                    })
+        
+        # Sort by agreement rate (highest first)
+        ready_discussions.sort(key=lambda x: x["agreement_rate"], reverse=True)
+        
+        return ready_discussions
+        
+    except Exception as e:
+        logger.error(f"Error getting discussions ready for consensus: {str(e)}")
+        return []
+
+
+def _build_recommended_consensus(agreement_analysis: Dict) -> Dict[str, Any]:
+    """
+    Build recommended consensus values based on agreement analysis
+    """
+    if not agreement_analysis or "field_agreements" not in agreement_analysis:
+        return {}
+    
+    recommended_consensus = {}
+    field_agreements = agreement_analysis["field_agreements"]
+    
+    for field, stats in field_agreements.items():
+        if stats["agreement_rate"] >= 60:  # Use majority value if reasonable agreement
+            recommended_consensus[field] = stats["consensus_value"]
+    
+    return recommended_consensus   
+def _calculate_annotation_agreement(annotations: List[models.Annotation], task_id: int) -> Dict[str, Any]:
+    """
+    Calculate agreement between annotations for consensus readiness
+    """
+    if len(annotations) < 2:
+        return {"agreement_rate": 0, "message": "Not enough annotations"}
+    
+    # Get field agreement by task type
+    if task_id == 1:
+        key_fields = ['relevance', 'learning', 'clarity', 'grounded']
+    elif task_id == 2:
+        key_fields = ['aspects', 'explanation', 'execution']
+    elif task_id == 3:
+        key_fields = ['classify', 'short_answer_list', 'longAnswer_text']
+    else:
+        return {"agreement_rate": 0, "message": "Invalid task ID"}
+    
+    field_agreements = {}
+    total_agreements = 0
+    total_fields = 0
+    
+    for field in key_fields:
+        field_values = []
+        for annotation in annotations:
+            if field in annotation.data:
+                field_values.append(annotation.data[field])
+        
+        if len(field_values) >= 2:
+            # Calculate agreement for this field
+            most_common_value = max(set(field_values), key=field_values.count)
+            agreement_count = field_values.count(most_common_value)
+            agreement_rate = (agreement_count / len(field_values)) * 100
+            
+            field_agreements[field] = {
+                "values": field_values,
+                "consensus_value": most_common_value,
+                "agreement_rate": round(agreement_rate, 1),
+                "agreed_count": agreement_count,
+                "total_count": len(field_values)
+            }
+            
+            total_agreements += agreement_count
+            total_fields += len(field_values)
+    
+    overall_agreement = (total_agreements / total_fields * 100) if total_fields > 0 else 0
+    
+    return {
+        "overall_agreement_rate": round(overall_agreement, 1),
+        "field_agreements": field_agreements,
+        "total_annotators": len(annotations),
+        "analysis_timestamp": datetime.utcnow().isoformat()
+    }
+
+def get_consensus_status(db: Session, discussion_id: str, task_id: int) -> Dict[str, Any]:
+    """
+    Get detailed consensus status for a task
+    """
+    try:
+        # Get annotations count
+        annotations = db.query(models.Annotation).filter(
+            models.Annotation.discussion_id == discussion_id,
+            models.Annotation.task_id == task_id
+        ).all()
+        
+        # Get consensus annotation
+        consensus = db.query(models.ConsensusAnnotation).filter(
+            models.ConsensusAnnotation.discussion_id == discussion_id,
+            models.ConsensusAnnotation.task_id == task_id
+        ).first()
+        
+        # Get required annotators
+        required_annotators = 3 if task_id < 3 else 5
+        
+        # Calculate agreement if we have annotations
+        agreement_analysis = None
+        if len(annotations) >= 2:
+            agreement_analysis = _calculate_annotation_agreement(annotations, task_id)
+        
+        # Determine consensus phase
+        consensus_phase = _determine_consensus_phase(
+            len(annotations), 
+            required_annotators, 
+            consensus, 
+            agreement_analysis
+        )
+        
+        # Check completion criteria if consensus exists
+        completion_status = None
+        if consensus:
+            completion_status = _get_task_completion_status(consensus.data, task_id)
+        
+        return {
+            "discussion_id": discussion_id,
+            "task_id": task_id,
+            "annotations_count": len(annotations),
+            "required_annotators": required_annotators,
+            "has_consensus": consensus is not None,
+            "consensus_phase": consensus_phase,
+            "agreement_analysis": agreement_analysis,
+            "completion_status": completion_status,
+            "consensus_created_by": consensus.user_id if consensus else None,
+            "consensus_created_at": consensus.timestamp.isoformat() if consensus else None,
+            "recommended_action": _get_recommended_action(consensus_phase, completion_status)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting consensus status: {str(e)}")
+        return {"error": str(e)}

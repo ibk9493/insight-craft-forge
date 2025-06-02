@@ -1109,3 +1109,394 @@ def update_task_status_enhanced(
             message=f"Failed to update task status: {str(e)}",
             discussion=None
         )
+def update_task_status_enhanced(
+    db: Session, 
+    discussion_id: str, 
+    task_id: int, 
+    status: str,
+    updated_by: str = "system"
+) -> schemas.TaskManagementResult:
+    """
+    Enhanced task status update that supports the full annotation workflow
+    """
+    try:
+        # Enhanced status definitions
+        valid_statuses = [
+            'locked',              # Task not yet available
+            'unlocked',            # Task available for annotation  
+            'in_progress',         # Annotations being collected
+            'ready_for_consensus', # Enough annotations, waiting for consensus creation
+            'consensus_created',   # Consensus exists, evaluating completion criteria
+            'completed',           # Task meets all criteria and is truly complete
+            'rework',              # Task flagged for rework (quality/data issues)
+            'flagged',             # Task has issues but not blocking
+            'blocked'              # Task cannot proceed (external dependencies)
+        ]
+        
+        if status not in valid_statuses:
+            raise Exception(f"Invalid status: {status}. Must be one of: {', '.join(valid_statuses)}")
+        
+        # Check if discussion exists
+        discussion = db.query(models.Discussion).filter(
+            models.Discussion.id == discussion_id
+        ).first()
+        if not discussion:
+            raise Exception(f"Discussion {discussion_id} not found")
+        
+        # Get current status
+        current_task = db.execute(
+            models.discussion_task_association.select().where(
+                and_(
+                    models.discussion_task_association.c.discussion_id == discussion_id,
+                    models.discussion_task_association.c.task_number == task_id
+                )
+            )
+        ).first()
+        
+        old_status = current_task.status if current_task else "none"
+        
+        # Update status in existing table
+        result = db.execute(
+            models.discussion_task_association.update().where(
+                and_(
+                    models.discussion_task_association.c.discussion_id == discussion_id,
+                    models.discussion_task_association.c.task_number == task_id
+                )
+            ).values(
+                status=status
+            )
+        )
+        
+        # Create if doesn't exist
+        if result.rowcount == 0:
+            db.execute(
+                models.discussion_task_association.insert().values(
+                    discussion_id=discussion_id,
+                    task_number=task_id,
+                    status=status,
+                    annotators=0
+                )
+            )
+        
+        # Handle workflow progression based on new status
+        auto_actions = []
+        
+        if status == 'completed' and task_id < 3:
+            # Auto-unlock next task when current task is truly completed
+            next_task_id = task_id + 1
+            next_task_result = db.execute(
+                models.discussion_task_association.update().where(
+                    and_(
+                        models.discussion_task_association.c.discussion_id == discussion_id,
+                        models.discussion_task_association.c.task_number == next_task_id,
+                        models.discussion_task_association.c.status == 'locked'
+                    )
+                ).values(
+                    status='unlocked'
+                )
+            )
+            
+            if next_task_result.rowcount == 0:
+                # Create next task if doesn't exist
+                db.execute(
+                    models.discussion_task_association.insert().values(
+                        discussion_id=discussion_id,
+                        task_number=next_task_id,
+                        status='unlocked',
+                        annotators=0
+                    )
+                )
+            
+            auto_actions.append(f"Auto-unlocked Task {next_task_id}")
+        
+        elif status == 'rework':
+            # When flagged for rework, may need to reset downstream tasks
+            if task_id < 3:
+                # Check if downstream tasks should be locked again
+                downstream_tasks = db.execute(
+                    models.discussion_task_association.select().where(
+                        and_(
+                            models.discussion_task_association.c.discussion_id == discussion_id,
+                            models.discussion_task_association.c.task_number > task_id
+                        )
+                    )
+                ).fetchall()
+                
+                for downstream_task in downstream_tasks:
+                    if downstream_task.status in ['unlocked', 'in_progress', 'ready_for_consensus']:
+                        # Lock downstream tasks that haven't been completed yet
+                        db.execute(
+                            models.discussion_task_association.update().where(
+                                and_(
+                                    models.discussion_task_association.c.discussion_id == discussion_id,
+                                    models.discussion_task_association.c.task_number == downstream_task.task_number
+                                )
+                            ).values(status='locked')
+                        )
+                        auto_actions.append(f"Auto-locked Task {downstream_task.task_number} (upstream rework)")
+        
+        db.commit()
+        
+        # Get updated discussion for response
+        updated_discussion = get_discussion_by_id(db, discussion_id)
+        
+        logger.info(f"Task {task_id} status updated from '{old_status}' to '{status}' by {updated_by}")
+        if auto_actions:
+            logger.info(f"Auto-actions: {', '.join(auto_actions)}")
+        
+        return schemas.TaskManagementResult(
+            success=True,
+            message=f"Task {task_id} status updated to {status}" + 
+                   (f". Auto-actions: {', '.join(auto_actions)}" if auto_actions else ""),
+            discussion=updated_discussion
+        )
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating task status: {str(e)}")
+        return schemas.TaskManagementResult(
+            success=False,
+            message=f"Failed to update task status: {str(e)}",
+            discussion=None
+        )
+def update_task_status_enhanced(
+    db: Session, 
+    discussion_id: str, 
+    task_id: int, 
+    status: str,
+    updated_by: str = "system"
+) -> schemas.TaskManagementResult:
+    """
+    Enhanced task status update that supports the full annotation workflow
+    """
+    try:
+        # Enhanced status definitions
+        valid_statuses = [
+            'locked',              # Task not yet available
+            'unlocked',            # Task available for annotation  
+            'in_progress',         # Annotations being collected
+            'ready_for_consensus', # Enough annotations, waiting for consensus creation
+            'consensus_created',   # Consensus exists, evaluating completion criteria
+            'completed',           # Task meets all criteria and is truly complete
+            'rework',              # Task flagged for rework (quality/data issues)
+            'flagged',             # Task has issues but not blocking
+            'blocked'              # Task cannot proceed (external dependencies)
+        ]
+        
+        if status not in valid_statuses:
+            raise Exception(f"Invalid status: {status}. Must be one of: {', '.join(valid_statuses)}")
+        
+        # Check if discussion exists
+        discussion = db.query(models.Discussion).filter(
+            models.Discussion.id == discussion_id
+        ).first()
+        if not discussion:
+            raise Exception(f"Discussion {discussion_id} not found")
+        
+        # Get current status
+        current_task = db.execute(
+            models.discussion_task_association.select().where(
+                and_(
+                    models.discussion_task_association.c.discussion_id == discussion_id,
+                    models.discussion_task_association.c.task_number == task_id
+                )
+            )
+        ).first()
+        
+        old_status = current_task.status if current_task else "none"
+        
+        # Update status in existing table
+        result = db.execute(
+            models.discussion_task_association.update().where(
+                and_(
+                    models.discussion_task_association.c.discussion_id == discussion_id,
+                    models.discussion_task_association.c.task_number == task_id
+                )
+            ).values(
+                status=status
+            )
+        )
+        
+        # Create if doesn't exist
+        if result.rowcount == 0:
+            db.execute(
+                models.discussion_task_association.insert().values(
+                    discussion_id=discussion_id,
+                    task_number=task_id,
+                    status=status,
+                    annotators=0
+                )
+            )
+        
+        # Handle workflow progression based on new status
+        auto_actions = []
+        
+        if status == 'completed' and task_id < 3:
+            # Auto-unlock next task when current task is truly completed
+            next_task_id = task_id + 1
+            next_task_result = db.execute(
+                models.discussion_task_association.update().where(
+                    and_(
+                        models.discussion_task_association.c.discussion_id == discussion_id,
+                        models.discussion_task_association.c.task_number == next_task_id,
+                        models.discussion_task_association.c.status == 'locked'
+                    )
+                ).values(
+                    status='unlocked'
+                )
+            )
+            
+            if next_task_result.rowcount == 0:
+                # Create next task if doesn't exist
+                db.execute(
+                    models.discussion_task_association.insert().values(
+                        discussion_id=discussion_id,
+                        task_number=next_task_id,
+                        status='unlocked',
+                        annotators=0
+                    )
+                )
+            
+            auto_actions.append(f"Auto-unlocked Task {next_task_id}")
+        
+        elif status == 'rework':
+            # When flagged for rework, may need to reset downstream tasks
+            if task_id < 3:
+                # Check if downstream tasks should be locked again
+                downstream_tasks = db.execute(
+                    models.discussion_task_association.select().where(
+                        and_(
+                            models.discussion_task_association.c.discussion_id == discussion_id,
+                            models.discussion_task_association.c.task_number > task_id
+                        )
+                    )
+                ).fetchall()
+                
+                for downstream_task in downstream_tasks:
+                    if downstream_task.status in ['unlocked', 'in_progress', 'ready_for_consensus']:
+                        # Lock downstream tasks that haven't been completed yet
+                        db.execute(
+                            models.discussion_task_association.update().where(
+                                and_(
+                                    models.discussion_task_association.c.discussion_id == discussion_id,
+                                    models.discussion_task_association.c.task_number == downstream_task.task_number
+                                )
+                            ).values(status='locked')
+                        )
+                        auto_actions.append(f"Auto-locked Task {downstream_task.task_number} (upstream rework)")
+        
+        db.commit()
+        
+        # Get updated discussion for response
+        updated_discussion = get_discussion_by_id(db, discussion_id)
+        
+        logger.info(f"Task {task_id} status updated from '{old_status}' to '{status}' by {updated_by}")
+        if auto_actions:
+            logger.info(f"Auto-actions: {', '.join(auto_actions)}")
+        
+        return schemas.TaskManagementResult(
+            success=True,
+            message=f"Task {task_id} status updated to {status}" + 
+                   (f". Auto-actions: {', '.join(auto_actions)}" if auto_actions else ""),
+            discussion=updated_discussion
+        )
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating task status: {str(e)}")
+        return schemas.TaskManagementResult(
+            success=False,
+            message=f"Failed to update task status: {str(e)}",
+            discussion=None
+        )
+def get_workflow_status_summary(db: Session, discussion_id: str) -> Dict[str, Any]:
+    """
+    Get a comprehensive workflow status summary for a discussion
+    """
+    try:
+        # Get all task associations
+        task_associations = db.execute(
+            models.discussion_task_association.select().where(
+                models.discussion_task_association.c.discussion_id == discussion_id
+            )
+        ).fetchall()
+        
+        summary = {
+            "discussion_id": discussion_id,
+            "overall_status": "not_started",
+            "tasks": {},
+            "workflow_stage": "initial",
+            "next_action": "Start Task 1 annotations",
+            "blockers": []
+        }
+        
+        for task_assoc in task_associations:
+            task_num = task_assoc.task_number
+            status = task_assoc.status
+            annotators = task_assoc.annotators
+            
+            # Get consensus info
+            consensus = db.query(models.ConsensusAnnotation).filter(
+                models.ConsensusAnnotation.discussion_id == discussion_id,
+                models.ConsensusAnnotation.task_id == task_num
+            ).first()
+            
+            # Get required annotators
+            required = 3 if task_num < 3 else 5
+            
+            summary["tasks"][f"task_{task_num}"] = {
+                "status": status,
+                "annotators": annotators,
+                "required_annotators": required,
+                "has_consensus": consensus is not None,
+                "consensus_meets_criteria": False
+            }
+            
+            if consensus:
+                from services.consensus_service import _should_task_be_completed
+                meets_criteria = _should_task_be_completed(db, discussion_id, task_num, consensus.data)
+                summary["tasks"][f"task_{task_num}"]["consensus_meets_criteria"] = meets_criteria
+            
+            # Check for blockers
+            if status in ['rework', 'flagged', 'blocked']:
+                summary["blockers"].append(f"Task {task_num}: {status}")
+        
+        # Determine overall status and next action
+        if all(summary["tasks"].get(f"task_{i}", {}).get("status") == "completed" for i in range(1, 4)):
+            summary["overall_status"] = "completed"
+            summary["workflow_stage"] = "complete"
+            summary["next_action"] = "Discussion complete"
+        elif any(summary["tasks"].get(f"task_{i}", {}).get("status") in ["rework", "flagged", "blocked"] for i in range(1, 4)):
+            summary["overall_status"] = "blocked"
+            summary["workflow_stage"] = "blocked"
+            summary["next_action"] = "Resolve blockers"
+        else:
+            # Find the current working task
+            for task_num in range(1, 4):
+                task_key = f"task_{task_num}"
+                task_info = summary["tasks"].get(task_key, {})
+                task_status = task_info.get("status", "locked")
+                
+                if task_status == "ready_for_consensus":
+                    summary["overall_status"] = "awaiting_consensus"
+                    summary["workflow_stage"] = f"task_{task_num}_consensus"
+                    summary["next_action"] = f"Create consensus for Task {task_num}"
+                    break
+                elif task_status in ["unlocked", "in_progress"]:
+                    summary["overall_status"] = "in_progress"
+                    summary["workflow_stage"] = f"task_{task_num}_annotations"
+                    annotators = task_info.get("annotators", 0)
+                    required = task_info.get("required_annotators", 3)
+                    summary["next_action"] = f"Collect more annotations for Task {task_num} ({annotators}/{required})"
+                    break
+                elif task_status == "consensus_created":
+                    summary["overall_status"] = "awaiting_review"
+                    summary["workflow_stage"] = f"task_{task_num}_review"
+                    summary["next_action"] = f"Review Task {task_num} consensus criteria"
+                    break
+        
+        return summary
+        
+    except Exception as e:
+        logger.error(f"Error getting workflow status: {str(e)}")
+        return {"error": str(e)}

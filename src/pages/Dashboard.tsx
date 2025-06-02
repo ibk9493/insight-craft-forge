@@ -24,7 +24,8 @@ import { api } from '@/services/api';
 import { Textarea } from '@/components/ui/textarea';
 import { validateForm, validateTask } from '@/utils/validation';
 import TaskFlagModal from '@/components/discussions/TaskFlagModal';
-
+import CommitFinderModal from '@/components/discussions/CommitFinderModalProps';
+import { GitBranch } from 'lucide-react'; // Add GitBranch icon if not already imported
 const computeCompleted = (
   task: SubTask,
   selectedOption?: string,
@@ -819,7 +820,12 @@ const Dashboard = () => {
     });
   };
   
-
+  const [showCommitModal, setShowCommitModal] = useState(false);
+  const handleCommitSelect = useCallback((commit: any) => {
+    console.log('Selected commit:', commit);
+    // Add your logic here to use the selected commit
+    toast.success(`Commit ${commit.short_sha} selected for analysis`);
+  }, []);
 // Simple duplication function
 const handleDuplicateForm = (type: string) => {
   if (!task3SubTasks) return;
@@ -859,8 +865,16 @@ return (
         currentStep === 3 ? 'Rewrite Question and Answer' :
         'Unknown Task'
       }`}
+      userRole={user?.role || 'annotator'}
       onFlagSubmitted={handleFlagSubmitted}
     />
+    <CommitFinderModal
+  isOpen={showCommitModal}
+  onClose={() => setShowCommitModal(false)}
+  discussionCreatedAt={currentDiscussion?.created_at}
+  discussionTitle={currentDiscussion?.title || 'Discussion'}
+  onCommitSelect={handleCommitSelect}
+/>
     <div className="container max-w-4xl mx-auto px-4 py-6 flex-grow">
       {(url || discussionId) && <DashboardBreadcrumb discussionId={discussionId || undefined} currentStep={currentStep} discussionTitle={currentDiscussion?.title || 'Discussion'} />}
       {currentStep === 0 && !discussionId && <UrlInput onSubmit={handleUrlSubmit} />}
@@ -903,7 +917,16 @@ return (
                   Flag Task {currentStep}
                 </Button>
               )}
-              
+               {currentStep > 0 && currentStep <= 3 && currentDiscussion && (
+                  <Button 
+                    variant="outline" 
+                    className="flex items-center gap-2 text-blue-600 border-blue-300 hover:bg-blue-50"
+                    onClick={() => setShowCommitModal(true)}
+                  >
+                    <GitBranch className="h-4 w-4" />
+                    Find Commit
+                  </Button>
+                )}
               {/* Existing consensus button */}
               {(isPodLead || isAdmin) && currentStep > 0 && (
                 <Button onClick={toggleConsensusMode} variant="outline" className="flex items-center gap-2">
