@@ -282,7 +282,7 @@ const TaskFlagModal: React.FC<TaskFlagModalProps> = ({
             </div>
           )}
 
-          {/* Task Selection - Show when relevant */}
+          {/* Task Selection - Show for all non-workflow categories when taskId > 1 */}
           {(taskId > 1 && !isWorkflowIssue) && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -311,6 +311,12 @@ const TaskFlagModal: React.FC<TaskFlagModalProps> = ({
                   </div>
                 ))}
               </div>
+              
+              {flaggedTaskId !== taskId && (
+                <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
+                  <strong>Upstream Flag:</strong> Task {flaggedTaskId} will be flagged (discovered while on Task {taskId})
+                </div>
+              )}
             </div>
           )}
 
