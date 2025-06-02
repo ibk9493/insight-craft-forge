@@ -264,22 +264,14 @@ def _build_status_filter_query(db: Session, status: str):
     Returns a subquery of discussion IDs that match the status criteria.
     """
     if status == 'completed':
-        # Discussions where ALL tasks are completed
-        # Get discussions where all task associations have status 'completed'
-        discussions_with_incomplete = db.query(models.discussion_task_association.c.discussion_id).filter(
-            models.discussion_task_association.c.status != 'completed'
-        ).distinct()
+        # ✅ SIMPLE FIX: Discussions where all 3 tasks are completed
+        return db.query(models.discussion_task_association.c.discussion_id).filter(
+            models.discussion_task_association.c.status == 'completed'
+        ).group_by(models.discussion_task_association.c.discussion_id).having(
+            func.count() >= 3
+        )
         
-        # Get all discussions that have task associations
-        discussions_with_tasks = db.query(models.discussion_task_association.c.discussion_id).distinct()
-        
-        # Return discussions that have tasks but none are incomplete
-        completed_discussions = db.query(models.discussion_task_association.c.discussion_id).filter(
-            models.discussion_task_association.c.discussion_id.in_(discussions_with_tasks),
-            ~models.discussion_task_association.c.discussion_id.in_(discussions_with_incomplete)
-        ).distinct()
-        
-        return completed_discussions
+
         
     elif status == 'unlocked':
         # Discussions that have at least one unlocked task

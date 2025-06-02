@@ -440,6 +440,19 @@ async def get_summary_report(
         """Process Task 3 annotation data to handle new forms structure"""
         processed_data = data.copy()
         
+        # Remove ALL form metadata from annotations
+        metadata_fields = ["forms", "form_index", "form_id", "form_name", "form_type", "total_forms"]
+        for field in metadata_fields:
+            processed_data.pop(field, None)
+            
+        # Rename fields to match expected output format
+        if "classify" in processed_data:
+            processed_data["question_type"] = processed_data.pop("classify")
+        if "rewrite_text" in processed_data:
+            processed_data["rewritten_question"] = processed_data.pop("rewrite_text")
+        if "supporting_docs_data" in processed_data:
+            processed_data["supporting_docs"] = processed_data.pop("supporting_docs_data")
+        
         # Handle short_answer_list conversion from new format to old format for API compatibility
         if data.get("short_answer_list"):
             short_answers = data["short_answer_list"]
@@ -451,7 +464,7 @@ async def get_summary_report(
                 for form_answers in short_answers:
                     for item in form_answers:
                         if isinstance(item, dict) and 'claim' in item:
-                            flattened.append(f"{item['claim']} (weight: {item.get('weight', 1)})")
+                            flattened.append({"claim": item['claim'], "weight": str(item.get('weight', 1))})
                         else:
                             flattened.append(str(item))
                 processed_data["short_answer_list"] = flattened
@@ -461,13 +474,13 @@ async def get_summary_report(
                 flattened = []
                 for item in short_answers:
                     if isinstance(item, dict) and 'claim' in item:
-                        flattened.append(f"{item['claim']} (weight: {item.get('weight', 1)})")
+                        flattened.append({"claim": item['claim'], "weight": str(item.get('weight', 1))})
                     else:
                         flattened.append(str(item))
                 processed_data["short_answer_list"] = flattened
         
         return processed_data
-    
+
     def _process_task3_consensus_data(data):
         """Process Task 3 consensus data to handle new forms structure"""
         if not data:
@@ -513,15 +526,20 @@ async def get_summary_report(
                 question_types = []
                 
                 for form in data["forms"]:
-                    # Collect short answers
-                    if "short_answer_list" in form and isinstance(form["short_answer_list"], list):
-                        form_short_answers = []
-                        for item in form["short_answer_list"]:
-                            if isinstance(item, dict) and 'claim' in item:
-                                form_short_answers.append({"claim": item['claim'], "weight": str(item.get('weight', 1))})
-                            else:
-                                form_short_answers.append({"claim": str(item), "weight": "1"})
-                        all_short_answers.append(form_short_answers)
+                    # FIX: Collect short answers from each form
+                    if "short_answer_list_items" in form:
+                        items = form["short_answer_list_items"]
+                        if isinstance(items, list):
+                            converted_items = []
+                            for item in items:
+                                # Convert string items to claim/weight format
+                                converted_items.append({"claim": str(item), "weight": "1"})
+                            # ADD TO all_short_answers - THIS WAS MISSING!
+                            all_short_answers.append(converted_items)
+                    
+                    # Handle the status field - if it's just "Completed", add empty array
+                    elif form.get("short_answer_list") == "Completed":
+                        all_short_answers.append([])
                     
                     # Collect long answers
                     if "longAnswer_text" in form:
@@ -545,16 +563,17 @@ async def get_summary_report(
                     if "classify" in form:
                         question_types.append(form["classify"])
                 
-                # Set merged data
-                processed_data["short_answer_list"] = all_short_answers  # Array of arrays
-                processed_data["long_answer"] = all_long_answers  # Array of strings
-                processed_data["rewritten_question"] = list(set(all_rewritten_questions)) if all_rewritten_questions else []  # Unique questions
+                # Set merged data - KEEP AS ARRAYS for Type A (multiple answers to same question)
+                processed_data["short_answer_list"] = all_short_answers  # Array of arrays - CORRECT
+                processed_data["long_answer"] = all_long_answers  # Array of strings - CORRECT
+                processed_data["rewritten_question"] = [all_rewritten_questions[0]] if all_rewritten_questions else []  # Unique questions
                 processed_data["supporting_docs"] = all_supporting_docs  # Combined docs
                 processed_data["question_type"] = question_types[0] if question_types else "Reasoning"  # Use first type
                 
-                # Add metadata
-                processed_data["form_type"] = "A"
-                processed_data["total_forms"] = len(data["forms"])
+                # REMOVE form metadata from consensus data
+                metadata_fields = ["forms", "form_type", "total_forms", "form_index", "form_id", "form_name","stars","comment","_last_updated"]
+                for field in metadata_fields:
+                    processed_data.pop(field, None)
                 
                 return [processed_data]  # Return single merged entry
             
@@ -573,8 +592,17 @@ async def get_summary_report(
                     if "classify" in form:
                         processed_data["question_type"] = form["classify"]
                     
-                    # Handle short_answer_list from forms
-                    if "short_answer_list" in form:
+                    # Handle short_answer_list_items from forms (Type Q processing)
+                    if "short_answer_list_items" in form:
+                        items = form["short_answer_list_items"]
+                        if isinstance(items, list):
+                            converted_items = []
+                            for item in items:
+                                converted_items.append({"claim": str(item), "weight": "1"})
+                            processed_data["short_answer_list"] = converted_items
+                    
+                    # Handle short_answer_list from forms (if already processed)
+                    elif "short_answer_list" in form:
                         form_answers = form["short_answer_list"]
                         if isinstance(form_answers, list):
                             flattened = []
@@ -596,11 +624,10 @@ async def get_summary_report(
                             })
                         processed_data["supporting_docs"] = supporting_docs
                     
-                    # Add form metadata
-                    processed_data["form_index"] = form_index
-                    processed_data["form_id"] = form.get("formId", f"form-{form_index}")
-                    processed_data["form_name"] = form.get("formName", f"Form {form_index + 1}")
-                    processed_data["form_type"] = form_types[form_index]
+                    # REMOVE form metadata from consensus data (don't add them)
+                    metadata_fields = ["forms", "form_index", "form_id", "form_name", "form_type", "total_forms"]
+                    for field in metadata_fields:
+                        processed_data.pop(field, None)
                     
                     results.append(processed_data)
                 
@@ -608,11 +635,21 @@ async def get_summary_report(
         
         # Handle single form or legacy format
         processed_data = data.copy()
-        
+
+        # Handle consensus format with short_answer_list_items
+        if "short_answer_list_items" in processed_data:
+            items = processed_data["short_answer_list_items"]
+            if isinstance(items, list):
+                converted_items = []
+                for item in items:
+                    converted_items.append({"claim": str(item), "weight": "1"})
+                processed_data["short_answer_list"] = converted_items
+            processed_data.pop("short_answer_list_items", None)
+
         # Convert rewritten_question from string to array if needed
         if "rewritten_question" in processed_data and isinstance(processed_data["rewritten_question"], str):
             processed_data["rewritten_question"] = [processed_data["rewritten_question"]]
-        
+
         # Handle supporting_docs field name mapping if needed
         if "supporting_docs" in processed_data:
             supporting_docs = []
@@ -625,8 +662,8 @@ async def get_summary_report(
                 else:
                     supporting_docs.append(doc)
             processed_data["supporting_docs"] = supporting_docs
-        
-        # Handle short_answer_list format conversion
+
+        # Handle short_answer_list format conversion (existing logic)
         if "short_answer_list" in processed_data and isinstance(processed_data["short_answer_list"], list):
             short_answers = processed_data["short_answer_list"]
             if len(short_answers) > 0 and isinstance(short_answers[0], str):
@@ -642,9 +679,45 @@ async def get_summary_report(
                         weight = "1"
                     converted.append({"claim": claim, "weight": weight})
                 processed_data["short_answer_list"] = converted
-        
-        return [processed_data]  # Return array with single object
 
+        # REMOVE form metadata from consensus data
+        metadata_fields = ["forms", "form_index", "form_id", "form_name", "form_type", "total_forms", "stars", "comment", "_last_updated"]
+        for field in metadata_fields:
+            processed_data.pop(field, None)
+
+        return [processed_data]  
+    
+    
+    # Return array with single object  # Return array with single object  # Return array with single object
+    def has_annotation_data(annotation, task_id):
+        """
+        Check if an annotation has actual data for the given task
+        Returns True if annotation contains meaningful data, False otherwise
+        """
+        if not annotation or not hasattr(annotation, 'data') or not annotation.data:
+            return False
+        
+        data = annotation.data
+        
+        if task_id == 1:
+            # Task 1 required fields
+            task1_fields = ['relevance', 'learning', 'clarity']
+            # Check if at least one required field exists and is not None/empty
+            return any(field in data and data[field] is not None for field in task1_fields)
+        
+        elif task_id == 2:
+            # Task 2 required fields
+            task2_fields = ['aspects', 'explanation', 'execution']
+            # Check if at least one required field exists and is not None/empty
+            return any(field in data and data[field] is not None for field in task2_fields)
+        
+        elif task_id == 3:
+            # Task 3 required fields
+            task3_fields = ['short_answer_list', 'longAnswer_text', 'rewrite_text', 'classify']
+            # Check if at least one required field exists and is not None/empty
+            return any(field in data and data[field] is not None and data[field] != "" for field in task3_fields)
+        
+        return False
     # GET ALL DISCUSSIONS
     discussions = discussions_service.get_discussions(db, filters=None, limit=100000, offset=0)
 
@@ -688,7 +761,7 @@ async def get_summary_report(
 
         # Create entries - duplicate entire discussion for Type Q, single entry for Type A
         for form_index, form_result in enumerate(task3_consensus_results):
-            # Create a unique ID based on form type
+        # Create a unique ID based on form type
             base_id = discussion.id
             if form_result.get("form_type") == "Q" and len(task3_consensus_results) > 1:
                 # Type Q: Different questions - create unique IDs for each form
@@ -697,6 +770,11 @@ async def get_summary_report(
                 # Type A: Same question, multiple answers - keep same ID
                 # Or single form - keep original ID
                 unique_id = str(base_id)
+
+            # Filter annotations that have actual data
+            filtered_task1_annotations = [ann for ann in task1_annotations if has_annotation_data(ann, 1)]
+            filtered_task2_annotations = [ann for ann in task2_annotations if has_annotation_data(ann, 2)]
+            filtered_task3_annotations = [ann for ann in task3_annotations if has_annotation_data(ann, 3)]
 
             # Build the main entry (complete discussion duplication for Type Q)
             entry = {
@@ -710,7 +788,7 @@ async def get_summary_report(
                 "createdAt": discussion.created_at,
                 "knowledge": knowledge,
                 
-                # Task 1 annotations (same for all forms)
+                # Task 1 annotations (only with data)
                 "annotations_task_1": [
                     {
                         "annotator": int(annotation.user_id),
@@ -719,65 +797,73 @@ async def get_summary_report(
                         "clarity": annotation.data.get("clarity", False),
                         **({"image_grounded": annotation.data.get("grounded", False)} if annotation.data.get("grounded", "") != "N/A" else {}),
                     }
-                    for annotation in task1_annotations
+                    for annotation in filtered_task1_annotations
                 ],
                 
-                # Task 2 annotations (same for all forms)
+                # Task 2 annotations (only with data)
                 "annotations_task_2": [
                     {
                         "annotator": int(annotation.user_id),
                         "address_all_aspects": annotation.data.get("aspects", False),
-                        "justification_for_addressing_all_aspects": annotation.data.get("execution_text", ""),
+                        "justification_for_addressing_all_aspects": annotation.data.get("explanation_text", ""),
                         "with_explanation": annotation.data.get("explanation", False),
                         "code_executable": annotation.data.get("execution") in ["Executable", "N/A"],
-                        "code_download_link": annotation.data.get("codeDownloadUrl", "")
+                        "code_download_link": annotation.data.get("codeDownloadUrl", ""),
+                        "code_execution_screenshot": annotation.data.get("screenshot", "N/A"),
                     }
-                    for annotation in task2_annotations
+                    for annotation in filtered_task2_annotations
                 ],
                 
-                # Task 3 annotations (same for all forms)
+                # Task 3 annotations (only with data)
                 "annotations_task_3": [
                     {
                         "annotator": int(annotation.user_id),
-                        "timestamp": annotation.timestamp.isoformat() if hasattr(annotation, 'timestamp') and annotation.timestamp else datetime.now(timezone.utc).isoformat(),
                         **_process_task3_annotation_data(annotation.data)
                     }
-                    for annotation in task3_annotations
+                    for annotation in filtered_task3_annotations
                 ],
-                
-                # Task 1 consensus (same for all forms)
-                "agreed_annotation_task_1": {
+            }
+
+            # Only add Task 1 consensus if data exists
+            if task1_consensus_data:
+                entry["agreed_annotation_task_1"] = {
                     "relevance": task1_consensus_data.get("relevance", False),
                     "learning_value": task1_consensus_data.get("learning", False),
                     "clarity": task1_consensus_data.get("clarity", False),
-                   **({"image_grounded": task1_consensus_data.get("grounded", False)} if annotation.data.get("grounded", "") != "N/A"else {}),
-                },
-                
-                # Task 2 consensus (same for all forms)
-                "agreed_annotation_task_2": {
+                    **({"image_grounded": task1_consensus_data.get("grounded", False)} if task1_consensus_data.get("grounded", "") != "N/A" else {}),
+                }
+            else:
+                entry["agreed_annotation_task_1"] = {}
+
+            # Only add Task 2 consensus if data exists
+            if task2_consensus_data:
+                entry["agreed_annotation_task_2"] = {
                     "address_all_aspects": task2_consensus_data.get("aspects", False),
-                    "justification_for_addressing_all_aspects": task2_consensus_data.get("aspects_text", ""),
+                    "justification_for_addressing_all_aspects": task2_consensus_data.get("explanation_text", ""),
                     "with_explanation": task2_consensus_data.get("explanation", False),
                     "code_executable": task2_consensus_data.get("execution") in ["Executable", "N/A"],
-                    "code_download_link": task2_consensus_data.get("codeDownloadUrl", "")
-                },
+                    "code_download_link": task2_consensus_data.get("codeDownloadUrl", ""),
+                    "code_execution_screenshot": task2_consensus_data.get("screenshot", "N/A"),
+                }
+            else:
+                entry["agreed_annotation_task_2"] = {}
+            # Only add Task 3 consensus if data exists
+            if task3_consensus_data and form_result:
+                entry["agreed_annotation_task_3"] = form_result
                 
-                # Task 3 consensus (specific to this form)
-                "agreed_annotation_task_3": form_result
-            }
-
-            # Add required fields with defaults if missing for Task 3
-            task3_required_fields = {
-                "question_type": "Reasoning",
-                "short_answer_list": [],
-                "long_answer": "",
-                "rewritten_question": [],
-                "supporting_docs": []
-            }
-            for field, default_value in task3_required_fields.items():
-                if field not in entry["agreed_annotation_task_3"]:
-                    entry["agreed_annotation_task_3"][field] = default_value
-
+                # Add required fields with defaults if missing for Task 3
+                task3_required_fields = {
+                    "question_type": "",
+                    "short_answer_list": [],
+                    "long_answer": [""],
+                    "rewritten_question": [],
+                    "supporting_docs": []
+                }
+                for field, default_value in task3_required_fields.items():
+                    if field not in entry["agreed_annotation_task_3"]:
+                        entry["agreed_annotation_task_3"][field] = default_value
+            else:
+                entry["agreed_annotation_task_3"] ={}
             # Add form metadata to the entry if multiple forms exist
             if len(task3_consensus_results) > 1:
                 entry["form_metadata"] = {
@@ -789,9 +875,8 @@ async def get_summary_report(
                 }
 
             result.append(entry)
-
-    if format.lower() == "csv":
-        pass
+        if format.lower() == "csv":
+            pass
         
     return result
 @app.get("/api/auth/authorized-users", response_model=List[schemas.AuthorizedUser], tags=["Auth"])
@@ -1079,10 +1164,6 @@ async def admin_override_annotation(
 
 
 # ================= Consensus APIs (Cleaned Up) =================
-@app.get("/api/hello")
-async def hello():
-    return {"message": "hello"}
-# Get a specific consensus annotation for a discussion and task
 @app.get("/api/selected/consensus/{discussion_id}/{task_id}",
          response_model=Optional[schemas.ConsensusAnnotationResponse], tags=["Consensus"])
 async def get_specific_consensus_annotation(
@@ -1099,6 +1180,7 @@ async def get_specific_consensus_annotation(
 
         if not consensus_annotation:
             logger.warning(f"No consensus annotation found for discussion='{discussion_id}', task={task_id}")
+            return None
 
         logger.info(f"Found consensus annotation with id={consensus_annotation.id}")
         return consensus_annotation

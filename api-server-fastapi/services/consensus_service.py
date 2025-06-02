@@ -192,12 +192,18 @@ def _should_task_be_completed(db: Session, discussion_id: str, task_id: int, con
         relevance = consensus_data.get('relevance', False)
         learning_value = consensus_data.get('learning', False)  # Note: might be 'learning' not 'learning_value'
         clarity = consensus_data.get('clarity', False)
+        grounded_value = consensus_data.get('grounded')
+        if grounded_value == "N/A":
+            image_grounded = True  # Skip this check
+        else:
+            image_grounded = bool(grounded_value)
         
         # image_grounded is optional - only required if the discussion actually has images
         image_grounded = consensus_data.get('grounded', True)  # Default to True if not applicable
         
         required_fields = [relevance, learning_value, clarity]
-        
+        if grounded_value != "N/A":
+            required_fields.append(image_grounded)
         # Check if image grounding is applicable (you might want to check if discussion has images)
         if consensus_data.get('grounded') is not None and consensus_data.get('grounded') != 'N/A':
             required_fields.append(image_grounded)

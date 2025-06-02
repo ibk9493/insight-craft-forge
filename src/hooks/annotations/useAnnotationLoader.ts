@@ -46,7 +46,8 @@ export function useAnnotationLoader({
       if (screenshotValue && typeof screenshotValue === 'string') {
         return {
           ...task,
-          selectedOption: screenshotStatus || 'Provided',
+          // selectedOption: screenshotStatus || 'Provided',
+          selectedOption: typeof screenshotStatus === 'boolean' ? (screenshotStatus ? 'True' : 'False') : String(screenshotStatus),
           textValue: screenshotValue,
           status: 'completed' as SubTaskStatus
         };
@@ -61,7 +62,8 @@ export function useAnnotationLoader({
       if (codeValue && typeof codeValue === 'string') {
         return {
           ...task,
-          selectedOption: codeStatus || 'Verified manually',
+          selectedOption: typeof codeStatus === 'boolean' ? (codeStatus ? 'True' : 'False') : String(codeStatus),
+          // selectedOption: codeStatus || 'Verified manually',
           textValue: codeValue,
           docDownloadLink: codeValue,
           enableDocDownload: true,
@@ -128,6 +130,45 @@ export function useAnnotationLoader({
         docDownloadLink: hasLink ? linkValue : undefined,
         enableDocDownload: hasLink
       };
+    }
+
+    // 🔧 FIXED: Handle question_image_links (now optional)
+    if (task.id === 'question_image_links') {
+      const imageLinks = annotation.data['question_image_links'];
+      const imageLinksOption = annotation.data['question_image_links_option'];
+      
+      // Check for explicit "Not Needed" option
+      if (imageLinksOption === 'Not Needed' || savedValue === 'Not Needed') {
+        return {
+          ...task,
+          selectedOption: 'Not Needed',
+          status: 'completed' as SubTaskStatus,
+          imageLinks: []
+        };
+      }
+      
+      // Check for provided image links
+      if (Array.isArray(imageLinks) && imageLinks.length > 0) {
+        const validLinks = imageLinks.filter(link => typeof link === 'string' && link.trim() !== '');
+        if (validLinks.length > 0) {
+          return {
+            ...task,
+            selectedOption: 'Provided',
+            status: 'completed' as SubTaskStatus,
+            imageLinks: validLinks
+          };
+        }
+      }
+      
+      // Check if "Provided" was selected but no valid links
+      if (imageLinksOption === 'Provided') {
+        return {
+          ...task,
+          selectedOption: 'Provided',
+          status: 'completed' as SubTaskStatus,
+          imageLinks: []
+        };
+      }
     }
 
     // Handle regular fields
@@ -269,6 +310,43 @@ export function useAnnotationLoader({
         }
       }
 
+      // 🔧 FIXED: Handle question_image_links for consensus (now optional)
+      if (task.id === 'question_image_links') {
+        const imageLinks = annotation.data['question_image_links'];
+        const imageLinksOption = annotation.data['question_image_links_option'];
+        
+        // Check for explicit "Not Needed" option
+        if (imageLinksOption === 'Not Needed' || savedValue === 'Not Needed') {
+          return {
+            ...task,
+            selectedOption: 'Not Needed',
+            status: 'completed' as SubTaskStatus,
+            imageLinks: []
+          };
+        }
+        
+        // Check for provided image links
+        if (Array.isArray(imageLinks) && imageLinks.length > 0) {
+          const validLinks = imageLinks.filter(link => typeof link === 'string' && link.trim() !== '');
+          return {
+            ...task,
+            selectedOption: 'Provided',
+            status: 'completed' as SubTaskStatus,
+            imageLinks: validLinks
+          };
+        }
+        
+        // Check if "Provided" was selected but no valid links
+        if (imageLinksOption === 'Provided') {
+          return {
+            ...task,
+            selectedOption: 'Provided',
+            status: 'completed' as SubTaskStatus,
+            imageLinks: []
+          };
+        }
+      }
+
       if (task.id === 'short_answer_list' && Array.isArray(savedValue)) {
         return {
           ...task,
@@ -328,7 +406,7 @@ export function useAnnotationLoader({
           ...task,
           selectedOption,
           status,
-          textValue: typeof textValue === 'string' ? textValue : (task.textValue || '')
+          textValue: typeof savedTextValue === 'string' ? savedTextValue : (task.textValue || '')
         };
       }
       return task;
@@ -415,6 +493,8 @@ export function useAnnotationLoader({
     const textValues: Record<string, string[]> = {};
     const shortAnswerLists: string[][] = [];
     const supportingDocs: any[][] = [];
+    const questionImageLists: string[][] = [];
+    const questionImageOptions: string[] = []; // 🔧 ADDED: Track image link options
 
     annotations.forEach(annotation => {
       Object.entries(annotation.data).forEach(([key, value]) => {
@@ -427,6 +507,24 @@ export function useAnnotationLoader({
         // Special handling for supporting_docs
         if (key === 'supporting_docs' && Array.isArray(value)) {
           supportingDocs.push(value);
+          return;
+        }
+
+        // 🔧 FIXED: Handle question_image_links options
+        if (key === 'question_image_links_option') {
+          if (typeof value === 'string') {
+            questionImageOptions.push(value);
+          }
+          return;
+        }
+
+        // Special handling for question_image_links
+        if (key === 'question_image_links') {
+          if (Array.isArray(value)) {
+            questionImageLists.push(value);
+          } else if (value === 'Not Needed') {
+            questionImageOptions.push('Not Needed');
+          }
           return;
         }
 
@@ -498,6 +596,51 @@ export function useAnnotationLoader({
           textValue: JSON.stringify(allDocs, null, 2),
           status: 'completed' as SubTaskStatus
         };
+      }
+
+      // 🔧 FIXED: Special handling for question_image_links (now optional)
+      if (task.id === 'question_image_links') {
+        // Count the options
+        const optionCounts: Record<string, number> = {};
+        questionImageOptions.forEach(option => {
+          optionCounts[option] = (optionCounts[option] || 0) + 1;
+        });
+
+        // Find the most common option
+        let mostCommonOption = 'Not Needed';
+        let maxOptionCount = 0;
+        Object.entries(optionCounts).forEach(([option, count]) => {
+          if (count > maxOptionCount) {
+            maxOptionCount = count;
+            mostCommonOption = option;
+          }
+        });
+
+        if (mostCommonOption === 'Not Needed') {
+          return {
+            ...task,
+            selectedOption: 'Not Needed',
+            imageLinks: [],
+            status: 'completed' as SubTaskStatus
+          };
+        } else {
+          // Collect all unique image links from annotations that provided them
+          const allImageLinks: string[] = [];
+          questionImageLists.forEach(linkList => {
+            linkList.forEach(link => {
+              if (typeof link === 'string' && link.trim() !== '' && !allImageLinks.includes(link)) {
+                allImageLinks.push(link);
+              }
+            });
+          });
+
+          return {
+            ...task,
+            selectedOption: 'Provided',
+            imageLinks: allImageLinks,
+            status: 'completed' as SubTaskStatus
+          };
+        }
       }
 
       const counts = fieldCounts[task.id];
