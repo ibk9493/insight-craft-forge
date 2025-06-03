@@ -635,7 +635,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                                       )}
                                     </div>
                                     <div className="mb-2">
-                                      <label className="block text-xs font-medium text-gray-700 mb-1">Link</label>
+                                      <label className="block text-xs font-medium text-gray-700 mb-1">Relative Path to File</label>
                                       <Input
                                           value={docField.link}
                                           onChange={e => {
@@ -644,7 +644,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                                           }}
                                           onClick={e => e.stopPropagation()}
                                           onMouseDown={e => e.stopPropagation()}
-                                          placeholder="https://example.com/docs/file.html"
+                                          placeholder="/downloads/marimo-10.01/folder/file.html"
                                           className="text-sm w-full"
                                       />
                                     </div>
@@ -658,7 +658,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                                           }}
                                           onClick={e => e.stopPropagation()}
                                           onMouseDown={e => e.stopPropagation()}
-                                          placeholder="The relevant section of documentation"
+                                          placeholder="Raw content from The relevant section of documentation"
                                           className="min-h-[80px] text-sm w-full"
                                       />
                                     </div>

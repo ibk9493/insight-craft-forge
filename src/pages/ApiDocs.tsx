@@ -331,11 +331,11 @@ const ApiDocs = () => {
                     { name: 'downloadUrl', type: 'string', description: 'URL to download code archive' }
                   ],
                   example: `{
-  "downloadUrl": "https://storage.example.com/code/repo-123.tar.gz",
-  "filename": "repo-123.tar.gz",
-  "size": 1245000,
-  "expires": "2025-05-02T12:00:00Z"
-}`
+            "downloadUrl": "https://storage.example.com/code/repo-123.tar.gz",
+            "filename": "repo-123.tar.gz",
+            "size": 1245000,
+            "expires": "2025-05-02T12:00:00Z"
+          }`
                 }
               ]}
             />

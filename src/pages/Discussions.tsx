@@ -370,7 +370,7 @@ const getTaskButtonState = useCallback((discussion: EnhancedDiscussion, taskNumb
   // Handle special statuses first
   if (parseTaskStatus(task.status).status === 'rework') {
     return {
-      isEnabled: isPodLead || isAdmin,
+      isEnabled: isPodLead || isAdmin || userAnnotated,
       text: `Needs Rework (${task.annotators}/${required})`
     };
   }

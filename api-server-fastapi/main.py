@@ -2110,6 +2110,128 @@ async def flag_discussion_task(
             detail="Failed to flag task"
         )
 
+@app.put("/api/admin/discussions/{discussion_id}/tasks/{task_id}/status")
+async def update_task_status_simple(
+    discussion_id: str = Path(..., description="Discussion ID"),
+    task_id: int = Path(..., description="Task ID"),
+    status_data: dict = Body(..., description="New status"),
+    admin_user: schemas.AuthorizedUser = Depends(jwt_auth_service.get_admin),
+    db: Session = Depends(get_db)
+):
+    """Update task status in existing system."""
+    try:
+        new_status = status_data.get("status")
+        
+        valid_statuses = ['locked', 'unlocked', 'completed', 'rework', 'blocked', 'ready_for_next', 'flagged','in_progress', 'ready_for_consensus', 'consensus_created']
+        
+        if not new_status or new_status not in valid_statuses:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+            )
+        
+        if task_id not in [1, 2, 3]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="task_id must be 1, 2, or 3"
+            )
+        
+        # Get current status
+        current_status_result = db.execute(
+            models.discussion_task_association.select().where(
+                and_(
+                    models.discussion_task_association.c.discussion_id == discussion_id,
+                    models.discussion_task_association.c.task_number == task_id
+                )
+            )
+        ).first()
+        
+        old_status = current_status_result.status if current_status_result else "none"
+        
+        # Update status
+        result = db.execute(
+            models.discussion_task_association.update().where(
+                and_(
+                    models.discussion_task_association.c.discussion_id == discussion_id,
+                    models.discussion_task_association.c.task_number == task_id
+                )
+            ).values(status=new_status)
+        )
+        
+        # Create if doesn't exist
+        if result.rowcount == 0:
+            db.execute(
+                models.discussion_task_association.insert().values(
+                    discussion_id=discussion_id,
+                    task_number=task_id,
+                    status=new_status,
+                    annotators=0
+                )
+            )
+            old_status = "none"
+        
+        # Auto-unlock next task if ready_for_next
+        auto_unlocked = False
+        if new_status == 'ready_for_next' and task_id < 3:
+            next_task_id = task_id + 1
+            
+            # Unlock next task if locked
+            db.execute(
+                models.discussion_task_association.update().where(
+                    and_(
+                        models.discussion_task_association.c.discussion_id == discussion_id,
+                        models.discussion_task_association.c.task_number == next_task_id,
+                        models.discussion_task_association.c.status == 'locked'
+                    )
+                ).values(status='unlocked')
+            )
+            
+            # Create next task if doesn't exist
+            next_task_exists = db.execute(
+                models.discussion_task_association.select().where(
+                    and_(
+                        models.discussion_task_association.c.discussion_id == discussion_id,
+                        models.discussion_task_association.c.task_number == next_task_id
+                    )
+                )
+            ).first()
+            
+            if not next_task_exists:
+                db.execute(
+                    models.discussion_task_association.insert().values(
+                        discussion_id=discussion_id,
+                        task_number=next_task_id,
+                        status='unlocked',
+                        annotators=0
+                    )
+                )
+            
+            auto_unlocked = True
+        
+        db.commit()
+        
+        logger.info(f"Task {task_id} status updated from '{old_status}' to '{new_status}' by {admin_user.email}")
+        
+        return {
+            "success": True,
+            "message": f"Task {task_id} status updated to {new_status}",
+            "discussion_id": discussion_id,
+            "task_id": task_id,
+            "old_status": old_status,
+            "new_status": new_status,
+            "updated_by": admin_user.email,
+            "auto_unlocked_next": auto_unlocked
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating task status: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update task status"
+        )
 
 @app.get("/api/github/latest-commit")
 async def get_latest_commit_before_discussion(

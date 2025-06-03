@@ -41,7 +41,28 @@ import {
   RotateCcw
 } from 'lucide-react';
 
-
+const parseTaskStatus = (statusData: any) => {
+  // Handle null/undefined
+  if (!statusData) return { status: 'locked' };
+  
+  // If it's already an object (shouldn't happen but safe)
+  if (typeof statusData === 'object') return statusData;
+  
+  // If it's a string that looks like JSON
+  if (typeof statusData === 'string' && statusData.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(statusData);
+      return parsed;
+    } catch (error) {
+      console.warn('Failed to parse status JSON:', statusData);
+      // Fallback to treating as simple status
+      return { status: statusData };
+    }
+  }
+  
+  // Simple string status (backward compatibility)
+  return { status: statusData };
+};
 
 const TaskManager: React.FC = () => {
   const [discussions, setDiscussions] = useState<Discussion[]>([]);
@@ -73,7 +94,7 @@ const TaskManager: React.FC = () => {
 
   // Get status icon and styling
   const getStatusDisplay = (status: TaskStatus) => {
-    switch (status) {
+    switch (parseTaskStatus(status).status) {
       case 'locked':
         return {
           icon: <Lock className="w-4 h-4 text-gray-500" />,
@@ -104,11 +125,29 @@ const TaskManager: React.FC = () => {
           label: 'Blocked',
           className: 'text-red-600'
         };
+      case 'ready_for_consensus':
+        return {
+          icon: <ArrowRight className="w-4 h-4 text-amber-500" />,
+          label: 'Ready for Consensus',
+          className: 'text-amber-600'
+        };
+      case 'consensus_created':
+        return {
+          icon: <Check className="w-4 h-4 text-indigo-500" />,
+          label: 'Consensus Created',
+          className: 'text-indigo-600'
+        };
       case 'ready_for_next':
         return {
           icon: <ArrowRight className="w-4 h-4 text-purple-500" />,
           label: 'Ready for Next',
           className: 'text-purple-600'
+        };
+      case 'flagged':
+        return {
+          icon: <Flag className="w-4 h-4 text-yellow-500" />,
+          label: 'Flagged',
+          className: 'text-yellow-600'
         };
       default:
         return {
@@ -309,11 +348,13 @@ const TaskManager: React.FC = () => {
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
                   <SelectItem value="locked">Locked</SelectItem>
-                  <SelectItem value="unlocked">Unlocked</SelectItem>
+                  <SelectItem value="unlocked">Unlocked</SelectItem>  
                   <SelectItem value="completed">Completed</SelectItem>
                   <SelectItem value="rework">Needs Rework</SelectItem>
                   <SelectItem value="blocked">Blocked</SelectItem>
-                  <SelectItem value="ready_for_next">Ready for Next</SelectItem>
+                  <SelectItem value="ready_for_consensus">Ready for Consensus</SelectItem>
+                  <SelectItem value="consensus_created">Consensus Created</SelectItem>
+                  <SelectItem value="flagged">Flagged</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -402,7 +443,7 @@ const TaskManager: React.FC = () => {
                     {/* Task 1 Status */}
                     <TableCell>
                       <Select
-                        value={discussion.tasks.task1.status}
+                        value={parseTaskStatus(discussion.tasks.task1.status).status}
                         onValueChange={(value: TaskStatus) => updateTaskStatus(discussion.id, 1, value)}
                         disabled={isUpdating === `${discussion.id}-1`}
                       >
@@ -446,6 +487,24 @@ const TaskManager: React.FC = () => {
                               <span>Ready for Next</span>
                             </div>
                           </SelectItem>
+                          <SelectItem value="ready_for_consensus">
+                            <div className="flex items-center">
+                              <ArrowRight className="w-4 h-4 mr-2 text-amber-500" />
+                              <span>Ready for Consensus</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="consensus_created">
+                            <div className="flex items-center">
+                              <Check className="w-4 h-4 mr-2 text-indigo-500" />
+                              <span>Consensus Created</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="flagged">
+                            <div className="flex items-center">
+                              <Flag className="w-4 h-4 mr-2 text-yellow-500" />
+                              <span>Flagged</span>
+                            </div>
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                       <div className="text-xs text-gray-500 mt-1">
@@ -456,7 +515,7 @@ const TaskManager: React.FC = () => {
                     {/* Task 2 Status */}
                     <TableCell>
                       <Select
-                        value={discussion.tasks.task2.status}
+                        value={parseTaskStatus(discussion.tasks.task2.status).status}
                         onValueChange={(value: TaskStatus) => updateTaskStatus(discussion.id, 2, value)}
                         disabled={isUpdating === `${discussion.id}-2`}
                       >
@@ -500,6 +559,24 @@ const TaskManager: React.FC = () => {
                               <span>Ready for Next</span>
                             </div>
                           </SelectItem>
+                          <SelectItem value="ready_for_consensus">
+                            <div className="flex items-center">
+                              <ArrowRight className="w-4 h-4 mr-2 text-amber-500" />
+                              <span>Ready for Consensus</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="consensus_created">
+                            <div className="flex items-center">
+                              <Check className="w-4 h-4 mr-2 text-indigo-500" />
+                              <span>Consensus Created</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="flagged">
+                            <div className="flex items-center">
+                              <Flag className="w-4 h-4 mr-2 text-yellow-500" />
+                              <span>Flagged</span>
+                            </div>
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                       <div className="text-xs text-gray-500 mt-1">
@@ -510,7 +587,7 @@ const TaskManager: React.FC = () => {
                     {/* Task 3 Status */}
                     <TableCell>
                       <Select
-                        value={discussion.tasks.task3.status}
+                        value={parseTaskStatus(discussion.tasks.task3.status).status}
                         onValueChange={(value: TaskStatus) => updateTaskStatus(discussion.id, 3, value)}
                         disabled={isUpdating === `${discussion.id}-3`}
                       >
@@ -554,6 +631,24 @@ const TaskManager: React.FC = () => {
                               <span>Ready for Next</span>
                             </div>
                           </SelectItem>
+                          <SelectItem value="ready_for_consensus">
+                            <div className="flex items-center">
+                              <ArrowRight className="w-4 h-4 mr-2 text-amber-500" />
+                              <span>Ready for Consensus</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="consensus_created">
+                            <div className="flex items-center">
+                              <Check className="w-4 h-4 mr-2 text-indigo-500" />
+                              <span>Consensus Created</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="flagged">
+                            <div className="flex items-center">
+                              <Flag className="w-4 h-4 mr-2 text-yellow-500" />
+                              <span>Flagged</span>
+                            </div>
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                       <div className="text-xs text-gray-500 mt-1">
@@ -587,7 +682,9 @@ const TaskManager: React.FC = () => {
               { status: 'completed', label: 'Completed', description: 'Finished successfully' },
               { status: 'rework', label: 'Needs Rework', description: 'Flagged for issues' },
               { status: 'blocked', label: 'Blocked', description: 'Has serious problems' },
-              { status: 'ready_for_next', label: 'Ready for Next', description: 'Will unlock next task' }
+              { status: 'ready_for_consensus', label: 'Ready for Consensus', description: 'Needs consensus creation' },
+              { status: 'consensus_created', label: 'Consensus Created', description: 'Consensus exists' },
+              { status: 'flagged', label: 'Flagged', description: 'Needs review' }
             ].map((item) => {
               const display = getStatusDisplay(item.status as TaskStatus);
               return (
