@@ -414,7 +414,100 @@ export const api = {
       });
     }
   },
+ // Add these endpoints to your existing api object
 
+taskFlags: {
+  flagTask: (
+    discussionId: string, 
+    taskId: number, 
+    flagData: {
+      reason: string;
+      category: string;
+      flagged_from_task: number;
+      workflow_scenario?: string;
+      flagged_by_role: string;
+    }
+  ) => {
+    console.log(`[TaskFlags] Flagging task ${taskId} for discussion ${discussionId}`);
+    
+    return safeApiRequest<{
+      success: boolean;
+      message: string;
+      discussion_id: string;
+      task_id: number;
+      new_status: string;
+      flagged_by: string;
+      reason: string;
+      category: string;
+    }>(`/api/discussions/${encodeURIComponent(discussionId)}/tasks/${taskId}/flag-enhanced`, 'POST', flagData, undefined, {
+      success: false,
+      message: 'Failed to flag task',
+      discussion_id: discussionId,
+      task_id: taskId,
+      new_status: 'failed',
+      flagged_by: '',
+      reason: flagData.reason,
+      category: flagData.category
+    });
+  },
+
+  updateTaskStatus: (discussionId: string, taskId: number, status: string) => {
+    return safeApiRequest<{
+      auto_unlocked_next: any;
+      success: boolean;
+      message: string;
+      discussion_id: string;
+      task_id: number;
+      old_status: string;
+      new_status: string;
+      updated_by: string;
+    }>(`/api/admin/discussions/${encodeURIComponent(discussionId)}/tasks/${taskId}/status`, 'PUT', { status });
+  }
+},
+
+github: {
+  getLatestCommit: (repoUrl: string, discussionDate: string) => {
+    const params = new URLSearchParams({
+      repo_url: repoUrl,
+      discussion_date: discussionDate
+    });
+    
+    return safeApiRequest<{
+      [x: string]: string;
+      success: boolean;
+      repository: string;
+      latest_commit: {
+        sha: string;
+        short_sha: string;
+        message: string;
+        author: { name: string; date: string };
+        url: string;
+        hours_before_discussion: number;
+      } | null;
+    }>(`/api/github/latest-commit?${params.toString()}`, 'GET');
+  },
+  getLatestTag: (repoUrl: string, discussionDate: string) => {
+    const params = new URLSearchParams({
+      repo_url: repoUrl,
+      discussion_date: discussionDate
+    });
+    
+    return safeApiRequest<{
+      [x: string]: string;
+      success: boolean;
+      repository: string;
+      latest_tag: {
+        name: string;
+        sha: string;
+        short_sha: string;
+        url: string;
+        date: string;
+        hours_before_discussion: number;
+        message?: string;
+      } | null;
+    }>(`/api/github/latest-tag?${params.toString()}`, 'GET');
+  }
+},
   discussions: {
     // Updated to support pagination parameters
     getFilterOptions: () => {

@@ -322,7 +322,7 @@ def _calculate_field_agreement(annotations: List[models.Annotation], task_id: in
             "agreement_rate": round(agreement_rate, 2),
             "consensus_value": consensus_value,
             "total_annotations": len(field_values),
-            "value_distribution": dict(Counter(field_values))
+            "value_distribution": value_counts
         }
     
     # Calculate overall agreement

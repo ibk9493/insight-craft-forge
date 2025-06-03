@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timezone, timedelta
+from operator import and_
 from fastapi import FastAPI, Depends, HTTPException, Query, Response, Body, status, Request, APIRouter, Path
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -1211,8 +1212,13 @@ async def create_or_update_consensus_annotation_endpoint(
         db: Session = Depends(get_db)
 ):
     """Create or update a consensus annotation."""
-    result = consensus_service.create_or_update_consensus_annotation(db, consensus_data, current_user.email)
-    return result
+    try:
+        result = consensus_service.create_or_update_consensus_annotation(db, consensus_data, current_user.email)
+        return result
+    except ValueError as e:
+        if "marked for rework" in str(e):
+            raise HTTPException(status_code=400, detail=str(e))
+        raise
 
 # Calculate consensus (operates on regular annotations)
 @app.get("/api/consensus/{discussion_id}/{task_id}/calculate",
@@ -2008,3 +2014,639 @@ async def get_all_pod_leads_breakdown(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get pod leads breakdown: {str(e)}"
         )
+@app.post("/api/discussions/{discussion_id}/tasks/{task_id}/flag")
+async def flag_discussion_task(
+    discussion_id: str = Path(..., description="Discussion ID"),
+    task_id: int = Path(..., description="Task ID (1, 2, or 3)"),
+    flag_data: dict = Body(..., description="Flag reason"),
+    current_user: schemas.AuthorizedUser = Depends(jwt_auth_service.require_authentication),
+    db: Session = Depends(get_db)
+):
+    """Flag a task by changing its status to 'rework'."""
+    try:
+        reason = flag_data.get("reason", "").strip()
+        category = flag_data.get("category", "general")
+        flagged_from_task = flag_data.get("flagged_from_task", task_id)
+        
+        if not reason or len(reason) < 10:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Please provide a detailed reason (minimum 10 characters)"
+            )
+        
+        if task_id not in [1, 2, 3]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="task_id must be 1, 2, or 3"
+            )
+        
+        # Check if discussion exists
+        discussion = db.query(models.Discussion).filter(
+            models.Discussion.id == discussion_id
+        ).first()
+        if not discussion:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Discussion not found"
+            )
+        # Determine status based on category
+        new_status = 'rework' if category == "quality_issue" else 'flagged'
+        
+        result = db.execute(
+            models.discussion_task_association.update().where(
+                and_(
+                    models.discussion_task_association.c.discussion_id == discussion_id,
+                    models.discussion_task_association.c.task_number == task_id
+                )
+            )).values(
+            status=json.dumps({
+                "status": new_status,
+                "reason": reason,
+                "category": category,
+                "flagged_by": current_user.email,
+                "flagged_at": datetime.utcnow().isoformat()
+            }) if new_status in ['rework', 'flagged'] else new_status
+        )
+    
+        # If task association doesn't exist, create it
+        if result.rowcount == 0:
+            db.execute(
+                models.discussion_task_association.insert().values(
+                    discussion_id=discussion_id,
+                    task_number=task_id,
+                    status=new_status,
+                    annotators=0
+                )
+            )
+        
+        db.commit()
+            
+        # Enhanced logging
+        log_message = f"Task {task_id} flagged for rework by {current_user.email}"
+        if flagged_from_task != task_id:
+            log_message += f" (discovered while working on Task {flagged_from_task})"
+        log_message += f": [{category}] {reason}"
+        logger.info(log_message)
+        
+        return {
+            "success": True,
+            "message": f"Task {task_id} flagged for rework. Status updated.",
+            "discussion_id": discussion_id,
+            "task_id": task_id,
+            "new_status": new_status,
+            "flagged_by": current_user.email,
+            "reason": reason,
+            "category": category,
+            "upstream_flag": flagged_from_task != task_id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error flagging task: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to flag task"
+        )
+
+@app.put("/api/admin/discussions/{discussion_id}/tasks/{task_id}/status")
+async def update_task_status_simple(
+    discussion_id: str = Path(..., description="Discussion ID"),
+    task_id: int = Path(..., description="Task ID"),
+    status_data: dict = Body(..., description="New status"),
+    db: Session = Depends(get_db)
+):
+    """Update task status in existing system."""
+    try:
+        new_status = status_data.get("status")
+        
+        valid_statuses = ['locked', 'unlocked', 'completed', 'rework', 'blocked', 'ready_for_next', 'flagged','in_progress', 'ready_for_consensus', 'consensus_created']
+        
+        if not new_status or new_status not in valid_statuses:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+            )
+        
+        if task_id not in [1, 2, 3]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="task_id must be 1, 2, or 3"
+            )
+        
+        # Get current status
+        current_status_result = db.execute(
+            models.discussion_task_association.select().where(
+                and_(
+                    models.discussion_task_association.c.discussion_id == discussion_id,
+                    models.discussion_task_association.c.task_number == task_id
+                )
+            )
+        ).first()
+        
+        old_status = current_status_result.status if current_status_result else "none"
+        
+        # Update status
+        result = db.execute(
+            models.discussion_task_association.update().where(
+                and_(
+                    models.discussion_task_association.c.discussion_id == discussion_id,
+                    models.discussion_task_association.c.task_number == task_id
+                )
+            ).values(status=new_status)
+        )
+        
+        # Create if doesn't exist
+        if result.rowcount == 0:
+            db.execute(
+                models.discussion_task_association.insert().values(
+                    discussion_id=discussion_id,
+                    task_number=task_id,
+                    status=new_status,
+                    annotators=0
+                )
+            )
+            old_status = "none"
+        
+        # Auto-unlock next task if ready_for_next
+        auto_unlocked = False
+        if new_status == 'ready_for_next' and task_id < 3:
+            next_task_id = task_id + 1
+            
+            # Unlock next task if locked
+            db.execute(
+                models.discussion_task_association.update().where(
+                    and_(
+                        models.discussion_task_association.c.discussion_id == discussion_id,
+                        models.discussion_task_association.c.task_number == next_task_id,
+                        models.discussion_task_association.c.status == 'locked'
+                    )
+                ).values(status='unlocked')
+            )
+            
+            # Create next task if doesn't exist
+            next_task_exists = db.execute(
+                models.discussion_task_association.select().where(
+                    and_(
+                        models.discussion_task_association.c.discussion_id == discussion_id,
+                        models.discussion_task_association.c.task_number == next_task_id
+                    )
+                )
+            ).first()
+            
+            if not next_task_exists:
+                db.execute(
+                    models.discussion_task_association.insert().values(
+                        discussion_id=discussion_id,
+                        task_number=next_task_id,
+                        status='unlocked',
+                        annotators=0
+                    )
+                )
+            
+            auto_unlocked = True
+        
+        db.commit()
+        
+        logger.info(f"Task {task_id} status updated from '{old_status}' to '{new_status}' by admin")
+        
+        return {
+            "success": True,
+            "message": f"Task {task_id} status updated to {new_status}",
+            "discussion_id": discussion_id,
+            "task_id": task_id,
+            "old_status": old_status,
+            "new_status": new_status,
+            "updated_by": 'admin',
+            "auto_unlocked_next": auto_unlocked
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating task status: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update task status"
+        )
+
+@app.get("/api/github/latest-commit")
+async def get_latest_commit_before_discussion(
+    repo_url: str = Query(..., description="GitHub repository URL"),
+    discussion_date: str = Query(..., description="Discussion creation date in ISO format"),
+    current_user: schemas.AuthorizedUser = Depends(jwt_auth_service.require_authentication)
+):
+    """Find the latest commit just before the discussion was created."""
+    try:
+        import re
+        import requests
+        from datetime import datetime
+        
+        # Parse GitHub URL
+        github_pattern = r'github\.com/([^/]+)/([^/]+)'
+        match = re.search(github_pattern, repo_url)
+        if not match:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid GitHub repository URL"
+            )
+        
+        owner, repo = match.groups()
+        repo = repo.replace('.git', '')
+        
+        # Parse discussion date
+        try:
+            discussion_dt = datetime.fromisoformat(discussion_date.replace('Z', '+00:00'))
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid date format. Use ISO format"
+            )
+        
+        # Get commits until discussion date
+        commits_url = f"https://api.github.com/repos/{owner}/{repo}/commits"
+        params = {
+            'until': discussion_dt.isoformat(),
+            'per_page': 1
+        }
+        
+        response = requests.get(commits_url, params=params, timeout=10)
+        
+        if response.status_code == 404:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Repository not found"
+            )
+        elif response.status_code == 403:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="GitHub API rate limit exceeded"
+            )
+        elif not response.ok:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"GitHub API error: {response.status_code}"
+            )
+        
+        commits_data = response.json()
+        
+        if not commits_data:
+            return {
+                'success': True,
+                'repository': f"{owner}/{repo}",
+                'discussion_date': discussion_date,
+                'latest_commit': None,
+                'message': 'No commits found before discussion date'
+            }
+        
+        # Get the latest commit
+        latest_commit = commits_data[0]
+        commit_date = datetime.fromisoformat(latest_commit['commit']['author']['date'].replace('Z', '+00:00'))
+        hours_diff = (discussion_dt - commit_date).total_seconds() / 3600
+        
+        commit_info = {
+            'sha': latest_commit['sha'],
+            'short_sha': latest_commit['sha'][:7],
+            'message': latest_commit['commit']['message'].split('\n')[0],
+            'author': {
+                'name': latest_commit['commit']['author']['name'],
+                'date': latest_commit['commit']['author']['date']
+            },
+            'url': latest_commit['html_url'],
+            'hours_before_discussion': round(hours_diff, 1)
+        }
+        
+        return {
+            'success': True,
+            'repository': f"{owner}/{repo}",
+            'discussion_date': discussion_date,
+            'latest_commit': commit_info
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error finding latest commit: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch latest commit"
+        )
+@app.get("/api/github/latest-tag")
+async def get_latest_tag_before_discussion(
+    repo_url: str = Query(..., description="GitHub repository URL"),
+    discussion_date: str = Query(..., description="Discussion creation date in ISO format")
+):
+    """
+    Get the latest tag from a GitHub repository before a specific date.
+    """
+    try:
+        import re
+        import requests
+        from datetime import datetime
+        
+        # Parse GitHub URL
+        github_pattern = r'github\.com/([^/]+)/([^/]+)'
+        match = re.search(github_pattern, repo_url)
+        if not match:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid GitHub repository URL"
+            )
+        
+        owner, repo = match.groups()
+        repo = repo.replace('.git', '')
+        
+        # Parse discussion date
+        try:
+            target_date = datetime.fromisoformat(discussion_date.replace('Z', '+00:00'))
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid date format. Use ISO format"
+            )
+        
+        # Get tags from GitHub API
+        tags_url = f"https://api.github.com/repos/{owner}/{repo}/tags"
+        
+        response = requests.get(tags_url, timeout=10)
+        
+        if response.status_code == 404:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Repository not found"
+            )
+        elif response.status_code == 403:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="GitHub API rate limit exceeded"
+            )
+        elif not response.ok:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"GitHub API error: {response.status_code}"
+            )
+        
+        tags_data = response.json()
+        
+        if not tags_data:
+            return {
+                'success': True,
+                'repository': f"{owner}/{repo}",
+                'discussion_date': discussion_date,
+                'latest_tag': None,
+                'message': 'No tags found in repository'
+            }
+        
+        # Find the latest tag before the discussion date
+        latest_tag = None
+        
+        for tag in tags_data:
+            # Get commit info for the tag
+            commit_url = f"https://api.github.com/repos/{owner}/{repo}/commits/{tag['commit']['sha']}"
+            commit_response = requests.get(commit_url, timeout=10)
+            
+            if commit_response.status_code == 200:
+                commit_data = commit_response.json()
+                commit_date_str = commit_data['commit']['committer']['date']
+                
+                try:
+                    commit_date = datetime.fromisoformat(commit_date_str.replace('Z', '+00:00'))
+                    
+                    # Check if this tag is before the discussion date
+                    if commit_date < target_date:
+                        if latest_tag is None or commit_date > latest_tag['date']:
+                            latest_tag = {
+                                'name': tag['name'],
+                                'sha': tag['commit']['sha'],
+                                'short_sha': tag['commit']['sha'][:7],
+                                'url': f"https://github.com/{owner}/{repo}/releases/tag/{tag['name']}",
+                                'date': commit_date,
+                                'message': commit_data['commit']['message'].split('\n')[0]
+                            }
+                except ValueError:
+                    continue
+        
+        if latest_tag is None:
+            return {
+                'success': True,
+                'repository': f"{owner}/{repo}",
+                'discussion_date': discussion_date,
+                'latest_tag': None,
+                'message': f'No tags found before {target_date.strftime("%Y-%m-%d %H:%M:%S")}'
+            }
+        
+        # Calculate hours before discussion
+        time_diff = target_date - latest_tag['date']
+        hours_before = time_diff.total_seconds() / 3600
+        
+        # Format the response
+        tag_info = {
+            'name': latest_tag['name'],
+            'sha': latest_tag['sha'],
+            'short_sha': latest_tag['short_sha'],
+            'url': latest_tag['url'],
+            'date': latest_tag['date'].isoformat(),
+            'hours_before_discussion': round(hours_before, 1),
+            'message': latest_tag['message']
+        }
+        
+        return {
+            'success': True,
+            'repository': f"{owner}/{repo}",
+            'discussion_date': discussion_date,
+            'latest_tag': tag_info
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error finding latest tag: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch latest tag"
+        )
+
+
+@app.post("/api/discussions/{discussion_id}/tasks/{task_id}/flag-enhanced", tags=["Tasks"])
+async def flag_task_enhanced(
+    discussion_id: str = Path(..., description="Discussion ID"),
+    task_id: int = Path(..., description="Task ID"),
+    flag_data: dict = Body(..., description="Enhanced flag data"),
+    current_user: schemas.AuthorizedUser = Depends(jwt_auth_service.require_authentication),
+    db: Session = Depends(get_db)
+):
+    """
+    Enhanced task flagging with workflow routing support
+    """
+    try:
+        reason = flag_data.get("reason", "").strip()
+        category = flag_data.get("category", "general")
+        flagged_from_task = flag_data.get("flagged_from_task", task_id)
+        workflow_scenario = flag_data.get("workflow_scenario")
+        flagged_by_role = flag_data.get("flagged_by_role", "annotator")
+        
+        # Validation
+        if not reason or len(reason) < 15:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Please provide a detailed reason (minimum 15 characters)"
+            )
+        
+        if task_id not in [1, 2, 3]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="task_id must be 1, 2, or 3"
+            )
+        
+        valid_categories = ['workflow_misrouting', 'quality_issue', 'consensus_mismatch', 'data_error', 'general']
+        if category not in valid_categories:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid category. Must be one of: {', '.join(valid_categories)}"
+            )
+        
+        # Check if discussion exists
+        discussion = db.query(models.Discussion).filter(
+            models.Discussion.id == discussion_id
+        ).first()
+        if not discussion:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Discussion not found"
+            )
+        
+        # Handle workflow misrouting
+        flagged_task_id = task_id
+        if category == 'workflow_misrouting' and workflow_scenario:
+            flagged_task_id = _handle_workflow_misrouting(
+                db, discussion_id, workflow_scenario, reason, current_user.email
+            )
+        
+        # Determine new status based on category and user role
+        if category == 'quality_issue' and flagged_by_role in ['pod_lead', 'admin']:
+            new_status = 'rework'
+        elif category in ['workflow_misrouting', 'data_error']:
+            new_status = 'rework'
+        else:
+            new_status = 'flagged'
+        
+
+        # Create the flag details object
+        flag_details = {
+            "status": new_status,
+            "reason": reason,
+            "category": category,
+            "flagged_by": current_user.email,
+            "flagged_by_role": flagged_by_role,
+            "flagged_from_task": flagged_from_task,
+            "workflow_scenario": workflow_scenario,
+            "flagged_at": datetime.utcnow().isoformat()
+        }
+        
+        # Store as JSON for flagged tasks, simple string for others
+        status_to_store = json.dumps(flag_details) if new_status in ['rework', 'flagged'] else new_status
+        
+ # Update task status directly
+        update_result = db.execute(
+            models.discussion_task_association.update().where(
+                and_(
+                    models.discussion_task_association.c.discussion_id == discussion_id,
+                    models.discussion_task_association.c.task_number == flagged_task_id
+                )
+            ).values(status=status_to_store)
+        )
+        
+        # Create task association if it doesn't exist
+        if update_result.rowcount == 0:
+            db.execute(
+                models.discussion_task_association.insert().values(
+                    discussion_id=discussion_id,
+                    task_number=flagged_task_id,
+                    status=status_to_store,
+                    annotators=0
+                )
+            )
+        
+        db.commit()
+        
+        # Get updated discussion for response
+        updated_discussion = discussions_service.get_discussion_by_id(db, discussion_id)
+        
+        task_result = schemas.TaskManagementResult(
+            success=True,
+            message=f"Task {flagged_task_id} flagged successfully",
+            discussion=updated_discussion
+        )
+        
+        # Create flag record for logging
+        flag_record = {
+            "discussion_id": discussion_id,
+            "task_id": flagged_task_id,
+            "flagged_from_task": flagged_from_task,
+            "category": category,
+            "reason": reason,
+            "workflow_scenario": workflow_scenario,
+            "flagged_by": current_user.email,
+            "flagged_by_role": flagged_by_role,
+            "new_status": new_status,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+        # Enhanced logging
+        log_message = f"Task {flagged_task_id} flagged by {current_user.email} ({flagged_by_role})"
+        if flagged_from_task != flagged_task_id:
+            log_message += f" (discovered on Task {flagged_from_task})"
+        log_message += f": [{category}] {reason}"
+        logger.info(log_message)
+        
+        return {
+            "success": True,
+            "message": f"Task {flagged_task_id} flagged successfully",
+            "flag_record": flag_record,
+            "task_update_result": task_result
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error flagging task: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to flag task"
+        )
+
+
+def _handle_workflow_misrouting(
+    db: Session, 
+    discussion_id: str, 
+    workflow_scenario: str, 
+    reason: str,
+    flagged_by: str
+) -> int:
+    """
+    Handle workflow misrouting scenarios
+    """
+    if workflow_scenario == 'stop_at_task1':
+        # Mark task 1 for rework, lock tasks 2 and 3
+        discussions_service.update_task_status_enhanced(db, discussion_id, 3, 'locked')  
+        discussions_service.update_task_status_enhanced(db, discussion_id, 2, 'locked')  
+        discussions_service.update_task_status_enhanced(db, discussion_id, 1, 'rework')
+        return 1
+        
+    elif workflow_scenario == 'stop_at_task2':
+        # Mark task 2 for rework, lock task 3
+        discussions_service.update_task_status_enhanced(db, discussion_id, 3, 'locked')  
+        discussions_service.update_task_status_enhanced(db, discussion_id, 2, 'rework')
+        return 2
+        
+    elif workflow_scenario == 'skip_to_task3':
+        # Mark tasks 1-2 as completed, unlock task 3
+        discussions_service.update_task_status_enhanced(db, discussion_id, 1, 'completed')
+        discussions_service.update_task_status_enhanced(db, discussion_id, 2, 'completed')  
+        discussions_service.update_task_status_enhanced(db, discussion_id, 3, 'unlocked')
+        return 3
+    
+    return 1  # Default fallback

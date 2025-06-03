@@ -27,7 +27,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { api, Discussion, TaskStatus, BulkActionResult } from '@/services/api';
+import { api, Discussion, TaskStatus } from '@/services/api';
 import { 
   Lock, 
   LockOpen, 
@@ -40,7 +40,10 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
-  Users
+  Users,
+  RotateCcw,
+  XCircle,
+  ArrowRight
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -61,7 +64,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-// No more props needed - BulkTaskManager is fully independent!
+
 const BulkTaskManager: React.FC = () => {
   // Data state
   const [discussions, setDiscussions] = useState<Discussion[]>([]);
@@ -71,12 +74,13 @@ const BulkTaskManager: React.FC = () => {
   // Search and pagination state
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [perPage, setPerPage] = useState(50); // Higher default for bulk operations
+  const [perPage, setPerPage] = useState(50);
   const [totalPages, setTotalPages] = useState(1);
   const [totalDiscussions, setTotalDiscussions] = useState(0);
   
   // Filter state
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [taskFilter, setTaskFilter] = useState<string>('all');
   const [filterText, setFilterText] = useState('');
   
   // Bulk operation state
@@ -98,6 +102,54 @@ const BulkTaskManager: React.FC = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  // Get status display info
+  const getStatusDisplay = (status: TaskStatus) => {
+    switch (status) {
+      case 'locked':
+        return {
+          icon: <Lock className="w-4 h-4 text-gray-500" />,
+          label: 'Locked',
+          className: 'text-gray-600'
+        };
+      case 'unlocked':
+        return {
+          icon: <LockOpen className="w-4 h-4 text-blue-500" />,
+          label: 'Unlocked',
+          className: 'text-blue-600'
+        };
+      case 'completed':
+        return {
+          icon: <Check className="w-4 h-4 text-green-500" />,
+          label: 'Completed',
+          className: 'text-green-600'
+        };
+      case 'rework':
+        return {
+          icon: <RotateCcw className="w-4 h-4 text-orange-500" />,
+          label: 'Needs Rework',
+          className: 'text-orange-600'
+        };
+      case 'blocked':
+        return {
+          icon: <XCircle className="w-4 h-4 text-red-500" />,
+          label: 'Blocked',
+          className: 'text-red-600'
+        };
+      case 'ready_for_next':
+        return {
+          icon: <ArrowRight className="w-4 h-4 text-purple-500" />,
+          label: 'Ready for Next',
+          className: 'text-purple-600'
+        };
+      default:
+        return {
+          icon: <AlertTriangle className="w-4 h-4 text-gray-400" />,
+          label: status,
+          className: 'text-gray-500'
+        };
+    }
+  };
+
   // Fetch discussions with current filters/search/pagination
   const fetchDiscussions = useCallback(async (resetPage = false) => {
     setLoading(true);
@@ -106,12 +158,16 @@ const BulkTaskManager: React.FC = () => {
     try {
       const page = resetPage ? 1 : currentPage;
       
-      const params = {
+      const params: any = {
         page,
         per_page: perPage,
         search: debouncedSearchQuery.trim() || undefined,
-        status: statusFilter === 'all' ? undefined : statusFilter,
       };
+
+      // Add status filter for specific task
+      if (statusFilter !== 'all' && taskFilter !== 'all') {
+        params[`task${taskFilter}_status`] = statusFilter;
+      }
       
       console.log('📡 Fetching discussions for BulkTaskManager:', params);
       
@@ -134,12 +190,12 @@ const BulkTaskManager: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, perPage, debouncedSearchQuery, statusFilter]);
+  }, [currentPage, perPage, debouncedSearchQuery, statusFilter, taskFilter]);
 
   // Initial load and refresh when filters change
   useEffect(() => {
-    fetchDiscussions(true); // Reset to page 1 when filters change
-  }, [debouncedSearchQuery, statusFilter, perPage]);
+    fetchDiscussions(true);
+  }, [debouncedSearchQuery, statusFilter, taskFilter, perPage]);
 
   // Fetch when page changes
   useEffect(() => {
@@ -153,30 +209,6 @@ const BulkTaskManager: React.FC = () => {
     setSelectedDiscussionIds([]);
   }, [discussions]);
 
-  // Helper function to get status icon
-  const getStatusIcon = (status: TaskStatus) => {
-    switch (status) {
-      case 'locked':
-        return <Lock className="w-4 h-4 text-gray-500" />;
-      case 'unlocked':
-        return <LockOpen className="w-4 h-4 text-blue-500" />;
-      case 'completed':
-        return <Check className="w-4 h-4 text-green-500" />;
-    }
-  };
-  
-  // Helper function to get status text color
-  const getStatusTextClass = (status: TaskStatus) => {
-    switch (status) {
-      case 'locked':
-        return "text-gray-500";
-      case 'unlocked':
-        return "text-blue-500";
-      case 'completed':
-        return "text-green-500";
-    }
-  };
-
   // Filter discussions based on local filter text
   const filteredDiscussions = filterText
     ? discussions.filter(d => 
@@ -184,6 +216,26 @@ const BulkTaskManager: React.FC = () => {
         d.repository.toLowerCase().includes(filterText.toLowerCase())
       )
     : discussions;
+
+  // Function to get task status for a discussion
+  const getTaskStatus = (discussion: Discussion, taskId: number): TaskStatus => {
+    const statusMap = {
+      1: discussion.tasks.task1.status,
+      2: discussion.tasks.task2.status,
+      3: discussion.tasks.task3.status
+    };
+    return statusMap[taskId as keyof typeof statusMap] as TaskStatus;
+  };
+
+  // Function to get task annotators for a discussion
+  const getTaskAnnotators = (discussion: Discussion, taskId: number): number => {
+    const annotatorMap = {
+      1: discussion.tasks.task1.annotators,
+      2: discussion.tasks.task2.annotators,
+      3: discussion.tasks.task3.annotators
+    };
+    return annotatorMap[taskId as keyof typeof annotatorMap] || 0;
+  };
 
   // Function to toggle selection of a discussion
   const toggleDiscussionSelection = (discussionId: string) => {
@@ -207,7 +259,7 @@ const BulkTaskManager: React.FC = () => {
     );
   };
 
-  // Function to apply bulk task status updates
+  // Function to apply bulk task status updates using new API
   const applyBulkUpdate = async () => {
     if (!selectedStatus || selectedDiscussionIds.length === 0) {
       toast.error('Please select a status and at least one discussion');
@@ -223,41 +275,49 @@ const BulkTaskManager: React.FC = () => {
     await performBulkUpdate();
   };
 
-  // Function to confirm and perform the bulk update
+  // Function to perform the bulk update using individual API calls
   const performBulkUpdate = async () => {
     setIsUpdating(true);
     
     try {
-      const bulkUpdate = {
-        discussion_ids: selectedDiscussionIds,
-        task_id: selectedTaskId,
-        status: selectedStatus as TaskStatus
-      };
-  
-      console.log('Sending bulk update request:', bulkUpdate);
-      
-      const response = await api.admin.bulkUpdateTaskStatus(
-        bulkUpdate.discussion_ids,
-        bulkUpdate.task_id,
-        bulkUpdate.status
+      const updatePromises = selectedDiscussionIds.map(discussionId =>
+        api.taskFlags.updateTaskStatus(discussionId, selectedTaskId, selectedStatus as TaskStatus)
       );
       
-      const results = response.results || [];
-      const successfulUpdates = results.filter(result => result.success);
-      const failedUpdates = results.filter(result => !result.success);
+      console.log(`Performing bulk update: ${selectedDiscussionIds.length} discussions, Task ${selectedTaskId} → ${selectedStatus}`);
       
-      if (failedUpdates.length === 0) {
-        toast.success(`Updated ${successfulUpdates.length} discussions successfully`);
+      const results = await Promise.allSettled(updatePromises);
+      
+      const successful = results.filter(result => 
+        result.status === 'fulfilled' && result.value.success
+      ).length;
+      
+      const failed = results.length - successful;
+      
+      if (failed === 0) {
+        toast.success(`Updated ${successful} discussions successfully`);
+        
+        // Update local state to reflect changes
+        setDiscussions(prevDiscussions => 
+          prevDiscussions.map(disc => {
+            if (selectedDiscussionIds.includes(disc.id)) {
+              const updated = { ...disc };
+              if (selectedTaskId === 1) updated.tasks.task1.status = selectedStatus as TaskStatus;
+              else if (selectedTaskId === 2) updated.tasks.task2.status = selectedStatus as TaskStatus;
+              else if (selectedTaskId === 3) updated.tasks.task3.status = selectedStatus as TaskStatus;
+              return updated;
+            }
+            return disc;
+          })
+        );
         
         // Reset selection after successful update
         setSelectedDiscussionIds([]);
         setSelectedStatus('');
         
-        // Refresh current page to show updated statuses
-        await fetchDiscussions(false);
       } else {
-        toast.warning(`Updated ${successfulUpdates.length} discussions, but ${failedUpdates.length} failed`);
-        console.error('Failed updates:', failedUpdates);
+        toast.warning(`Updated ${successful} discussions, but ${failed} failed`);
+        console.error('Some updates failed');
         
         // Still refresh to show partial updates
         await fetchDiscussions(false);
@@ -282,11 +342,6 @@ const BulkTaskManager: React.FC = () => {
       setSelectedDiscussionIds([]);
       setIsConfirmDialogOpen(false);
     }
-  };
-
-  // Handle search form submission
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
   };
 
   // Handle page navigation
@@ -352,8 +407,8 @@ const BulkTaskManager: React.FC = () => {
             </div>
 
             {/* Search and Filters */}
-            <div className="flex flex-col sm:flex-row gap-4">
-              <form onSubmit={handleSearchSubmit} className="flex gap-2 flex-1">
+            <div className="flex flex-col lg:flex-row gap-4">
+              <div className="flex gap-2 flex-1">
                 <div className="relative flex-1">
                   <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <Input
@@ -364,12 +419,9 @@ const BulkTaskManager: React.FC = () => {
                     className="pl-8"
                   />
                 </div>
-                <Button type="submit" variant="outline" disabled={loading}>
-                  Search
-                </Button>
-              </form>
+              </div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Input
                   placeholder="Filter current page..."
                   className="w-[180px]"
@@ -377,8 +429,20 @@ const BulkTaskManager: React.FC = () => {
                   onChange={(e) => setFilterText(e.target.value)}
                 />
 
+                <Select value={taskFilter} onValueChange={setTaskFilter}>
+                  <SelectTrigger className="w-[120px]">
+                    <SelectValue placeholder="Filter task" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Tasks</SelectItem>
+                    <SelectItem value="1">Task 1</SelectItem>
+                    <SelectItem value="2">Task 2</SelectItem>
+                    <SelectItem value="3">Task 3</SelectItem>
+                  </SelectContent>
+                </Select>
+
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-[140px]">
+                  <SelectTrigger className="w-[160px]">
                     <SelectValue placeholder="Filter by status" />
                   </SelectTrigger>
                   <SelectContent>
@@ -386,6 +450,9 @@ const BulkTaskManager: React.FC = () => {
                     <SelectItem value="locked">Locked</SelectItem>
                     <SelectItem value="unlocked">Unlocked</SelectItem>
                     <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="rework">Needs Rework</SelectItem>
+                    <SelectItem value="blocked">Blocked</SelectItem>
+                    <SelectItem value="ready_for_next">Ready for Next</SelectItem>
                   </SelectContent>
                 </Select>
 
@@ -425,7 +492,8 @@ const BulkTaskManager: React.FC = () => {
             <div className="text-sm text-gray-500">
               Showing {filteredDiscussions.length} of {totalDiscussions} discussions
               {searchQuery && ` (filtered by "${searchQuery}")`}
-              {statusFilter !== 'all' && ` (${statusFilter} tasks only)`}
+              {statusFilter !== 'all' && ` (${statusFilter} status only)`}
+              {taskFilter !== 'all' && ` (Task ${taskFilter} only)`}
               • Page {currentPage} of {totalPages}
               {selectedDiscussionIds.length > 0 && ` • ${selectedDiscussionIds.length} selected`}
             </div>
@@ -437,7 +505,7 @@ const BulkTaskManager: React.FC = () => {
                   {selectedDiscussionIds.length} selected
                 </Badge>
                 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Select value={String(selectedTaskId)} onValueChange={(value) => setSelectedTaskId(parseInt(value))}>
                     <SelectTrigger className="w-[120px] h-8">
                       <SelectValue placeholder="Select task" />
@@ -450,7 +518,7 @@ const BulkTaskManager: React.FC = () => {
                   </Select>
 
                   <Select value={selectedStatus} onValueChange={(value) => setSelectedStatus(value as TaskStatus)}>
-                    <SelectTrigger className="w-[130px] h-8">
+                    <SelectTrigger className="w-[160px] h-8">
                       <SelectValue placeholder="Set status" />
                     </SelectTrigger>
                     <SelectContent>
@@ -470,6 +538,24 @@ const BulkTaskManager: React.FC = () => {
                         <div className="flex items-center">
                           <Check className="w-4 h-4 mr-2 text-green-500" />
                           <span>Completed</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="rework">
+                        <div className="flex items-center">
+                          <RotateCcw className="w-4 h-4 mr-2 text-orange-500" />
+                          <span>Needs Rework</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="blocked">
+                        <div className="flex items-center">
+                          <XCircle className="w-4 h-4 mr-2 text-red-500" />
+                          <span>Blocked</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="ready_for_next">
+                        <div className="flex items-center">
+                          <ArrowRight className="w-4 h-4 mr-2 text-purple-500" />
+                          <span>Ready for Next</span>
                         </div>
                       </SelectItem>
                     </SelectContent>
@@ -523,9 +609,18 @@ const BulkTaskManager: React.FC = () => {
                   </TableHead>
                   <TableHead>Discussion</TableHead>
                   <TableHead>Repository</TableHead>
-                  <TableHead className="w-[100px] text-center">Task 1</TableHead>
-                  <TableHead className="w-[100px] text-center">Task 2</TableHead>
-                  <TableHead className="w-[100px] text-center">Task 3</TableHead>
+                  <TableHead className="w-[120px] text-center">
+                    Task 1
+                    <div className="text-xs text-gray-500 font-normal">Question Quality</div>
+                  </TableHead>
+                  <TableHead className="w-[120px] text-center">
+                    Task 2
+                    <div className="text-xs text-gray-500 font-normal">Answer Quality</div>
+                  </TableHead>
+                  <TableHead className="w-[120px] text-center">
+                    Task 3
+                    <div className="text-xs text-gray-500 font-normal">Rewrite</div>
+                  </TableHead>
                   <TableHead className="w-[100px] text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -541,7 +636,7 @@ const BulkTaskManager: React.FC = () => {
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                       No discussions found
-                      {searchQuery && (
+                      {(searchQuery || filterText || statusFilter !== 'all' || taskFilter !== 'all') && (
                         <p className="mt-2 text-sm">
                           Try adjusting your search term or filters
                         </p>
@@ -560,17 +655,19 @@ const BulkTaskManager: React.FC = () => {
                           onCheckedChange={() => toggleDiscussionSelection(discussion.id)}
                         />
                       </TableCell>
-                      <TableCell className="font-medium max-w-[200px] truncate">
-                        {discussion.title}
+                      <TableCell className="font-medium max-w-[200px]">
+                        <div className="truncate" title={discussion.title}>
+                          {discussion.title}
+                        </div>
                       </TableCell>
                       <TableCell>{discussion.repository}</TableCell>
                       
                       {/* Task 1 Status */}
                       <TableCell>
                         <div className="flex items-center justify-center">
-                          {getStatusIcon(discussion.tasks.task1.status)}
-                          <span className={`ml-1 text-xs ${getStatusTextClass(discussion.tasks.task1.status)}`}>
-                            {discussion.tasks.task1.annotators > 0 ? `(${discussion.tasks.task1.annotators})` : ''}
+                          {getStatusDisplay(getTaskStatus(discussion, 1)).icon}
+                          <span className={`ml-1 text-xs ${getStatusDisplay(getTaskStatus(discussion, 1)).className}`}>
+                            {getTaskAnnotators(discussion, 1) > 0 ? `(${getTaskAnnotators(discussion, 1)})` : ''}
                           </span>
                         </div>
                       </TableCell>
@@ -578,9 +675,9 @@ const BulkTaskManager: React.FC = () => {
                       {/* Task 2 Status */}
                       <TableCell>
                         <div className="flex items-center justify-center">
-                          {getStatusIcon(discussion.tasks.task2.status)}
-                          <span className={`ml-1 text-xs ${getStatusTextClass(discussion.tasks.task2.status)}`}>
-                            {discussion.tasks.task2.annotators > 0 ? `(${discussion.tasks.task2.annotators})` : ''}
+                          {getStatusDisplay(getTaskStatus(discussion, 2)).icon}
+                          <span className={`ml-1 text-xs ${getStatusDisplay(getTaskStatus(discussion, 2)).className}`}>
+                            {getTaskAnnotators(discussion, 2) > 0 ? `(${getTaskAnnotators(discussion, 2)})` : ''}
                           </span>
                         </div>
                       </TableCell>
@@ -588,9 +685,9 @@ const BulkTaskManager: React.FC = () => {
                       {/* Task 3 Status */}
                       <TableCell>
                         <div className="flex items-center justify-center">
-                          {getStatusIcon(discussion.tasks.task3.status)}
-                          <span className={`ml-1 text-xs ${getStatusTextClass(discussion.tasks.task3.status)}`}>
-                            {discussion.tasks.task3.annotators > 0 ? `(${discussion.tasks.task3.annotators})` : ''}
+                          {getStatusDisplay(getTaskStatus(discussion, 3)).icon}
+                          <span className={`ml-1 text-xs ${getStatusDisplay(getTaskStatus(discussion, 3)).className}`}>
+                            {getTaskAnnotators(discussion, 3) > 0 ? `(${getTaskAnnotators(discussion, 3)})` : ''}
                           </span>
                         </div>
                       </TableCell>
@@ -609,6 +706,31 @@ const BulkTaskManager: React.FC = () => {
                 )}
               </TableBody>
             </Table>
+          </div>
+
+          {/* Enhanced Status Legend */}
+          <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+            <h4 className="text-sm font-medium text-gray-700 mb-3">Status Legend</h4>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              {[
+                { status: 'locked', label: 'Locked' },
+                { status: 'unlocked', label: 'Unlocked' },
+                { status: 'completed', label: 'Completed' },
+                { status: 'rework', label: 'Needs Rework' },
+                { status: 'blocked', label: 'Blocked' },
+                { status: 'ready_for_next', label: 'Ready for Next' }
+              ].map((item) => {
+                const display = getStatusDisplay(item.status as TaskStatus);
+                return (
+                  <div key={item.status} className="flex items-center gap-1">
+                    {display.icon}
+                    <span className={`text-xs font-medium ${display.className}`}>
+                      {item.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {/* Pagination */}
@@ -699,8 +821,13 @@ const BulkTaskManager: React.FC = () => {
             <AlertDialogDescription>
               {actionType === 'apply' && (
                 <>
-                  You're about to update the status of {selectedDiscussionIds.length} discussions. 
-                  This action could take some time to complete and cannot be undone easily.
+                  You're about to update Task {selectedTaskId} status to "{selectedStatus}" for {selectedDiscussionIds.length} discussions. 
+                  This action may take some time to complete and cannot be undone easily.
+                  {selectedStatus === 'ready_for_next' && (
+                    <div className="mt-2 text-amber-600 font-medium">
+                      ⚠️ Setting status to "Ready for Next" will automatically unlock the next task for these discussions.
+                    </div>
+                  )}
                 </>
               )}
               {actionType === 'selectAll' && (

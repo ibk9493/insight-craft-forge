@@ -81,7 +81,7 @@ export function useTaskInitialization({
                   ...task,
                   selectedOption: undefined, 
                   textValue: '',
-                  status: task.id === 'consensus' ? task.status : 'pending' as SubTaskStatus 
+                  status: task.id === 'consensus' ? parseTaskStatus(task.status).status : 'pending' as SubTaskStatus 
                 }));
                 setTask1SubTasks(resetTasks1);
                 break;
@@ -92,7 +92,7 @@ export function useTaskInitialization({
                   ...task,
                   selectedOption: undefined,
                   textValue: '',
-                  status: task.id === 'consensus' ? task.status : 'pending' as SubTaskStatus
+                  status: task.id === 'consensus' ? parseTaskStatus(task.status).status : 'pending' as SubTaskStatus
                 }));
                 setTask2SubTasks(resetTasks2);
                 break;
@@ -103,7 +103,7 @@ export function useTaskInitialization({
                   ...task,
                   selectedOption: undefined,
                   textValue: '',
-                  status: task.id === 'consensus' ? task.status : 'pending' as SubTaskStatus
+                  status: task.id === 'consensus' ? parseTaskStatus(task.status).status : 'pending' as SubTaskStatus
                 }));
                 setTask3SubTasks(resetTasks3);
                 break;

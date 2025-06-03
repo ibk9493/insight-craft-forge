@@ -5,13 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { parseTaskStatus } from '@/services/api';
 
 interface TaskGridProps {
   tasks: {
     id: number;
     title: string;
     description: string;
-    status: 'locked' | 'unlocked' | 'completed';
+    status: 'locked' | 'unlocked' | 'completed' | 'rework' | 'blocked' | 'ready_for_next' | 'ready_for_consensus' | 'consensus_created' | 'general' | 'flagged';
     requiredAnnotators: number;
     currentAnnotators: number;
   }[];
@@ -107,8 +108,14 @@ const TaskGrid: React.FC<TaskGridProps> = ({
               key={task.id}
               className={cn(
                 "transition-all duration-300",
-                task.status === 'locked' ? "opacity-70" : "",
-                task.status === 'completed' ? "border-green-500" : "",
+                parseTaskStatus(task.status).status === 'locked' ? "opacity-70" : "",
+                parseTaskStatus(task.status).status === 'completed' ? "border-green-500" : "",
+                parseTaskStatus(task.status).status === 'rework' ? "border-orange-500" : "",
+                parseTaskStatus(task.status).status === 'blocked' ? "border-red-500" : "",
+                parseTaskStatus(task.status).status === 'flagged' ? "border-yellow-500" : "",
+                parseTaskStatus(task.status).status === 'ready_for_consensus' ? "border-amber-500" : "",
+                parseTaskStatus(task.status).status === 'consensus_created' ? "border-indigo-500" : "",
+                parseTaskStatus(task.status).status === 'ready_for_next' ? "border-purple-500" : "",
                 "hover:shadow-md"
               )}
             >
@@ -119,17 +126,33 @@ const TaskGrid: React.FC<TaskGridProps> = ({
                     <Badge 
                       variant="outline" 
                       className={cn(
-                        task.status === 'completed' ? "bg-green-100 text-green-800 hover:bg-green-100" : 
-                        task.status === 'unlocked' ? "bg-blue-100 text-blue-800 hover:bg-blue-100" : 
+                        parseTaskStatus(task.status).status === 'completed' ? "bg-green-100 text-green-800 hover:bg-green-100" : 
+                        parseTaskStatus(task.status).status === 'unlocked' ? "bg-blue-100 text-blue-800 hover:bg-blue-100" : 
+                        parseTaskStatus(task.status).status === 'rework' ? "bg-orange-100 text-orange-800 hover:bg-orange-100" :
+                        parseTaskStatus(task.status).status === 'blocked' ? "bg-red-100 text-red-800 hover:bg-red-100" :
+                        parseTaskStatus(task.status).status === 'flagged' ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-100" :
+                        parseTaskStatus(task.status).status === 'ready_for_consensus' ? "bg-amber-100 text-amber-800 hover:bg-amber-100" :
+                        parseTaskStatus(task.status).status === 'consensus_created' ? "bg-indigo-100 text-indigo-800 hover:bg-indigo-100" :
+                        parseTaskStatus(task.status).status === 'ready_for_next' ? "bg-purple-100 text-purple-800 hover:bg-purple-100" :
                         "bg-gray-100 text-gray-800 hover:bg-gray-100"
                       )}
                     >
-                      {task.status === 'completed' ? 'Completed' : 
-                       task.status === 'unlocked' ? 'Unlocked' : 'Locked'}
+                      {parseTaskStatus(task.status).status === 'completed' ? 'Completed' : 
+                       parseTaskStatus(task.status).status === 'unlocked' ? 'Unlocked' : 
+                       parseTaskStatus(task.status).status === 'rework' ? 'Needs Rework' :
+                       parseTaskStatus(task.status).status === 'blocked' ? 'Blocked' :
+                       parseTaskStatus(task.status).status === 'flagged' ? 'Flagged' :
+                       parseTaskStatus(task.status).status === 'ready_for_consensus' ? 'Ready for Consensus' :
+                       parseTaskStatus(task.status).status === 'consensus_created' ? 'Consensus Created' :
+                       parseTaskStatus(task.status).status === 'ready_for_next' ? 'Ready for Next' :
+                       'Locked'}
                     </Badge>
                   </div>
-                  {task.status === 'locked' && <Lock className="h-5 w-5 text-gray-400" />}
-                  {task.status === 'completed' && <CheckCircle className="h-5 w-5 text-green-500" />}
+                  {parseTaskStatus(task.status).status === 'locked' && <Lock className="h-5 w-5 text-gray-400" />}
+                  {parseTaskStatus(task.status).status === 'completed' && <CheckCircle className="h-5 w-5 text-green-500" />}
+                  {parseTaskStatus(task.status).status === 'rework' && <CheckCircle className="h-5 w-5 text-orange-500" />}
+                  {parseTaskStatus(task.status).status === 'blocked' && <CheckCircle className="h-5 w-5 text-red-500" />}
+                  {parseTaskStatus(task.status).status === 'flagged' && <CheckCircle className="h-5 w-5 text-yellow-500" />}
                 </div>
                 <CardDescription>{task.title}</CardDescription>
               </CardHeader>
@@ -142,8 +165,14 @@ const TaskGrid: React.FC<TaskGridProps> = ({
                     <div 
                       className={cn(
                         "h-2.5 rounded-full",
-                        task.status === 'completed' ? "bg-green-500" : 
-                        task.status === 'unlocked' ? "bg-blue-500" : 
+                        parseTaskStatus(task.status).status === 'completed' ? "bg-green-500" : 
+                        parseTaskStatus(task.status).status === 'unlocked' ? "bg-blue-500" : 
+                        parseTaskStatus(task.status).status === 'rework' ? "bg-orange-500" :
+                        parseTaskStatus(task.status).status === 'blocked' ? "bg-red-500" :
+                        parseTaskStatus(task.status).status === 'flagged' ? "bg-yellow-500" :
+                        parseTaskStatus(task.status).status === 'ready_for_consensus' ? "bg-amber-500" :
+                        parseTaskStatus(task.status).status === 'consensus_created' ? "bg-indigo-500" :
+                        parseTaskStatus(task.status).status === 'ready_for_next' ? "bg-purple-500" :
                         "bg-gray-400"
                       )} 
                       style={{width: `${progressPercentage}%`}}
@@ -164,13 +193,19 @@ const TaskGrid: React.FC<TaskGridProps> = ({
               <CardFooter>
                 <Button 
                   onClick={() => onSelectTask(task.id)} 
-                  disabled={task.status === 'locked'}
+                  disabled={parseTaskStatus(task.status).status === 'locked'}
                   className="w-full"
-                  variant={task.status === 'completed' ? "outline" : "default"}
+                  variant={parseTaskStatus(task.status).status === 'completed' ? "outline" : "default"}
                 >
-                  {task.status === 'locked' && "Locked"}
-                  {task.status === 'unlocked' && "Start Task"}
-                  {task.status === 'completed' && "View Results"}
+                  {parseTaskStatus(task.status).status === 'locked' && "Locked"}
+                  {parseTaskStatus(task.status).status === 'unlocked' && "Start Task"}
+                  {parseTaskStatus(task.status).status === 'completed' && "View Results"}
+                  {parseTaskStatus(task.status).status === 'rework' && "View Rework"}
+                  {parseTaskStatus(task.status).status === 'blocked' && "Contact Admin"}
+                  {parseTaskStatus(task.status).status === 'flagged' && "View Flagged"}
+                  {parseTaskStatus(task.status).status === 'ready_for_consensus' && "Create Consensus"}
+                  {parseTaskStatus(task.status).status === 'consensus_created' && "View Consensus"}
+                  {parseTaskStatus(task.status).status === 'ready_for_next' && "Start Next Task"}
                 </Button>
               </CardFooter>
             </Card>

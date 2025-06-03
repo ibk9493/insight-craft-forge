@@ -57,15 +57,16 @@ export function useAnnotationLoader({
     // Special handling for codeDownloadUrl field (Task 2)
     if (task.id === 'codeDownloadUrl') {
       console.log("DEBUG CODE DOWNLOAD:", task)
-      const codeValue = annotation.data['codeDownloadUrl'];
-      const codeStatus = annotation.data['codeDownloadUrl_text'];
+      const codeStatus = annotation.data['codeDownloadUrl'];
+      const codeValue = annotation.data['codeDownloadUrl_text'];
+      console.log("DEBUG CODE STATUS:", codeStatus,codeValue)
       if (codeValue && typeof codeValue === 'string') {
         return {
           ...task,
           selectedOption: typeof codeStatus === 'boolean' ? (codeStatus ? 'True' : 'False') : String(codeStatus),
           // selectedOption: codeStatus || 'Verified manually',
           textValue: codeValue,
-          docDownloadLink: codeValue,
+          docDownloadLink: codeStatus,
           enableDocDownload: true,
           status: 'completed' as SubTaskStatus
         };
@@ -119,7 +120,7 @@ export function useAnnotationLoader({
 
     // Handle doc_download_link
     if (task.id === 'doc_download_link') {
-      const linkValue = annotation.data['doc_download_link'];
+      const linkValue = annotation.data['doc_download_link_text'];
       const hasLink = linkValue && typeof linkValue === 'string' && linkValue.trim() !== '';
 
       return {
@@ -296,8 +297,9 @@ export function useAnnotationLoader({
 
       // Special handling for codeDownloadUrl field (Task 2)
       if (task.id === 'codeDownloadUrl') {
-        const codeValue = annotation.data['codeDownloadUrl'];
-        const codeStatus = annotation.data['codeDownloadUrl_status'];
+        const codeStatus = annotation.data['codeDownloadUrl'];
+        const codeValue = annotation.data['codeDownloadUrl_text'];
+        console.log("DEBUG CODE STATUS:", codeStatus,codeValue)
         if (codeValue && typeof codeValue === 'string') {
           return {
             ...task,
