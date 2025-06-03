@@ -109,12 +109,12 @@ def create_or_update_consensus_annotation(
     """
     # Find existing consensus annotation based on discussion_id and task_id only
 
-    task_assoc = db.query(models.discussion_task_association).filter(
-        models.discussion_task_association.c.discussion_id == consensus_input.discussion_id,
-        models.discussion_task_association.c.task_id == consensus_input.task_id
-    ).first()
-    if task_assoc and task_assoc.status == 'rework':
-        raise ValueError(f"Cannot create consensus for task {consensus_input.task_id} - task is marked for rework")
+    # task_assoc = db.query(models.discussion_task_association).filter(
+    #     models.discussion_task_association.c.discussion_id == consensus_input.discussion_id,
+    #     models.discussion_task_association.c.task_id == consensus_input.task_id
+    # ).first()
+    # if task_assoc and task_assoc.status == 'rework':
+    #     raise ValueError(f"Cannot create consensus for task {consensus_input.task_id} - task is marked for rework")
     
     
     db_annotation = db.query(models.ConsensusAnnotation).filter(
