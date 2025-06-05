@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Filter, Calendar as CalendarIcon, Search, X, Tag, Code, Check, Lock, Unlock, CheckCircle } from 'lucide-react';
+import { Filter, Calendar as CalendarIcon, X, Tag, Code, Check, Lock, Unlock, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 
@@ -27,8 +27,8 @@ interface FilterValues {
   fromDate: Date | undefined;
   toDate: Date | undefined;
   batchId: string;
-   taskStatuses: {
-    task1: string; // 'all' | 'locked' | 'unlocked' | 'completed'
+  taskStatuses: {
+    task1: string;
     task2: string;
     task3: string;
   };
@@ -42,6 +42,21 @@ interface DiscussionFiltersProps {
   initialFilters?: Partial<FilterValues>;
 }
 
+const DEFAULT_FILTERS: FilterValues = {
+  status: 'all',
+  showMyAnnotations: false,
+  repositoryLanguage: [],
+  releaseTag: [],
+  fromDate: undefined,
+  toDate: undefined,
+  batchId: 'all', // Changed from '' to 'all'
+  taskStatuses: {
+    task1: 'all',
+    task2: 'all',
+    task3: 'all'
+  }
+};
+
 const DiscussionFilters: React.FC<DiscussionFiltersProps> = ({
   onFilterChange,
   availableLanguages = [],
@@ -49,213 +64,219 @@ const DiscussionFilters: React.FC<DiscussionFiltersProps> = ({
   availableBatches = [],
   initialFilters = {}
 }) => {
-  const [filters, setFilters] = useState<FilterValues>({
-    status: initialFilters.status || 'all',
-    showMyAnnotations: initialFilters.showMyAnnotations || false,
-    repositoryLanguage: initialFilters.repositoryLanguage || [],
-    releaseTag: initialFilters.releaseTag || [],
-    fromDate: initialFilters.fromDate,
-    toDate: initialFilters.toDate,
-    batchId: initialFilters.batchId || '',
-    taskStatuses: {
-      task1: initialFilters.taskStatuses?.task1 || 'all',
-      task2: initialFilters.taskStatuses?.task2 || 'all',
-      task3: initialFilters.taskStatuses?.task3 || 'all'
-    }
+  // Initialize filters with defaults merged with initial values
+  const [filters, setFilters] = useState<FilterValues>(() => {
+    const merged = {
+      ...DEFAULT_FILTERS,
+      ...initialFilters,
+      taskStatuses: {
+        ...DEFAULT_FILTERS.taskStatuses,
+        ...initialFilters.taskStatuses
+      }
+    };
+    console.log('DiscussionFilters: Initial filters set to:', merged);
+    return merged;
   });
   
   const [isOpen, setIsOpen] = useState(false);
-  const isInitializing = useRef(true);
+  const prevFiltersRef = useRef<FilterValues>(filters);
   
-  // Count active filters (excluding status='all' which is default)
-  const activeFilterCount = [
-    filters.status !== 'all',
-    filters.showMyAnnotations,
-    filters.repositoryLanguage.length > 0,
-    filters.releaseTag.length > 0,
-    filters.fromDate !== undefined,
-    filters.toDate !== undefined,
-    filters.batchId !== '',
-    filters.taskStatuses.task1 !== 'all',
-    filters.taskStatuses.task2 !== 'all',
-    filters.taskStatuses.task3 !== 'all'
-  ].filter(Boolean).length;
-  
-  // REMOVED: The problematic useEffect that calls onFilterChange on every filter change
-  // This was causing the cascading API calls
-  
-  // Update filters when initialFilters prop changes (for browser navigation)
-  // BUT only update internal state, don't call onFilterChange automatically
+  // Memoize active filter count calculation
+  const activeFilterCount = useMemo(() => {
+    const count = [
+      filters.status !== 'all',
+      filters.showMyAnnotations,
+      filters.repositoryLanguage.length > 0,
+      filters.releaseTag.length > 0,
+      filters.fromDate !== undefined,
+      filters.toDate !== undefined,
+      filters.batchId !== 'all' && filters.batchId !== '', // Fixed batch filter check
+      filters.taskStatuses.task1 !== 'all',
+      filters.taskStatuses.task2 !== 'all',
+      filters.taskStatuses.task3 !== 'all'
+    ].filter(Boolean).length;
+    
+    console.log('DiscussionFilters: Active filter count:', count, filters);
+    return count;
+  }, [filters]);
+
+  // Simplified deep compare for filter objects
+  const filtersChanged = useCallback((newFilters: FilterValues, oldFilters: FilterValues): boolean => {
+    return JSON.stringify(newFilters) !== JSON.stringify(oldFilters);
+  }, []);
+
+  // Handle filter changes and notify parent
+  const handleFilterChange = useCallback((newFilters: FilterValues) => {
+    console.log('DiscussionFilters: Filter change triggered:', newFilters);
+    
+    // Only update if filters actually changed
+    if (filtersChanged(newFilters, prevFiltersRef.current)) {
+      setFilters(newFilters);
+      prevFiltersRef.current = newFilters;
+      onFilterChange(newFilters);
+      console.log('DiscussionFilters: Filters updated and parent notified');
+    } else {
+      console.log('DiscussionFilters: No change detected, skipping update');
+    }
+  }, [onFilterChange, filtersChanged]);
+
+  // Update internal state when initialFilters prop changes (only on mount or explicit prop change)
   useEffect(() => {
-    // Only update if there are actual differences
-    const shouldUpdate = 
-      filters.status !== (initialFilters.status || 'all') ||
-      filters.showMyAnnotations !== (initialFilters.showMyAnnotations || false) ||
-      JSON.stringify(filters.repositoryLanguage) !== JSON.stringify(initialFilters.repositoryLanguage || []) ||
-      JSON.stringify(filters.releaseTag) !== JSON.stringify(initialFilters.releaseTag || []) ||
-      filters.fromDate !== initialFilters.fromDate ||
-      filters.toDate !== initialFilters.toDate ||
-      filters.batchId !== (initialFilters.batchId || '') ||
-      filters.taskStatuses.task1 !== (initialFilters.taskStatuses?.task1 || 'all') ||
-      filters.taskStatuses.task2 !== (initialFilters.taskStatuses?.task2 || 'all') ||
-      filters.taskStatuses.task3 !== (initialFilters.taskStatuses?.task3 || 'all');
-
-    if (shouldUpdate) {
-      console.log('DiscussionFilters: Updating from initialFilters prop');
-      setFilters({
-        status: initialFilters.status || 'all',
-        showMyAnnotations: initialFilters.showMyAnnotations || false,
-        repositoryLanguage: initialFilters.repositoryLanguage || [],
-        releaseTag: initialFilters.releaseTag || [],
-        fromDate: initialFilters.fromDate,
-        toDate: initialFilters.toDate,
-        batchId: initialFilters.batchId || '',
+    if (initialFilters && Object.keys(initialFilters).length > 0) {
+      const newFilters = {
+        ...DEFAULT_FILTERS,
+        ...initialFilters,
         taskStatuses: {
-          task1: initialFilters.taskStatuses?.task1 || 'all',
-          task2: initialFilters.taskStatuses?.task2 || 'all',
-          task3: initialFilters.taskStatuses?.task3 || 'all'
+          ...DEFAULT_FILTERS.taskStatuses,
+          ...initialFilters.taskStatuses
         }
-      });
-    }
-  }, [
-    initialFilters.status,
-    initialFilters.showMyAnnotations,
-    initialFilters.repositoryLanguage,
-    initialFilters.releaseTag,
-    initialFilters.fromDate,
-    initialFilters.toDate,
-    initialFilters.batchId,
-    initialFilters.taskStatuses?.task1,
-    initialFilters.taskStatuses?.task2,
-    initialFilters.taskStatuses?.task3,
-    filters.status,
-    filters.showMyAnnotations,
-    filters.repositoryLanguage,
-    filters.releaseTag,
-    filters.fromDate,
-    filters.toDate,
-    filters.batchId,
-    filters.taskStatuses.task1,
-    filters.taskStatuses.task2,
-    filters.taskStatuses.task3
-  ]);
-
-  // Helper function to notify parent of changes
-  const notifyFilterChange = (newFilters: FilterValues) => {
-    console.log('DiscussionFilters: Notifying parent of filter change');
-    onFilterChange(newFilters);
-  };
-  
-  const handleStatusChange = (status: string) => {
-    const newFilters = { ...filters, status };
-    setFilters(newFilters);
-    notifyFilterChange(newFilters);
-  };
-  
-  const handleMyAnnotationsChange = (checked: boolean) => {
-    const newFilters = { ...filters, showMyAnnotations: checked };
-    setFilters(newFilters);
-    notifyFilterChange(newFilters);
-  };
-  
-  const handleLanguageToggle = (language: string) => {
-    const newFilters = {
-      ...filters,
-      repositoryLanguage: filters.repositoryLanguage.includes(language)
-        ? filters.repositoryLanguage.filter(l => l !== language)
-        : [...filters.repositoryLanguage, language]
-    };
-    setFilters(newFilters);
-    notifyFilterChange(newFilters);
-  };
-  
-  const handleTagToggle = (tag: string) => {
-    const newFilters = {
-      ...filters,
-      releaseTag: filters.releaseTag.includes(tag)
-        ? filters.releaseTag.filter(t => t !== tag)
-        : [...filters.releaseTag, tag]
-    };
-    setFilters(newFilters);
-    notifyFilterChange(newFilters);
-  };
-  
-  const handleBatchChange = (batchId: string) => {
-    const newFilters = { ...filters, batchId };
-    setFilters(newFilters);
-    notifyFilterChange(newFilters);
-  };
-  
-  const handleFromDateChange = (date: Date | undefined) => {
-    const newFilters = { ...filters, fromDate: date };
-    setFilters(newFilters);
-    notifyFilterChange(newFilters);
-  };
-  
-  const handleToDateChange = (date: Date | undefined) => {
-    const newFilters = { ...filters, toDate: date };
-    setFilters(newFilters);
-    notifyFilterChange(newFilters);
-  };
-
-  // New handlers for task status filters
-  const handleTaskStatusChange = (taskNumber: 1 | 2 | 3, status: string) => {
-    const newFilters = {
-      ...filters,
-      taskStatuses: {
-        ...filters.taskStatuses,
-        [`task${taskNumber}`]: status
+      };
+      
+      if (filtersChanged(newFilters, filters)) {
+        console.log('DiscussionFilters: Updating from initialFilters prop change:', newFilters);
+        setFilters(newFilters);
+        prevFiltersRef.current = newFilters;
       }
-    };
-    setFilters(newFilters);
-    notifyFilterChange(newFilters);
-  };
-
-  const getTaskStatusIcon = (status: string) => {
-    switch (status) {
-      case 'locked':
-        return <Lock className="h-3.5 w-3.5" />;
-      case 'unlocked':
-        return <Unlock className="h-3.5 w-3.5" />;
-      case 'completed':
-        return <CheckCircle className="h-3.5 w-3.5" />;
-      default:
-        return null;
     }
-  };
+  }, []); // Only run on mount
 
-  const getTaskStatusLabel = (status: string) => {
-    switch (status) {
-      case 'locked':
-        return 'Locked';
-      case 'unlocked':
-        return 'Unlocked';
-      case 'completed':
-        return 'Completed';
-      default:
-        return 'All';
-    }
-  };
+  // Individual filter handlers with proper dependency management
+  const handleStatusChange = useCallback((status: string) => {
+    handleFilterChange({ ...filters, status });
+  }, [filters, handleFilterChange]);
   
-  const clearFilters = () => {
-    const clearedFilters = {
-      status: 'all',
-      showMyAnnotations: false,
-      repositoryLanguage: [],
-      releaseTag: [],
-      fromDate: undefined,
-      toDate: undefined,
-      batchId: '',
-      taskStatuses: {
-        task1: 'all',
-        task2: 'all',
-        task3: 'all'
-      }
+  const handleMyAnnotationsChange = useCallback((checked: boolean) => {
+    handleFilterChange({ ...filters, showMyAnnotations: checked });
+  }, [filters, handleFilterChange]);
+  
+  const handleLanguageToggle = useCallback((language: string) => {
+    const newLanguages = filters.repositoryLanguage.includes(language)
+      ? filters.repositoryLanguage.filter(l => l !== language)
+      : [...filters.repositoryLanguage, language];
+    
+    handleFilterChange({ ...filters, repositoryLanguage: newLanguages });
+  }, [filters, handleFilterChange]);
+  
+  const handleTagToggle = useCallback((tag: string) => {
+    const newTags = filters.releaseTag.includes(tag)
+      ? filters.releaseTag.filter(t => t !== tag)
+      : [...filters.releaseTag, tag];
+    
+    handleFilterChange({ ...filters, releaseTag: newTags });
+  }, [filters, handleFilterChange]);
+  
+  const handleBatchChange = useCallback((batchId: string) => {
+    console.log('DiscussionFilters: Batch changed to:', batchId);
+    handleFilterChange({ ...filters, batchId });
+  }, [filters, handleFilterChange]);
+  
+  const handleFromDateChange = useCallback((date: Date | undefined) => {
+    handleFilterChange({ ...filters, fromDate: date });
+  }, [filters, handleFilterChange]);
+  
+  const handleToDateChange = useCallback((date: Date | undefined) => {
+    handleFilterChange({ ...filters, toDate: date });
+  }, [filters, handleFilterChange]);
+
+  const handleTaskStatusChange = useCallback((taskNumber: 1 | 2 | 3, status: string) => {
+    const newTaskStatuses = {
+      ...filters.taskStatuses,
+      [`task${taskNumber}`]: status
     };
-    setFilters(clearedFilters);
-    notifyFilterChange(clearedFilters);
-  };
+    handleFilterChange({ ...filters, taskStatuses: newTaskStatuses });
+  }, [filters, handleFilterChange]);
+
+  // Memoized icon and label getters
+  const getTaskStatusIcon = useCallback((status: string) => {
+    const iconMap: Record<string, JSX.Element> = {
+      locked: <Lock className="h-3.5 w-3.5" />,
+      unlocked: <Unlock className="h-3.5 w-3.5" />,
+      completed: <CheckCircle className="h-3.5 w-3.5" />,
+      rework: <Tag className="h-3.5 w-3.5" />,
+      blocked: <X className="h-3.5 w-3.5" />,
+      flagged: <Filter className="h-3.5 w-3.5" />,
+      ready_for_consensus: <Check className="h-3.5 w-3.5" />,
+      consensus_created: <CheckCircle className="h-3.5 w-3.5" />,
+      ready_for_next: <Tag className="h-3.5 w-3.5" />
+    };
+    return iconMap[status] || null;
+  }, []);
+
+  const getTaskStatusLabel = useCallback((status: string) => {
+    const labelMap: Record<string, string> = {
+      locked: 'Locked',
+      unlocked: 'Unlocked',
+      completed: 'Completed',
+      rework: 'Needs Rework',
+      blocked: 'Blocked',
+      flagged: 'Flagged',
+      ready_for_consensus: 'Ready for Consensus',
+      consensus_created: 'Consensus Created',
+      ready_for_next: 'Ready for Next'
+    };
+    return labelMap[status] || 'All';
+  }, []);
   
+  const clearFilters = useCallback(() => {
+    console.log('DiscussionFilters: Clearing all filters');
+    handleFilterChange(DEFAULT_FILTERS);
+  }, [handleFilterChange]);
+
+  // Clear individual filter handlers
+  const clearStatusFilter = useCallback(() => handleStatusChange('all'), [handleStatusChange]);
+  const clearMyAnnotationsFilter = useCallback(() => handleMyAnnotationsChange(false), [handleMyAnnotationsChange]);
+  const clearBatchFilter = useCallback(() => handleBatchChange('all'), [handleBatchChange]);
+
+  // Memoized task status options
+  const taskStatusOptions = useMemo(() => [
+    { value: 'all', label: 'All Statuses' },
+    { value: 'locked', label: 'Locked', icon: <Lock className="h-3.5 w-3.5" /> },
+    { value: 'unlocked', label: 'Unlocked', icon: <Unlock className="h-3.5 w-3.5" /> },
+    { value: 'completed', label: 'Completed', icon: <CheckCircle className="h-3.5 w-3.5" /> },
+    { value: 'rework', label: 'Needs Rework', icon: <Tag className="h-3.5 w-3.5" /> },
+    { value: 'blocked', label: 'Blocked', icon: <X className="h-3.5 w-3.5" /> },
+    { value: 'flagged', label: 'Flagged', icon: <Filter className="h-3.5 w-3.5" /> },
+    { value: 'ready_for_consensus', label: 'Ready for Consensus', icon: <Check className="h-3.5 w-3.5" /> },
+    { value: 'consensus_created', label: 'Consensus Created', icon: <CheckCircle className="h-3.5 w-3.5" /> },
+    { value: 'ready_for_next', label: 'Ready for Next', icon: <Tag className="h-3.5 w-3.5" /> }
+  ], []);
+
+  // Memoized task status select component
+  const TaskStatusSelect = useCallback(({ 
+    value, 
+    onValueChange, 
+    options, 
+    label 
+  }: { 
+    value: string; 
+    onValueChange: (value: string) => void; 
+    options: typeof taskStatusOptions;
+    label: string;
+  }) => (
+    <div className="space-y-2">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <Select value={value} onValueChange={onValueChange}>
+        <SelectTrigger className="w-full h-8">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map(option => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.icon ? (
+                <div className="flex items-center gap-2">
+                  {option.icon}
+                  {option.label}
+                </div>
+              ) : (
+                option.label
+              )}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  ), []);
+
   return (
     <div className="flex flex-col md:flex-row gap-2 w-full">
       {/* Status filter select */}
@@ -316,107 +337,26 @@ const DiscussionFilters: React.FC<DiscussionFiltersProps> = ({
             <div className="space-y-3">
               <Label className="text-sm font-medium">Task Status Filters</Label>
               
-              {/* Task 1 Filter */}
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Task 1: Question Quality</Label>
-                <Select 
-                  value={filters.taskStatuses.task1} 
-                  onValueChange={(value) => handleTaskStatusChange(1, value)}
-                >
-                  <SelectTrigger className="w-full h-8">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Statuses</SelectItem>
-                    <SelectItem value="locked">
-                      <div className="flex items-center gap-2">
-                        <Lock className="h-3.5 w-3.5" />
-                        Locked
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="unlocked">
-                      <div className="flex items-center gap-2">
-                        <Unlock className="h-3.5 w-3.5" />
-                        Unlocked
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="completed">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="h-3.5 w-3.5" />
-                        Completed
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <TaskStatusSelect
+                value={filters.taskStatuses.task1}
+                onValueChange={(value) => handleTaskStatusChange(1, value)}
+                options={taskStatusOptions}
+                label="Task 1: Question Quality"
+              />
               
-              {/* Task 2 Filter */}
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Task 2: Answer Quality</Label>
-                <Select 
-                  value={filters.taskStatuses.task2} 
-                  onValueChange={(value) => handleTaskStatusChange(2, value)}
-                >
-                  <SelectTrigger className="w-full h-8">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Statuses</SelectItem>
-                    <SelectItem value="locked">
-                      <div className="flex items-center gap-2">
-                        <Lock className="h-3.5 w-3.5" />
-                        Locked
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="unlocked">
-                      <div className="flex items-center gap-2">
-                        <Unlock className="h-3.5 w-3.5" />
-                        Unlocked
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="completed">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="h-3.5 w-3.5" />
-                        Completed
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <TaskStatusSelect
+                value={filters.taskStatuses.task2}
+                onValueChange={(value) => handleTaskStatusChange(2, value)}
+                options={taskStatusOptions.slice(0, 4)}
+                label="Task 2: Answer Quality"
+              />
               
-              {/* Task 3 Filter */}
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Task 3: Rewrite</Label>
-                <Select 
-                  value={filters.taskStatuses.task3} 
-                  onValueChange={(value) => handleTaskStatusChange(3, value)}
-                >
-                  <SelectTrigger className="w-full h-8">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Statuses</SelectItem>
-                    <SelectItem value="locked">
-                      <div className="flex items-center gap-2">
-                        <Lock className="h-3.5 w-3.5" />
-                        Locked
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="unlocked">
-                      <div className="flex items-center gap-2">
-                        <Unlock className="h-3.5 w-3.5" />
-                        Unlocked
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="completed">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="h-3.5 w-3.5" />
-                        Completed
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <TaskStatusSelect
+                value={filters.taskStatuses.task3}
+                onValueChange={(value) => handleTaskStatusChange(3, value)}
+                options={taskStatusOptions.slice(0, 4)}
+                label="Task 3: Rewrite"
+              />
             </div>
             
             <Separator />
@@ -526,7 +466,7 @@ const DiscussionFilters: React.FC<DiscussionFiltersProps> = ({
             
             <Separator />
             
-            {/* Batch filter */}
+            {/* Batch filter - Fixed */}
             <div className="space-y-2">
               <Label className="text-sm font-medium">Batch</Label>
               <Select value={filters.batchId} onValueChange={handleBatchChange}>
@@ -534,7 +474,7 @@ const DiscussionFilters: React.FC<DiscussionFiltersProps> = ({
                   <SelectValue placeholder="Select a batch" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all_batches">All Batches</SelectItem>
+                  <SelectItem value="all">All Batches</SelectItem>
                   {availableBatches.map(batch => (
                     <SelectItem key={batch.id} value={batch.id.toString()}>
                       {batch.name}
@@ -557,88 +497,86 @@ const DiscussionFilters: React.FC<DiscussionFiltersProps> = ({
         </PopoverContent>
       </Popover>
       
-      {/* Active filters display */}
-      <div className="flex flex-wrap gap-2 mt-2">
-        {activeFilterCount > 0 && (
-          <div className="flex flex-wrap gap-2 mt-2">
-            {filters.status !== 'all' && (
-              <Badge variant="secondary" className="flex items-center gap-1">
-                Status: {filters.status}
-                <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleStatusChange('all')} />
-              </Badge>
-            )}
-            
-            {filters.showMyAnnotations && (
-              <Badge variant="secondary" className="flex items-center gap-1">
-                My Annotations
-                <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleMyAnnotationsChange(false)} />
-              </Badge>
-            )}
-            
-            {/* Task Status Badges */}
-            {filters.taskStatuses.task1 !== 'all' && (
-              <Badge variant="secondary" className="flex items-center gap-1">
-                {getTaskStatusIcon(filters.taskStatuses.task1)}
-                Task 1: {getTaskStatusLabel(filters.taskStatuses.task1)}
-                <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleTaskStatusChange(1, 'all')} />
-              </Badge>
-            )}
-            
-            {filters.taskStatuses.task2 !== 'all' && (
-              <Badge variant="secondary" className="flex items-center gap-1">
-                {getTaskStatusIcon(filters.taskStatuses.task2)}
-                Task 2: {getTaskStatusLabel(filters.taskStatuses.task2)}
-                <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleTaskStatusChange(2, 'all')} />
-              </Badge>
-            )}
-            
-            {filters.taskStatuses.task3 !== 'all' && (
-              <Badge variant="secondary" className="flex items-center gap-1">
-                {getTaskStatusIcon(filters.taskStatuses.task3)}
-                Task 3: {getTaskStatusLabel(filters.taskStatuses.task3)}
-                <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleTaskStatusChange(3, 'all')} />
-              </Badge>
-            )}
-            
-            {filters.repositoryLanguage.map(lang => (
-              <Badge key={lang} variant="secondary" className="flex items-center gap-1">
-                <Code className="h-3.5 w-3.5 mr-1" />
-                {lang}
-                <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleLanguageToggle(lang)} />
-              </Badge>
-            ))}
-            
-            {filters.releaseTag.map(tag => (
-              <Badge key={tag} variant="secondary" className="flex items-center gap-1">
-                <Tag className="h-3.5 w-3.5 mr-1" />
-                {tag}
-                <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleTagToggle(tag)} />
-              </Badge>
-            ))}
-            
-            {filters.fromDate && (
-              <Badge variant="secondary" className="flex items-center gap-1">
-                From: {format(filters.fromDate, "PP")}
-                <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleFromDateChange(undefined)} />
-              </Badge>
-            )}
-            
-            {filters.toDate && (
-              <Badge variant="secondary" className="flex items-center gap-1">
-                To: {format(filters.toDate, "PP")}
-                <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleToDateChange(undefined)} />
-              </Badge>
-            )}
-            
-            {filters.batchId && (
-              <Badge variant="secondary" className="flex items-center gap-1">
-                Batch: {availableBatches.find(b => b.id.toString() === filters.batchId)?.name || filters.batchId}
-                <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleBatchChange('')} />
-              </Badge>
-            )}
-          </div>
-        )}
-      </div>
+      {/* Active filters display - Fixed */}
+      {activeFilterCount > 0 && (
+        <div className="flex flex-wrap gap-2 mt-2">
+          {filters.status !== 'all' && (
+            <Badge variant="secondary" className="flex items-center gap-1">
+              Status: {filters.status}
+              <X className="h-3 w-3 ml-1 cursor-pointer" onClick={clearStatusFilter} />
+            </Badge>
+          )}
+          
+          {filters.showMyAnnotations && (
+            <Badge variant="secondary" className="flex items-center gap-1">
+              My Annotations
+              <X className="h-3 w-3 ml-1 cursor-pointer" onClick={clearMyAnnotationsFilter} />
+            </Badge>
+          )}
+          
+          {/* Task Status Badges */}
+          {filters.taskStatuses.task1 !== 'all' && (
+            <Badge variant="secondary" className="flex items-center gap-1">
+              {getTaskStatusIcon(filters.taskStatuses.task1)}
+              Task 1: {getTaskStatusLabel(filters.taskStatuses.task1)}
+              <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleTaskStatusChange(1, 'all')} />
+            </Badge>
+          )}
+          
+          {filters.taskStatuses.task2 !== 'all' && (
+            <Badge variant="secondary" className="flex items-center gap-1">
+              {getTaskStatusIcon(filters.taskStatuses.task2)}
+              Task 2: {getTaskStatusLabel(filters.taskStatuses.task2)}
+              <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleTaskStatusChange(2, 'all')} />
+            </Badge>
+          )}
+          
+          {filters.taskStatuses.task3 !== 'all' && (
+            <Badge variant="secondary" className="flex items-center gap-1">
+              {getTaskStatusIcon(filters.taskStatuses.task3)}
+              Task 3: {getTaskStatusLabel(filters.taskStatuses.task3)}
+              <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleTaskStatusChange(3, 'all')} />
+            </Badge>
+          )}
+          
+          {filters.repositoryLanguage.map(lang => (
+            <Badge key={lang} variant="secondary" className="flex items-center gap-1">
+              <Code className="h-3.5 w-3.5 mr-1" />
+              {lang}
+              <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleLanguageToggle(lang)} />
+            </Badge>
+          ))}
+          
+          {filters.releaseTag.map(tag => (
+            <Badge key={tag} variant="secondary" className="flex items-center gap-1">
+              <Tag className="h-3.5 w-3.5 mr-1" />
+              {tag}
+              <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleTagToggle(tag)} />
+            </Badge>
+          ))}
+          
+          {filters.fromDate && (
+            <Badge variant="secondary" className="flex items-center gap-1">
+              From: {format(filters.fromDate, "PP")}
+              <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleFromDateChange(undefined)} />
+            </Badge>
+          )}
+          
+          {filters.toDate && (
+            <Badge variant="secondary" className="flex items-center gap-1">
+              To: {format(filters.toDate, "PP")}
+              <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => handleToDateChange(undefined)} />
+            </Badge>
+          )}
+          
+          {filters.batchId !== 'all' && filters.batchId !== '' && (
+            <Badge variant="secondary" className="flex items-center gap-1">
+              Batch: {availableBatches.find(b => b.id.toString() === filters.batchId)?.name || filters.batchId}
+              <X className="h-3 w-3 ml-1 cursor-pointer" onClick={clearBatchFilter} />
+            </Badge>
+          )}
+        </div>
+      )}
     </div>
   );
 };

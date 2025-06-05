@@ -78,26 +78,37 @@ const Discussions = () => {
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [availableBatches, setAvailableBatches] = useState<{ id: number, name: string }[]>([]);
   
-  const fetchFilterOptions = useCallback(async () => {
+  // Remove the separate functions and use this instead
+useEffect(() => {
+  const loadFilterData = async () => {
     if (!isAuthenticated) return;
+    
+    console.log('Discussions: Loading filter data...');
+    
     try {
+      // Fetch filter options
+      console.log('Discussions: Calling api.discussions.getFilterOptions()...');
       const options = await api.discussions.getFilterOptions();
+      console.log('Discussions: Filter options received:', options);
       setAvailableLanguages(options.repository_languages || []);
       setAvailableTags(options.release_tags || []);
-    } catch (err) {
-      console.error('Failed to fetch filter options:', err);
-    }
-  }, [isAuthenticated]);
-  
-  const fetchBatchesData = useCallback(async () => {
-    if (!isAuthenticated) return;
-    try {
+      
+      // Fetch batches
+      console.log('Discussions: Calling api.batches.getAllBatches()...');
       const batches = await api.batches.getAllBatches();
+      console.log('Discussions: Batches received:', batches);
       setAvailableBatches(batches.map(b => ({ id: b.id, name: b.name })));
+      
+      console.log('Discussions: Filter data loaded successfully');
+      
     } catch (err) {
-      console.error('Failed to fetch batches:', err);
+      console.error('Discussions: Failed to fetch filter data:', err);
+      toast.error('Failed to load filter options');
     }
-  }, [isAuthenticated]);
+  };
+
+  loadFilterData();
+}, [isAuthenticated]);
 
   const fetchDiscussionsWithCurrentState = useCallback((overrides = {}) => {
     const params = {
