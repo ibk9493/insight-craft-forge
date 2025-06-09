@@ -29,8 +29,9 @@ import UserAccessManager from '@/components/admin/UserAccessManager';
 import AnalyticsDashboard from '@/components/admin/analytics/AnalyticsDashboard';
 import BulkTaskManager from '@/components/admin/bulk/BulkTaskManager';
 import AnnotationQuality from '@/components/admin/quality/AnnotationQuality';
-import { api, SystemSummary } from '@/services/api';
+import { api, EnhancedSystemSummary } from '@/services/api';
 import ConsensusReviewDashboard from '@/components/admin/ConsensusReviewDashboard';
+import StatusFixManager from '@/components/admin/StatusFixManage';
 
 const Admin = () => {
   const { isAuthenticated, isPodLead, isAdmin, user } = useUser();
@@ -38,7 +39,7 @@ const Admin = () => {
   const { discussions, loading, error } = useAnnotationData();
   // Updated default tab - prioritize workflow insights
   const [activeTab, setActiveTab] = useState((isAdmin || isPodLead) ? "task-management" : "analytics-dashboard");
-  const [systemSummary, setSystemSummary] = useState<SystemSummary | null>(null);
+  const [systemSummary, setSystemSummary] = useState<EnhancedSystemSummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const { toast } = useToast();
   
@@ -176,6 +177,10 @@ const Admin = () => {
                 <span>Analytics</span>
               </Tab>
             )}
+              <Tab value="status-fix-manage" className="flex items-center gap-2">
+              <Settings className="h-4 w-4" />
+              <span>Status Fix Manage</span>
+            </Tab>
             
             <Tab value="task-management" className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
@@ -274,6 +279,10 @@ const Admin = () => {
             
             <TaskManager 
                          />
+          </TabPanel>
+
+          <TabPanel value="status-fix-manage">
+            <StatusFixManager />
           </TabPanel>
 
           {/* Bulk Task Management Tab */}

@@ -1,7 +1,7 @@
 import { toast } from '@/components/ui/sonner';
-import { ApiError } from './types';
+import { ApiError, EnhancedGeneralReport, EnhancedSystemSummary, StatusFixResult, StatusFixResult,  } from './types';
 import { Discussion, Annotation, TaskStatus, GitHubDiscussion, UploadResult, 
-         TaskManagementResult, UserRole, SystemSummary, UserSummary, 
+         TaskManagementResult, UserRole,  UserSummary, 
          BatchUpload, BatchManagementResult, BulkTaskUpdate, BulkActionResult } from './types';
 import { API_CONFIG } from '@/config';
 import { apiRequest, safeApiRequest, formatApiUrl, safeToString } from './helpers';
@@ -260,16 +260,18 @@ export const api = {
         total_discussions: 0,
         ready_for_consensus: [],
         ready_for_task_unlock: [],
+        rework_required: [],
         workflow_summary: {
           discussions_ready_for_consensus: 0,
           discussions_ready_for_unlock: 0,
           fully_completed_discussions: 0,
-          blocked_discussions: 0
+          blocked_discussions: 0,
+          rework_discussions: 0
         },
         task_breakdown: {
-          task_1: { ready_for_consensus: 0, ready_for_unlock: 0, completed: 0 },
-          task_2: { ready_for_consensus: 0, ready_for_unlock: 0, completed: 0 },
-          task_3: { ready_for_consensus: 0, ready_for_unlock: 0, completed: 0 }
+          task_1: { ready_for_consensus: 0, ready_for_unlock: 0, completed: 0, rework_required: 0 },
+          task_2: { ready_for_consensus: 0, ready_for_unlock: 0, completed: 0, rework_required: 0 },
+          task_3: { ready_for_consensus: 0, ready_for_unlock: 0, completed: 0, rework_required: 0 }
         },
         recommendations: []
       });
@@ -474,7 +476,7 @@ github: {
     
     return safeApiRequest<{
       [x: string]: string;
-      success: boolean;
+      success: string;
       repository: string;
       latest_commit: {
         sha: string;
@@ -494,7 +496,7 @@ github: {
     
     return safeApiRequest<{
       [x: string]: string;
-      success: boolean;
+      success: string;
       repository: string;
       latest_tag: {
         name: string;
@@ -992,24 +994,57 @@ github: {
   summary: {
     getSystemSummary: () => {
       console.log('[Summary] Getting system summary statistics');
-      return safeApiRequest<any>('/api/summary/stats', 'GET', undefined, undefined, {
-        totalDiscussions: 0,
-        task1Completed: 0,
-        task2Completed: 0,
-        task3Completed: 0,
-        totalTasksCompleted: 0,
-        totalAnnotations: 0,
-        uniqueAnnotators: 0,
-        totalBatches: 0,
-        batchesBreakdown: [],
-        trainerBreakdown: [],
-        taskProgression: {
-          stuck_in_task1: 0,
-          stuck_in_task2: 0,
-          reached_task3: 0,
-          fully_completed: 0
+      console.log('[Summary] Getting enhanced system summary with bottleneck analysis');
+      return safeApiRequest<EnhancedSystemSummary>('/api/summary/stats', 'GET', undefined, undefined, {
+        total_discussions: 0,
+        total_annotations: 0,
+        unique_annotators: 0,
+        consensus_annotations: 0,
+        task_completions: {
+          task1: { completed: 0, consensus_created: 0, quality_failed: 0, total_done: 0 },
+          task2: { completed: 0, consensus_created: 0, quality_failed: 0, total_done: 0 },
+          task3: { completed: 0, consensus_created: 0, quality_failed: 0, total_done: 0 }
         },
-        consensus_annotations: 0
+        bottleneckAnalysis: {
+          task1_missing_annotations: 0,
+          task1_ready_for_consensus: 0,
+          task1_rework_flagged: 0,
+          task2_missing_annotations: 0,
+          task2_ready_for_consensus: 0,
+          task2_rework_flagged: 0,
+          task3_missing_annotations: 0,
+          task3_ready_for_consensus: 0,
+          task3_rework_flagged: 0,
+          total_stuck_discussions: 0,
+          stuck_details: []
+        },
+        workflowHealth: {
+          healthy_discussions: 0,
+          quality_issues: 0,
+          blocked_discussions: 0,
+          rework_discussions: 0,
+          consensus_pending: 0,
+          completion_rate: 0,
+          average_task_completion: 0
+        },
+        taskProgression: {
+          not_started: 0,
+          task1_in_progress: 0,
+          task1_done: 0,
+          task2_in_progress: 0,
+          task2_done: 0,
+          task3_in_progress: 0,
+          fully_completed: 0,
+          workflow_blocked: 0,
+          workflow_rework: 0
+        },
+        actionableInsights: [],
+        task1_completed: 0,
+        task2_completed: 0,
+        task3_completed: 0,
+        total_tasks_completed: 0,
+        batches_breakdown: [],
+        trainer_breakdown: []
       });
     },
     
@@ -1090,7 +1125,88 @@ github: {
       return safeApiRequest<{repository: string, count: number}[]>('/api/summary/repositories', 'GET', undefined, undefined, []);
     }
   },
-
+  statusFix: {
+    /**
+     * Preview status fixes without applying them
+     */
+    previewFixes: () => {
+      console.log('[StatusFix] Previewing status fixes');
+      return safeApiRequest<StatusFixResult>(
+        '/api/admin/workflow/fix-statuses?dry_run=true', 
+        'POST', 
+        undefined, 
+        undefined, 
+        {
+          success: false,
+          dry_run: true,
+          message: 'Preview failed',
+          updated_discussions: 0,
+          total_discussions_analyzed: 0,
+          status_updates: [],
+          summary: {
+            status_changes: {},
+            fixes_applied: {},
+            tasks_affected: {}
+          },
+          errors: []
+        }
+      );
+    },
+  
+    /**
+     * Apply status fixes to all discussions
+     */
+    applyFixes: () => {
+      console.log('[StatusFix] Applying status fixes');
+      return safeApiRequest<StatusFixResult>(
+        '/api/admin/workflow/fix-statuses?dry_run=false', 
+        'POST', 
+        undefined, 
+        undefined, 
+        {
+          success: false,
+          dry_run: false,
+          message: 'Apply failed',
+          updated_discussions: 0,
+          total_discussions_analyzed: 0,
+          status_updates: [],
+          summary: {
+            status_changes: {},
+            fixes_applied: {},
+            tasks_affected: {}
+          },
+          errors: []
+        }
+      );
+    },
+  
+    /**
+     * Run status fix with custom dry_run parameter
+     */
+    runStatusFix: (dryRun: boolean = true) => {
+      console.log(`[StatusFix] Running status fix (dry_run=${dryRun})`);
+      return safeApiRequest<StatusFixResult>(
+        `/api/admin/workflow/fix-statuses?dry_run=${dryRun}`, 
+        'POST', 
+        undefined, 
+        undefined, 
+        {
+          success: false,
+          dry_run: dryRun,
+          message: 'Status fix failed',
+          updated_discussions: 0,
+          total_discussions_analyzed: 0,
+          status_updates: [],
+          summary: {
+            status_changes: {},
+            fixes_applied: {},
+            tasks_affected: {}
+          },
+          errors: []
+        }
+      );
+    }
+  },
   // User endpoints
   users: {
     getUserById: (userId: string) => {
@@ -1255,5 +1371,7 @@ export type {
   EnhancedDiscussionQueryParams, 
   FilterOptionsResponse,
   TaskCompletionStatusResponse,
-  ExportResponse
+  ExportResponse,
+  EnhancedSystemSummary, 
+  EnhancedGeneralReport 
 };

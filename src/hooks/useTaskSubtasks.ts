@@ -31,6 +31,7 @@ const cloneSubtasks = (subtasks: SubTask[]): SubTask[] => {
 export function useTaskSubtasks() {
   // Task 1 subtasks
   const [task1SubTasks, setTask1SubTasks] = useState<SubTask[]>([
+    
     {
       id: 'relevance',
       title: 'Relevance Check',

@@ -127,17 +127,22 @@ def _get_existing_annotation(
     except exc.SQLAlchemyError as e:
         logger.error(f"Database error in _get_existing_annotation: {str(e)}")
         raise DatabaseError(f"Failed to retrieve existing annotation: {str(e)}")
+    
 def _increment_task_annotators(
     db: Session, 
     discussion_id: str, 
     task_id: int
 ) -> None:
-    """Helper function to increment the annotators count for a task."""
+    """
+    Helper function to increment the annotators count and check for consensus readiness.
+    """
     try:
-        task_assoc = db.query(models.discussion_task_association).filter(
-            and_(
-                models.discussion_task_association.c.discussion_id == discussion_id,
-                models.discussion_task_association.c.task_number == task_id
+        task_assoc = db.execute(
+            models.discussion_task_association.select().where(
+                and_(
+                    models.discussion_task_association.c.discussion_id == discussion_id,
+                    models.discussion_task_association.c.task_number == task_id
+                )
             )
         ).first()
         
@@ -146,14 +151,11 @@ def _increment_task_annotators(
             
             # Check if we need to update status to ready_for_consensus
             new_status = task_assoc.status
-            if task_id == 1 and new_annotator_count >= 3:
-                new_status = 'ready_for_consensus'
-            elif task_id == 2 and new_annotator_count >= 3:
-                new_status = 'ready_for_consensus'
-            elif task_id == 3 and new_annotator_count >= 5:
+            required_annotators = 5 if task_id == 3 else 3
+            
+            if new_annotator_count >= required_annotators:
                 new_status = 'ready_for_consensus'
             
-
             db.execute(
                 models.discussion_task_association.update().where(
                     and_(
@@ -167,10 +169,17 @@ def _increment_task_annotators(
             )
             logger.info(f"Updated task {task_id} annotators to {new_annotator_count}, status: {new_status}")
             
+            # Auto-create consensus if ready
+            # if new_annotator_count >= required_annotators:
+            #     try:
+            #         from services import consensus_service
+            #         consensus_service.auto_create_consensus_if_ready(db, discussion_id, task_id)
+            #     except Exception as e:
+            #         logger.error(f"Error auto-creating consensus: {str(e)}")
+            
     except exc.SQLAlchemyError as e:
         logger.error(f"Database error in _increment_task_annotators: {str(e)}")
         raise DatabaseError(f"Failed to update task annotators count: {str(e)}")
-
 def create_or_update_annotation(db: Session, annotation: schemas.AnnotationCreate) -> schemas.Annotation:
     """Create a new annotation or update an existing one."""
     # Validate the data structure
@@ -218,6 +227,7 @@ def create_or_update_annotation(db: Session, annotation: schemas.AnnotationCreat
             data=existing.data,
             timestamp=existing.timestamp
         )
+    
     except ValueError as e:
         # Re-raise validation errors
         raise

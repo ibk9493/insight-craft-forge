@@ -4,6 +4,7 @@ import { SubTask, SubTaskStatus } from '@/components/dashboard/TaskCard';
 import { User } from '@/contexts/UserContext';
 import { api } from '@/services/api/endpoints';
 import { TaskId } from './annotations/useAnnotationTypes';
+import { parseTaskStatus } from '@/services/api';
 
 interface UseTaskInitializationProps {
   discussionId: string | null;

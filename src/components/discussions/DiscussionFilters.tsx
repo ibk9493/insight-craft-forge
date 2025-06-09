@@ -347,14 +347,14 @@ const DiscussionFilters: React.FC<DiscussionFiltersProps> = ({
               <TaskStatusSelect
                 value={filters.taskStatuses.task2}
                 onValueChange={(value) => handleTaskStatusChange(2, value)}
-                options={taskStatusOptions.slice(0, 4)}
+                options={taskStatusOptions}
                 label="Task 2: Answer Quality"
               />
               
               <TaskStatusSelect
                 value={filters.taskStatuses.task3}
                 onValueChange={(value) => handleTaskStatusChange(3, value)}
-                options={taskStatusOptions.slice(0, 4)}
+                options={taskStatusOptions}
                 label="Task 3: Rewrite"
               />
             </div>

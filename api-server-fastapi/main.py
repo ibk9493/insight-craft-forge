@@ -27,7 +27,7 @@ import secrets
 import google.oauth2.id_token
 import google.auth.transport.requests
 from pydantic import BaseModel
-
+from routers.status_fix import status_fix_router
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -35,6 +35,7 @@ app = FastAPI(
     version="1.0.0",
     description="API for managing discussions, annotations, and user authentication for an annotation tool."
 )
+app.include_router(status_fix_router)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 logger.info(f"Server started")
@@ -1557,7 +1558,137 @@ async def get_task_completion_status(
         )
     
 # Add this endpoint to your main.py file
+@app.post("/api/consensus/{discussion_id}/{task_id}/auto-create")
+async def auto_create_consensus_endpoint(
+    discussion_id: str = Path(..., description="Discussion ID"),
+    task_id: int = Path(..., description="Task ID"),
+    current_user: schemas.AuthorizedUser = Depends(jwt_auth_service.get_pod_lead),
+    db: Session = Depends(get_db)
+):
+    """
+    Auto-create consensus using field-by-field majority voting.
+    """
+    try:
+        logger.info(f"Auto-creating consensus for {discussion_id}/task{task_id} by {current_user.email}")
+        
+        result = consensus_service.auto_create_consensus_if_ready(db, discussion_id, task_id)
+        
+        if not result:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot create consensus - insufficient annotations or consensus already exists"
+            )
+        
+        return {
+            "success": True,
+            "message": "Consensus created successfully using field-by-field majority",
+            "consensus": result
+        }
+        
+    except Exception as e:
+        logger.error(f"Error auto-creating consensus: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create consensus: {str(e)}"
+        )
 
+@app.get("/api/discussions/{discussion_id}/tasks/{task_id}/status-details")
+async def get_task_status_details_endpoint(
+    discussion_id: str = Path(..., description="Discussion ID"),
+    task_id: int = Path(..., description="Task ID"),
+    current_user: schemas.AuthorizedUser = Depends(jwt_auth_service.require_authentication),
+    db: Session = Depends(get_db)
+):
+    """
+    Get detailed task status including consensus information.
+    """
+    try:
+        # Get task association
+        task_assoc = db.execute(
+            models.discussion_task_association.select().where(
+                and_(
+                    models.discussion_task_association.c.discussion_id == discussion_id,
+                    models.discussion_task_association.c.task_number == task_id
+                )
+            )
+        ).first()
+        
+        if not task_assoc:
+            return {
+                "status": "locked",
+                "annotators": 0,
+                "has_consensus": False,
+                "consensus_meets_criteria": None
+            }
+        
+        # Get consensus if exists
+        consensus = consensus_service.get_consensus_annotation_by_discussion_and_task(db, discussion_id, task_id)
+        
+        result = {
+            "status": task_assoc.status,
+            "annotators": task_assoc.annotators,
+            "has_consensus": consensus is not None,
+            "consensus_meets_criteria": None
+        }
+        
+        if consensus:
+            result["consensus_meets_criteria"] = consensus_service.validate_consensus_criteria(consensus.data, task_id)
+            result["consensus_data"] = consensus.data
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error getting task status details: {str(e)}")
+        return {"error": str(e)}
+
+@app.post("/api/discussions/{discussion_id}/tasks/{task_id}/trigger-consensus")
+async def trigger_consensus_creation_endpoint(
+    discussion_id: str = Path(..., description="Discussion ID"), 
+    task_id: int = Path(..., description="Task ID"),
+    current_user: schemas.AuthorizedUser = Depends(jwt_auth_service.get_pod_lead),
+    db: Session = Depends(get_db)
+):
+    """
+    Trigger consensus creation and quality gate evaluation.
+    """
+    try:
+        # Check if enough annotations exist
+        annotations = db.query(models.Annotation).filter(
+            models.Annotation.discussion_id == discussion_id,
+            models.Annotation.task_id == task_id
+        ).count()
+        
+        required = 5 if task_id == 3 else 3
+        
+        if annotations < required:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Insufficient annotations: {annotations}/{required}"
+            )
+        
+        # Create consensus
+        consensus = consensus_service.auto_create_consensus_if_ready(db, discussion_id, task_id)
+        
+        if not consensus:
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to create consensus"
+            )
+        
+        return {
+            "success": True,
+            "message": "Consensus created and quality gates evaluated",
+            "consensus": consensus
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error triggering consensus: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Consensus creation failed: {str(e)}"
+        )
 
 # ================= General Workflow Report API =================
 

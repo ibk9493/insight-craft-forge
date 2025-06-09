@@ -517,7 +517,7 @@ def _apply_filters(query, filters: Dict, db: Session):
     # FIXED TASK STATUS FILTERS - Use EXISTS instead of IN:
     
     # Task 1 status filter
-    if filters.get('task1_status') and filters['task1_status'] in ['locked', 'unlocked', 'completed', 'ready_for_consensus', 'consensus_created', 'rework', 'blocked']:
+    if filters.get('task1_status') and filters['task1_status'] in ['locked', 'unlocked', 'completed', 'ready_for_consensus', 'consensus_created', 'rework', 'blocked','flagged','ready_for_next','quality_failed']:
         query = query.filter(
             db.query(models.discussion_task_association).filter(
                 and_(
@@ -529,7 +529,7 @@ def _apply_filters(query, filters: Dict, db: Session):
         )
     
     # Task 2 status filter
-    if filters.get('task2_status') and filters['task2_status'] in ['locked', 'unlocked', 'completed', 'ready_for_consensus', 'consensus_created', 'rework', 'blocked']:
+    if filters.get('task2_status') and filters['task2_status'] in ['locked', 'unlocked', 'completed', 'ready_for_consensus', 'consensus_created', 'rework', 'blocked','flagged','ready_for_next','quality_failed']:
         query = query.filter(
             db.query(models.discussion_task_association).filter(
                 and_(
@@ -541,7 +541,7 @@ def _apply_filters(query, filters: Dict, db: Session):
         )
     
     # Task 3 status filter
-    if filters.get('task3_status') and filters['task3_status'] in ['locked', 'unlocked', 'completed', 'ready_for_consensus', 'consensus_created', 'rework', 'blocked']:
+    if filters.get('task3_status') and filters['task3_status'] in ['locked', 'unlocked', 'completed', 'ready_for_consensus', 'consensus_created', 'rework', 'blocked','flagged','ready_for_next','quality_failed']:
         query = query.filter(
             db.query(models.discussion_task_association).filter(
                 and_(
@@ -552,7 +552,7 @@ def _apply_filters(query, filters: Dict, db: Session):
             ).exists()
         )
     if any(filters.get(f'task{i}_status') for i in [1,2,3]):
-        logger.info(f"DEBUGGING: Applied task filters: {filters}")
+        logger.info(f"DEBUGGING: Applied task filters: {filters}")                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
         logger.info(f"DEBUGGING: Final query SQL: {str(query)}")
 
     return query
@@ -1182,7 +1182,8 @@ def update_task_status_enhanced(
 
 def get_workflow_status_summary(db: Session, discussion_id: str) -> Dict[str, Any]:
     """
-    Get a comprehensive workflow status summary for a discussion
+    Get a comprehensive workflow status summary for a discussion.
+    Enhanced to properly detect stuck states, rework requirements, and provide actionable insights.
     """
     try:
         # Get all task associations
@@ -1198,8 +1199,25 @@ def get_workflow_status_summary(db: Session, discussion_id: str) -> Dict[str, An
             "tasks": {},
             "workflow_stage": "initial",
             "next_action": "Start Task 1 annotations",
-            "blockers": []
+            "blockers": [],
+            "stuck_analysis": {  # NEW: Detailed stuck analysis
+                "is_stuck": False,
+                "stuck_reasons": [],
+                "stuck_type": None,  # 'missing_annotations', 'ready_for_consensus', 'rework_required', 'blocked'
+                "actionable_by": None  # 'annotators', 'administrators', 'pod_leads'
+            },
+            "completion_summary": {  # NEW: Enhanced completion tracking
+                "tasks_completed": 0,
+                "tasks_consensus_created": 0,
+                "tasks_quality_failed": 0,
+                "tasks_requiring_rework": 0,
+                "overall_progress_percentage": 0
+            }
         }
+        
+        tasks_completed = 0
+        tasks_with_issues = 0
+        highest_active_task = 0
         
         for task_assoc in task_associations:
             task_num = task_assoc.task_number
@@ -1213,36 +1231,144 @@ def get_workflow_status_summary(db: Session, discussion_id: str) -> Dict[str, An
             ).first()
             
             # Get required annotators
-            required = 3 if task_num < 3 else 5
+            required = 5 if task_num == 3 else 3
             
-            summary["tasks"][f"task_{task_num}"] = {
+            # Enhanced task info
+            task_info = {
                 "status": status,
                 "annotators": annotators,
                 "required_annotators": required,
                 "has_consensus": consensus is not None,
-                "consensus_meets_criteria": False
+                "consensus_meets_criteria": False,
+                "is_stuck": False,  # NEW: Individual task stuck status
+                "stuck_reason": None,  # NEW: Specific reason if stuck
+                "priority": "normal"  # NEW: Priority level for action
             }
             
+            # Check consensus criteria if consensus exists
             if consensus:
-                from services.consensus_service import _should_task_be_completed
-                meets_criteria = _should_task_be_completed(db, discussion_id, task_num, consensus.data)
-                summary["tasks"][f"task_{task_num}"]["consensus_meets_criteria"] = meets_criteria
+                from services.consensus_service import validate_consensus_criteria
+                meets_criteria = validate_consensus_criteria(consensus.data, task_num)
+                task_info["consensus_meets_criteria"] = meets_criteria
             
-            # Check for blockers
-            if status in ['rework', 'flagged', 'blocked']:
+            # Enhanced stuck analysis for each task
+            if status in ['rework', 'flagged']:
+                task_info["is_stuck"] = True
+                task_info["stuck_reason"] = f"Requires rework ({status})"
+                task_info["priority"] = "high"
+                summary["stuck_analysis"]["stuck_reasons"].append(f"Task {task_num}: Requires rework ({status})")
+                summary["stuck_analysis"]["stuck_type"] = "rework_required"
+                summary["stuck_analysis"]["actionable_by"] = "pod_leads"
                 summary["blockers"].append(f"Task {task_num}: {status}")
+                tasks_with_issues += 1
+                
+            elif status == 'blocked':
+                # Check WHY it's blocked - if upstream is quality_failed, that's a workflow decision, not stuck
+                upstream_task_num = task_num - 1
+                if upstream_task_num >= 1:
+                    upstream_task = next((t for t in task_associations if t.task_number == upstream_task_num), None)
+                    upstream_status = upstream_task.status if upstream_task else "unknown"
+                    
+                    if upstream_status == "quality_failed":
+                        # Blocked by quality decision - this is normal workflow, not stuck
+                        task_info["is_stuck"] = False
+                        task_info["stuck_reason"] = f"Blocked by upstream quality decision (Task {upstream_task_num} quality_failed)"
+                        task_info["priority"] = "normal"
+                        # Don't add to stuck analysis - this is expected workflow
+                    else:
+                        # Blocked by actual workflow issues - this IS stuck
+                        task_info["is_stuck"] = True
+                        task_info["stuck_reason"] = f"Blocked by upstream issues (Task {upstream_task_num}: {upstream_status})"
+                        task_info["priority"] = "high"
+                        summary["stuck_analysis"]["stuck_reasons"].append(f"Task {task_num}: Blocked by upstream issues")
+                        summary["stuck_analysis"]["stuck_type"] = "blocked"
+                        summary["stuck_analysis"]["actionable_by"] = "administrators"
+                        tasks_with_issues += 1
+                else:
+                    # Task 1 blocked - this is definitely stuck
+                    task_info["is_stuck"] = True
+                    task_info["stuck_reason"] = "Blocked without clear upstream cause"
+                    task_info["priority"] = "high"
+                    summary["stuck_analysis"]["stuck_reasons"].append(f"Task {task_num}: Blocked without clear cause")
+                    summary["stuck_analysis"]["stuck_type"] = "blocked"
+                    summary["stuck_analysis"]["actionable_by"] = "administrators"
+                    tasks_with_issues += 1
+                
+                summary["blockers"].append(f"Task {task_num}: blocked")
+                
+            elif status in ['unlocked', 'in_progress'] and annotators < required:
+                # Only consider this stuck if no progress is being made for a while
+                # For now, treat as normal in-progress unless severely lacking annotations
+                if annotators == 0:
+                    task_info["is_stuck"] = True
+                    task_info["stuck_reason"] = f"No annotations started ({annotators}/{required})"
+                    task_info["priority"] = "medium"
+                    summary["stuck_analysis"]["stuck_reasons"].append(f"Task {task_num}: No annotations started")
+                    if not summary["stuck_analysis"]["stuck_type"]:
+                        summary["stuck_analysis"]["stuck_type"] = "missing_annotations"
+                        summary["stuck_analysis"]["actionable_by"] = "annotators"
+                else:
+                    # Has some annotations - this is normal in-progress, not stuck
+                    task_info["is_stuck"] = False
+                    task_info["stuck_reason"] = None
+                    task_info["priority"] = "normal"
+                
+            elif status == "ready_for_consensus":
+                task_info["is_stuck"] = True
+                task_info["stuck_reason"] = "Ready for consensus creation"
+                task_info["priority"] = "medium"
+                summary["stuck_analysis"]["stuck_reasons"].append(f"Task {task_num}: Ready for consensus creation")
+                if not summary["stuck_analysis"]["stuck_type"]:
+                    summary["stuck_analysis"]["stuck_type"] = "ready_for_consensus"
+                    summary["stuck_analysis"]["actionable_by"] = "administrators"
+            
+            # Track completion states
+            if status == "completed":
+                tasks_completed += 1
+                summary["completion_summary"]["tasks_completed"] += 1
+                highest_active_task = max(highest_active_task, task_num)
+            elif status == "consensus_created":
+                summary["completion_summary"]["tasks_consensus_created"] += 1
+                highest_active_task = max(highest_active_task, task_num)
+            elif status == "quality_failed":
+                summary["completion_summary"]["tasks_quality_failed"] += 1
+                highest_active_task = max(highest_active_task, task_num)
+            elif status in ['rework', 'flagged']:
+                summary["completion_summary"]["tasks_requiring_rework"] += 1
+            
+            summary["tasks"][f"task_{task_num}"] = task_info
         
-        # Determine overall status and next action
-        if all(summary["tasks"].get(f"task_{i}", {}).get("status") == "completed" for i in range(1, 4)):
+        # Set overall stuck status
+        summary["stuck_analysis"]["is_stuck"] = len(summary["stuck_analysis"]["stuck_reasons"]) > 0
+        
+        # Calculate overall progress percentage
+        total_possible_tasks = 3
+        completed_work = (summary["completion_summary"]["tasks_completed"] + 
+                         summary["completion_summary"]["tasks_consensus_created"] + 
+                         summary["completion_summary"]["tasks_quality_failed"])
+        summary["completion_summary"]["overall_progress_percentage"] = (completed_work / total_possible_tasks) * 100
+        
+        # Enhanced overall status determination
+        if tasks_completed == 3:
             summary["overall_status"] = "completed"
             summary["workflow_stage"] = "complete"
             summary["next_action"] = "Discussion complete"
-        elif any(summary["tasks"].get(f"task_{i}", {}).get("status") in ["rework", "flagged", "blocked"] for i in range(1, 4)):
+            
+        elif any(summary["tasks"].get(f"task_{i}", {}).get("status") in ["rework", "flagged"] for i in range(1, 4)):
+            summary["overall_status"] = "rework_required"
+            summary["workflow_stage"] = "rework"
+            rework_tasks = [i for i in range(1, 4) if summary["tasks"].get(f"task_{i}", {}).get("status") in ["rework", "flagged"]]
+            summary["next_action"] = f"Resolve rework issues for Task(s) {', '.join(map(str, rework_tasks))}"
+            
+        elif any(summary["tasks"].get(f"task_{i}", {}).get("is_stuck", False) and 
+                summary["tasks"].get(f"task_{i}", {}).get("status") == "blocked" for i in range(1, 4)):
+            # Only consider as blocked if tasks are actually stuck (not blocked by quality decisions)
             summary["overall_status"] = "blocked"
             summary["workflow_stage"] = "blocked"
-            summary["next_action"] = "Resolve blockers"
+            summary["next_action"] = "Resolve upstream dependencies to unblock tasks"
+            
         else:
-            # Find the current working task
+            # Find the current working task (enhanced logic)
             for task_num in range(1, 4):
                 task_key = f"task_{task_num}"
                 task_info = summary["tasks"].get(task_key, {})
@@ -1253,21 +1379,69 @@ def get_workflow_status_summary(db: Session, discussion_id: str) -> Dict[str, An
                     summary["workflow_stage"] = f"task_{task_num}_consensus"
                     summary["next_action"] = f"Create consensus for Task {task_num}"
                     break
-                elif task_status in ["unlocked", "in_progress"]:
-                    summary["overall_status"] = "in_progress"
-                    summary["workflow_stage"] = f"task_{task_num}_annotations"
-                    annotators = task_info.get("annotators", 0)
-                    required = task_info.get("required_annotators", 3)
-                    summary["next_action"] = f"Collect more annotations for Task {task_num} ({annotators}/{required})"
-                    break
+                    
                 elif task_status == "consensus_created":
                     summary["overall_status"] = "awaiting_review"
                     summary["workflow_stage"] = f"task_{task_num}_review"
-                    summary["next_action"] = f"Review Task {task_num} consensus criteria"
+                    summary["next_action"] = f"Review Task {task_num} consensus criteria and mark as completed or quality_failed"
                     break
+                    
+                elif task_status in ["unlocked", "in_progress"]:
+                    summary["overall_status"] = "in_progress"  # This is normal workflow!
+                    summary["workflow_stage"] = f"task_{task_num}_annotations"
+                    annotators = task_info.get("annotators", 0)
+                    required = task_info.get("required_annotators", 3)
+                    
+                    if annotators == 0:
+                        summary["next_action"] = f"Start annotations for Task {task_num} (no annotations yet)"
+                    elif annotators < required:
+                        summary["next_action"] = f"Collect more annotations for Task {task_num} ({annotators}/{required}) - in progress"
+                    else:
+                        summary["next_action"] = f"Create consensus for Task {task_num} (sufficient annotations available)"
+                    break
+                    
+                elif task_status == "locked" and task_num == 1:
+                    summary["overall_status"] = "not_started"
+                    summary["workflow_stage"] = "initial"
+                    summary["next_action"] = "Unlock Task 1 to begin annotation workflow"
+                    break
+                    
+                elif task_status == "locked" and task_num > 1:
+                    # Check if previous task is completed OR quality_failed (both allow progression)
+                    prev_task_status = summary["tasks"].get(f"task_{task_num - 1}", {}).get("status", "locked")
+                    if prev_task_status in ["completed", "quality_failed"]:
+                        summary["overall_status"] = "ready_for_unlock"
+                        summary["workflow_stage"] = f"task_{task_num}_locked"
+                        summary["next_action"] = f"Unlock Task {task_num} (previous task resolved: {prev_task_status})"
+                        break
         
+        # Add workflow efficiency metrics
+        summary["workflow_efficiency"] = {
+            "avg_annotators_per_active_task": 0,
+            "tasks_above_minimum": 0,
+            "estimated_completion_time": "unknown"
+        }
+        
+        active_tasks = [task for task in summary["tasks"].values() 
+                       if task["status"] in ["unlocked", "in_progress", "ready_for_consensus"]]
+        
+        if active_tasks:
+            total_annotators = sum(task["annotators"] for task in active_tasks)
+            summary["workflow_efficiency"]["avg_annotators_per_active_task"] = total_annotators / len(active_tasks)
+            summary["workflow_efficiency"]["tasks_above_minimum"] = sum(
+                1 for task in active_tasks if task["annotators"] >= task["required_annotators"]
+            )
+        
+        logger.info(f"Enhanced workflow status for {discussion_id}: {summary['overall_status']}, stuck: {summary['stuck_analysis']['is_stuck']}")
         return summary
         
     except Exception as e:
-        logger.error(f"Error getting workflow status: {str(e)}")
-        return {"error": str(e)}
+        logger.error(f"Error getting enhanced workflow status: {str(e)}")
+        return {
+            "discussion_id": discussion_id,
+            "error": str(e),
+            "overall_status": "error",
+            "tasks": {},
+            "stuck_analysis": {"is_stuck": False, "stuck_reasons": [], "stuck_type": None},
+            "completion_summary": {"tasks_completed": 0, "overall_progress_percentage": 0}
+        }

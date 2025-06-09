@@ -1,4 +1,4 @@
-from fastapi import logger
+import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 import models  # Assuming models.py contains the updated ConsensusAnnotation model
@@ -7,6 +7,201 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 
+from collections import Counter
+from typing import Dict, List, Any, Optional, Tuple
+
+logger = logging.getLogger(__name__)
+TASK_FIELDS = {
+    1: ['relevance', 'learning', 'clarity'],
+    2: ['aspects', 'explanation', 'execution'], 
+    3: ['classify', 'short_answer_list', 'longAnswer_text', 'supporting_docs_available']
+}
+
+BOOLEAN_FIELDS = {'relevance', 'learning', 'clarity', 'aspects', 'explanation', 'supporting_docs_available'}
+
+def _determine_manual_consensus_phase(annotations_count: int, required: int, consensus, agreement_analysis) -> str:
+    """
+    Determine consensus phase for manual-only workflow
+    """
+    if annotations_count < required:
+        return "collecting_annotations"
+    
+    if not consensus:
+        return "ready_for_manual_consensus"  # Always manual
+    
+    return "consensus_created"
+
+def auto_create_consensus_if_ready(db: Session, discussion_id: str, task_id: int) -> Optional[schemas.ConsensusAnnotationResponse]:
+    """
+    Auto-create consensus if enough annotations exist and agreement is sufficient.
+    DISABLED: Returns existing consensus only, no auto-creation.
+    """
+    try:
+        # Only check if consensus already exists, don't create new ones
+        existing_consensus = get_consensus_annotation_by_discussion_and_task(db, discussion_id, task_id)
+        if existing_consensus:
+            return existing_consensus
+        
+        # REMOVED: Auto-creation logic
+        logger.info(f"Auto-consensus creation disabled for {discussion_id}/task{task_id}")
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error checking existing consensus: {str(e)}")
+        return None
+
+def handle_task3_retroactive_updates(db: Session, discussion_id: str, task3_consensus_data: Dict[str, Any]) -> bool:
+    """
+    Handle retroactive updates when Task 3 indicates supporting docs are not available.
+    Returns True if retroactive update was performed.
+    """
+    try:
+        supporting_docs_available = task3_consensus_data.get('supporting_docs_available', True)
+        
+        if supporting_docs_available:
+            # No retroactive update needed
+            return False
+        
+        logger.info(f"Task 3 indicates no supporting docs for {discussion_id}, performing retroactive update")
+        
+        # Get current Task 2 consensus
+        task2_consensus = get_consensus_annotation_by_discussion_and_task(db, discussion_id, 2)
+        
+        if not task2_consensus:
+            logger.warning(f"No Task 2 consensus found for retroactive update: {discussion_id}")
+            return False
+        
+        # Create updated Task 2 consensus data
+        updated_task2_data = task2_consensus.data.copy()
+        original_explanation = updated_task2_data.get('explanation')
+        
+        # Update explanation to False
+        updated_task2_data['explanation'] = False
+        
+        # Add retroactive update metadata
+        updated_task2_data['_retroactively_updated_by_task3'] = True
+        updated_task2_data['_retroactive_update_timestamp'] = datetime.utcnow().isoformat()
+        updated_task2_data['_original_explanation_value'] = original_explanation
+        
+        # Update the Task 2 consensus
+        task2_consensus.data = updated_task2_data
+        task2_consensus.timestamp = datetime.utcnow()
+        db.commit()
+        
+        logger.info(f"Retroactively updated Task 2 consensus for {discussion_id}")
+        
+        # Re-evaluate Task 2 quality criteria
+        task2_passes = validate_consensus_criteria(updated_task2_data, 2)
+        
+        if not task2_passes:
+            # Task 2 now fails criteria due to retroactive update
+            from services import discussions_service
+            discussions_service.update_task_status_enhanced(
+                db, discussion_id, 2, "quality_failed", "retroactive_update_system"
+            )
+            logger.info(f"Task 2 marked as quality_failed due to retroactive update: {discussion_id}")
+        
+        return True
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error handling retroactive updates: {str(e)}")
+        raise Exception(f"Retroactive update failed: {str(e)}")
+
+def validate_consensus_criteria(consensus_data: Dict[str, Any], task_id: int) -> bool:
+    """
+    Validate if consensus meets quality criteria for task progression.
+    """
+    try:
+        if task_id == 1:
+            # Task 1: All 3 fields must be True
+            required_fields = ['relevance', 'learning', 'clarity']
+            return all(consensus_data.get(field, False) for field in required_fields)
+        
+        elif task_id == 2:
+            # Task 2: aspects and explanation must be True, execution must be "Executable" if not "N/A"
+            aspects = consensus_data.get('aspects', False)
+            explanation = consensus_data.get('explanation', False)
+            execution = consensus_data.get('execution')
+            
+            base_criteria = aspects and explanation
+            
+            if execution and execution != "N/A":
+                return base_criteria and execution == "Executable"
+            
+            return base_criteria
+        
+        elif task_id == 3:
+            # Task 3: supporting_docs_available must be True
+            return True # consensus_data.get('supporting_docs_available', False)
+        
+        return False
+        
+    except Exception as e:
+        logger.error(f"Error validating consensus criteria: {str(e)}")
+        return False
+
+def _calculate_field_consensus(annotations: List[models.Annotation], field: str) -> Any:
+    """
+    Calculate consensus for a single field using majority voting.
+    """
+    field_values = []
+    
+    for annotation in annotations:
+        if field in annotation.data and annotation.data[field] is not None:
+            field_values.append(annotation.data[field])
+    
+    if not field_values:
+        return None
+    
+    if field in BOOLEAN_FIELDS:
+        # Boolean field: majority of True/False
+        true_count = sum(1 for val in field_values if val)
+        false_count = len(field_values) - true_count
+        return true_count > false_count
+    else:
+        # Non-boolean field: most common value
+        value_counts = Counter(field_values)
+        most_common_value, most_common_count = value_counts.most_common(1)[0]
+        return most_common_value
+
+def create_field_by_field_consensus(db: Session, discussion_id: str, task_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Create consensus using field-by-field majority voting.
+    Returns consensus data or None if insufficient annotations.
+    """
+    try:
+        # Get all annotations for this task
+        annotations = db.query(models.Annotation).filter(
+            models.Annotation.discussion_id == discussion_id,
+            models.Annotation.task_id == task_id
+        ).all()
+        
+        required_annotators = 5 if task_id == 3 else 3
+        
+        if len(annotations) < required_annotators:
+            logger.warning(f"Insufficient annotations for consensus: {len(annotations)}/{required_annotators}")
+            return None
+        
+        consensus_data = {}
+        fields = TASK_FIELDS.get(task_id, [])
+        
+        for field in fields:
+            field_consensus = _calculate_field_consensus(annotations, field)
+            if field_consensus is not None:
+                consensus_data[field] = field_consensus
+        
+        # Add consensus metadata
+        consensus_data["_consensus_method"] = "field_majority"
+        consensus_data["_total_annotators"] = len(annotations)
+        consensus_data["_created_at"] = datetime.utcnow().isoformat()
+        
+        logger.info(f"Created field consensus for {discussion_id}/task{task_id}: {consensus_data}")
+        return consensus_data
+        
+    except Exception as e:
+        logger.error(f"Error creating field consensus: {str(e)}")
+        return None
 
 def get_consensus_annotation_by_discussion_and_task(
         db: Session,
@@ -34,7 +229,6 @@ def get_consensus_annotation_by_discussion_and_task(
         data=db_annotation.data,
         timestamp=db_annotation.timestamp
     )
-
 
 def get_consensus_annotation_by_ids(
         db: Session,
@@ -66,7 +260,6 @@ def get_consensus_annotation_by_ids(
         timestamp=db_annotation.timestamp
     )
 
-
 def get_all_consensus_annotations_for_task(
         db: Session,
         discussion_id: str,
@@ -93,7 +286,6 @@ def get_all_consensus_annotations_for_task(
         ) for anno in db_annotations
     ]
 
-
 def create_or_update_consensus_annotation(
         db: Session,
         consensus_input: schemas.ConsensusAnnotationCreate,
@@ -107,16 +299,6 @@ def create_or_update_consensus_annotation(
     Since ConsensusAnnotation has unique constraint on (discussion_id, task_id),
     there can only be one consensus per discussion-task combination.
     """
-    # Find existing consensus annotation based on discussion_id and task_id only
-
-    # task_assoc = db.query(models.discussion_task_association).filter(
-    #     models.discussion_task_association.c.discussion_id == consensus_input.discussion_id,
-    #     models.discussion_task_association.c.task_id == consensus_input.task_id
-    # ).first()
-    # if task_assoc and task_assoc.status == 'rework':
-    #     raise ValueError(f"Cannot create consensus for task {consensus_input.task_id} - task is marked for rework")
-    
-    
     db_annotation = db.query(models.ConsensusAnnotation).filter(
         models.ConsensusAnnotation.discussion_id == consensus_input.discussion_id,
         models.ConsensusAnnotation.task_id == consensus_input.task_id
@@ -179,133 +361,65 @@ def create_or_update_consensus_annotation(
 
 def _should_task_be_completed(db: Session, discussion_id: str, task_id: int, consensus_data: dict) -> bool:
     """
-    Determine if a task should be marked as 'completed' based on consensus data.
-    
-    Rules:
-    - Task 1: Must have relevance=True AND learning_value=True AND clarity=True (image_grounded optional)
-    - Task 2: Must have address_all_aspects=True AND with_explanation=True (code_executable depends on if code exists)
-    - Task 3: Always completed when consensus exists (since it's rewriting/classification)
-    
-    Returns:
-    - True if task should be marked as 'completed'
-    - False if task should remain 'unlocked' (consensus exists but criteria not met)
+    ENHANCED version using quality gate criteria.
     """
-    import logging
-    logger = logging.getLogger(__name__)
-    
-    logger.info(f"Evaluating completion criteria for task {task_id}, discussion {discussion_id}")
-    logger.info(f"Consensus data: {consensus_data}")
-    
-    if task_id == 1:
-        # Task 1: Question Quality - require core quality criteria
-        relevance = consensus_data.get('relevance', False)
-        learning_value = consensus_data.get('learning', False)  # Note: might be 'learning' not 'learning_value'
-        clarity = consensus_data.get('clarity', False)
-        grounded_value = consensus_data.get('grounded')
-        if grounded_value == "N/A":
-            image_grounded = True  # Skip this check
-        else:
-            image_grounded = bool(grounded_value)
-        
-        # image_grounded is optional - only required if the discussion actually has images
-        image_grounded = consensus_data.get('grounded', True)  # Default to True if not applicable
-        
-        required_fields = [relevance, learning_value, clarity]
-        if grounded_value != "N/A":
-            required_fields.append(image_grounded)
-        # Check if image grounding is applicable (you might want to check if discussion has images)
-        if consensus_data.get('grounded') is not None and consensus_data.get('grounded') != 'N/A':
-            required_fields.append(image_grounded)
-        
-        all_criteria_met = all(required_fields)
-        
-        logger.info(f"Task 1 criteria: relevance={relevance}, learning={learning_value}, clarity={clarity}, grounded={image_grounded}")
-        logger.info(f"Task 1 completion criteria met: {all_criteria_met}")
-        
-        return all_criteria_met
-    
-    elif task_id == 2:
-        # Task 2: Answer Quality - require completeness and explanation
-        address_all_aspects = consensus_data.get('aspects', False)
-        with_explanation = consensus_data.get('explanation', False)
-        
-        # code_executable - only required if there's actually code to execute
-        code_executable = consensus_data.get('execution')
-        
-        required_fields = [address_all_aspects, with_explanation]
-        
-        # If there's code, it should be executable or marked as N/A
-        if code_executable is not None:
-            if code_executable in ['Executable', 'N/A']:
-                code_ok = True
-            else:
-                code_ok = False
-            required_fields.append(code_ok)
-        
-        all_criteria_met = all(required_fields)
-        
-        logger.info(f"Task 2 criteria: aspects={address_all_aspects}, explanation={with_explanation}, code_executable={code_executable}")
-        logger.info(f"Task 2 completion criteria met: {all_criteria_met}")
-        
-        return all_criteria_met
-    
-    elif task_id == 3:
-        # Task 3: Rewrite - always complete when consensus exists
-        # This task is about rewriting/classification, not quality gates
-        logger.info("Task 3 automatically marked as completable (rewrite task)")
-        return True
-    
-    else:
-        logger.warning(f"Unknown task_id: {task_id}")
-        return False
-
+    return validate_consensus_criteria(consensus_data, task_id)
 
 def _update_task_statuses_after_consensus(db: Session, discussion_id: str, completed_task_id: int, consensus_data: dict):
     """
-    Enhanced task status update logic that considers true/false field criteria.
-    Only marks tasks as 'completed' when ALL three tasks have consensus created.
+    Handle task status updates after MANUAL consensus creation only.
     """
-    import logging
-    logger = logging.getLogger(__name__)
-    
     try:
-        logger.info(f"Auto-updating task statuses for discussion {discussion_id} after task {completed_task_id} consensus")
+        logger.info(f"Processing manual consensus for {discussion_id}/task{completed_task_id}")
         
         # Import here to avoid circular imports
         from services import discussions_service
         
-        # 1. Check if the current task should actually be marked as consensus_created
-        should_complete = _should_task_be_completed(db, discussion_id, completed_task_id, consensus_data)
+        # Step 1: Mark current task as consensus_created
+        discussions_service.update_task_status_enhanced(
+            db, discussion_id, completed_task_id, "consensus_created", "manual_consensus_system"
+        )
         
-        if should_complete:
-            # Mark as consensus_created (not completed yet)
-            logger.info(f"Task {completed_task_id} meets completion criteria - marking as consensus_created")
-            discussions_service.update_task_status_enhanced(
-                db, discussion_id, completed_task_id, "consensus_created", "consensus_system"
+        # Step 2: Handle Task 3 retroactive logic (keep this as it's important business logic)
+        retroactive_update_performed = False
+        if completed_task_id == 3:
+            retroactive_update_performed = handle_task3_retroactive_updates(
+                db, discussion_id, consensus_data
             )
+        
+        # Step 3: Validate quality criteria for current task
+        passes_criteria = validate_consensus_criteria(consensus_data, completed_task_id)
+        
+        if passes_criteria:
+            # Quality criteria met - mark as completed
+            discussions_service.update_task_status_enhanced(
+                db, discussion_id, completed_task_id, "completed", "manual_consensus_system"
+            )
+            
+            # REMOVED: Automatic unlocking of next task
+            # Next tasks must be manually unlocked by administrators
+            logger.info(f"Task {completed_task_id} completed for {discussion_id} - next task requires manual unlock")
         else:
-            # Consensus exists but doesn't meet criteria - keep as consensus_created but with note
-            logger.info(f"Task {completed_task_id} consensus exists but criteria not met - marking as consensus_created")
+            # Quality criteria not met - mark as quality_failed
             discussions_service.update_task_status_enhanced(
-                db, discussion_id, completed_task_id, "consensus_created", "consensus_system"
+                db, discussion_id, completed_task_id, "quality_failed", "manual_consensus_system"
             )
-        
-        # 2. Check if ALL three tasks now have consensus_created status
-        all_tasks_have_consensus = _check_all_tasks_have_consensus(db, discussion_id)
-        
-        if all_tasks_have_consensus:
-            logger.info(f"All tasks for discussion {discussion_id} have consensus - marking all as completed")
-            # Mark all three tasks as completed (this overwrites the consensus_created status)
-            for task_id in [1, 2, 3]:
+            
+            # Block all downstream tasks
+            for next_task_id in range(completed_task_id + 1, 4):
                 discussions_service.update_task_status_enhanced(
-                    db, discussion_id, task_id, "completed", "consensus_system"
+                    db, discussion_id, next_task_id, "blocked", "manual_consensus_system"
                 )
+            
+            logger.info(f"Task {completed_task_id} failed quality criteria, blocked downstream tasks")
         
-        logger.info(f"Successfully updated task statuses after consensus evaluation")
+        # Step 4: Handle special messaging
+        if retroactive_update_performed:
+            logger.info(f"Retroactive update completed for {discussion_id}")
         
     except Exception as e:
-        logger.error(f"Error updating task statuses after consensus: {str(e)}")
-
+        logger.error(f"Error updating task statuses after manual consensus: {str(e)}")
+        raise
 
 def _check_all_tasks_have_consensus(db: Session, discussion_id: str) -> bool:
     """
@@ -326,7 +440,6 @@ def _check_all_tasks_have_consensus(db: Session, discussion_id: str) -> bool:
     except Exception as e:
         logger.error(f"Error checking consensus status for all tasks: {str(e)}")
         return False
-    
 
 def _get_task_completion_status(consensus_data: dict, task_id: int) -> dict:
     """
@@ -391,10 +504,11 @@ def _get_task_completion_status(consensus_data: dict, task_id: int) -> dict:
             'message': "Rewrite task - automatically completable"
         }
 
-
 def calculate_consensus(db: Session, discussion_id: str, task_id: int) -> Dict[str, Any]:
-    # This function uses models.Annotation, not models.ConsensusAnnotation.
-    # It appears to be for a different purpose (calculating overall consensus from individual annotations).
+    """
+    This function calculates overall consensus from individual annotations for analysis purposes.
+    Note: This is different from creating ConsensusAnnotation records.
+    """
     annotations = db.query(models.Annotation).filter(
         models.Annotation.discussion_id == discussion_id,
         models.Annotation.task_id == task_id
@@ -438,7 +552,6 @@ def calculate_consensus(db: Session, discussion_id: str, task_id: int) -> Dict[s
             "annotator_count": len(annotations),
             "required": required_annotators
         }
-
 
 def override_consensus_annotation(
         db: Session,
@@ -504,7 +617,6 @@ def override_consensus_annotation(
         timestamp=existing_annotation.timestamp
     )
 
-
 # Legacy function for backward compatibility
 def override_consensus(db: Session, override_data: schemas.ConsensusOverride) -> schemas.Annotation:
     """
@@ -514,55 +626,87 @@ def override_consensus(db: Session, override_data: schemas.ConsensusOverride) ->
     # This function appears to work with the old Annotation model for consensus
     # You may want to update this to use ConsensusAnnotation instead
     pass
-def _determine_consensus_phase(annotations_count: int, required: int, consensus, agreement_analysis) -> str:
-    """
-    Determine what phase the consensus process is in
-    """
-    if annotations_count < required:
-        return "collecting_annotations"
-    
-    if not consensus:
-        if agreement_analysis and agreement_analysis.get("overall_agreement_rate", 0) >= 80:
-            return "ready_for_consensus"
-        else:
-            return "needs_pod_lead_review"
-    
-    # Consensus exists, check if it meets criteria
-    return "consensus_created"
 
-
-def _get_recommended_action(consensus_phase: str, completion_status: Dict = None) -> str:
+def get_consensus_status(db: Session, discussion_id: str, task_id: int) -> Dict[str, Any]:
     """
-    Get recommended next action based on consensus phase
+    Modified to reflect manual-only consensus workflow.
+    """
+    try:
+        annotations = db.query(models.Annotation).filter(
+            models.Annotation.discussion_id == discussion_id,
+            models.Annotation.task_id == task_id
+        ).all()
+
+        consensus = db.query(models.ConsensusAnnotation).filter(
+            models.ConsensusAnnotation.discussion_id == discussion_id,
+            models.ConsensusAnnotation.task_id == task_id
+        ).first()
+
+        required_annotators = 3 if task_id < 3 else 5
+
+        agreement_analysis = None
+        if len(annotations) >= 2:
+            agreement_analysis = _calculate_annotation_agreement(annotations, task_id)
+
+        # Use manual phase determination for consistent workflow
+        consensus_phase = _determine_manual_consensus_phase(
+            len(annotations), 
+            required_annotators, 
+            consensus, 
+            agreement_analysis
+        )
+
+        completion_status = _get_task_completion_status(consensus.data, task_id) if consensus else None
+
+        return {
+            "discussion_id": discussion_id,
+            "task_id": task_id,
+            "annotations_count": len(annotations),
+            "required_annotators": required_annotators,
+            "has_consensus": bool(consensus),
+            "consensus_phase": consensus_phase,
+            "agreement_analysis": agreement_analysis,
+            "completion_status": completion_status,
+            "consensus_created_by": consensus.user_id if consensus else None,
+            "consensus_created_at": consensus.timestamp.isoformat() if consensus else None,
+            "recommended_action": _get_manual_recommended_action(consensus_phase, completion_status),
+            "workflow_mode": "manual_only"  # Flag to indicate manual workflow
+        }
+
+    except Exception as e:
+        logger.exception("Error getting consensus status")
+        return {"error": str(e)}
+
+def _get_manual_recommended_action(consensus_phase: str, completion_status: Dict = None) -> str:
+    """
+    Get recommended action for manual workflow
     """
     if consensus_phase == "collecting_annotations":
         return "Collect more annotations"
-    elif consensus_phase == "ready_for_consensus":
-        return "Create consensus annotation"
-    elif consensus_phase == "needs_pod_lead_review":
-        return "Pod lead should review for low agreement"
+    elif consensus_phase == "ready_for_manual_consensus":
+        return "Administrator should manually create consensus"
     elif consensus_phase == "consensus_created":
         if completion_status and completion_status.get("can_complete", False):
-            return "Mark task as completed"
+            return "Administrator can mark task as completed"
         else:
-            return "Review consensus criteria"
+            return "Review consensus criteria with administrator"
     else:
-        return "Review task status"
-def get_discussions_ready_for_consensus(db: Session, task_id: Optional[int] = None) -> List[Dict[str, Any]]:
+        return "Administrator review required"
+
+def get_discussions_ready_for_manual_consensus(db: Session, task_id: Optional[int] = None) -> List[Dict[str, Any]]:
     """
-    Get discussions that are ready for consensus creation
+    Get discussions that have enough annotations and are ready for manual consensus creation
     """
     try:
         ready_discussions = []
         
-        # Get all discussions
         discussions = db.query(models.Discussion).all()
         
         for discussion in discussions:
             for check_task_id in ([task_id] if task_id else [1, 2, 3]):
                 consensus_status = get_consensus_status(db, discussion.id, check_task_id)
                 
-                if consensus_status.get("consensus_phase") == "ready_for_consensus":
+                if consensus_status.get("consensus_phase") == "ready_for_manual_consensus":
                     agreement_rate = consensus_status.get("agreement_analysis", {}).get("overall_agreement_rate", 0)
                     
                     ready_discussions.append({
@@ -572,20 +716,20 @@ def get_discussions_ready_for_consensus(db: Session, task_id: Optional[int] = No
                         "task_name": f"Task {check_task_id}",
                         "annotations_count": consensus_status.get("annotations_count"),
                         "agreement_rate": agreement_rate,
-                        "recommended_consensus": _build_recommended_consensus(
+                        "priority": "high" if agreement_rate >= 80 else "medium" if agreement_rate >= 60 else "low",
+                        "suggested_consensus": _build_recommended_consensus(
                             consensus_status.get("agreement_analysis", {})
                         )
                     })
         
-        # Sort by agreement rate (highest first)
-        ready_discussions.sort(key=lambda x: x["agreement_rate"], reverse=True)
+        # Sort by agreement rate and priority
+        ready_discussions.sort(key=lambda x: (x["agreement_rate"], x["annotations_count"]), reverse=True)
         
         return ready_discussions
         
     except Exception as e:
-        logger.error(f"Error getting discussions ready for consensus: {str(e)}")
+        logger.error(f"Error getting discussions ready for manual consensus: {str(e)}")
         return []
-
 
 def _build_recommended_consensus(agreement_analysis: Dict) -> Dict[str, Any]:
     """
@@ -602,111 +746,56 @@ def _build_recommended_consensus(agreement_analysis: Dict) -> Dict[str, Any]:
             recommended_consensus[field] = stats["consensus_value"]
     
     return recommended_consensus   
+
 def _calculate_annotation_agreement(annotations: List[models.Annotation], task_id: int) -> Dict[str, Any]:
     """
-    Calculate agreement between annotations for consensus readiness
+    Calculate agreement between annotations for consensus readiness.
+    Fixed to handle lists properly for fields like 'short_answer_list'.
     """
     if len(annotations) < 2:
         return {"agreement_rate": 0, "message": "Not enough annotations"}
-    
-    # Get field agreement by task type
-    if task_id == 1:
-        key_fields = ['relevance', 'learning', 'clarity', 'grounded']
-    elif task_id == 2:
-        key_fields = ['aspects', 'explanation', 'execution']
-    elif task_id == 3:
-        key_fields = ['classify', 'short_answer_list', 'longAnswer_text']
-    else:
+
+    key_fields = {
+        1: ['relevance', 'learning', 'clarity', 'grounded'],
+        2: ['aspects', 'explanation', 'execution'],
+    }.get(task_id, [])
+
+    if not key_fields:
         return {"agreement_rate": 0, "message": "Invalid task ID"}
-    
+
     field_agreements = {}
     total_agreements = 0
     total_fields = 0
-    
+
     for field in key_fields:
         field_values = []
         for annotation in annotations:
             if field in annotation.data:
-                field_values.append(annotation.data[field])
-        
+                value = annotation.data[field]
+                if isinstance(value, list):
+                    value = tuple(sorted(value))  # Sort and convert lists to tuples to make them hashable
+                field_values.append(value)
+
         if len(field_values) >= 2:
-            # Calculate agreement for this field
-            most_common_value = max(set(field_values), key=field_values.count)
-            agreement_count = field_values.count(most_common_value)
+            most_common_value, agreement_count = Counter(field_values).most_common(1)[0]
             agreement_rate = (agreement_count / len(field_values)) * 100
-            
+
             field_agreements[field] = {
-                "values": field_values,
-                "consensus_value": most_common_value,
+                "values": [list(v) if isinstance(v, tuple) else v for v in field_values],  # Convert back for readability
+                "consensus_value": list(most_common_value) if isinstance(most_common_value, tuple) else most_common_value,
                 "agreement_rate": round(agreement_rate, 1),
                 "agreed_count": agreement_count,
                 "total_count": len(field_values)
             }
-            
+
             total_agreements += agreement_count
             total_fields += len(field_values)
-    
+
     overall_agreement = (total_agreements / total_fields * 100) if total_fields > 0 else 0
-    
+
     return {
         "overall_agreement_rate": round(overall_agreement, 1),
         "field_agreements": field_agreements,
         "total_annotators": len(annotations),
         "analysis_timestamp": datetime.utcnow().isoformat()
     }
-
-def get_consensus_status(db: Session, discussion_id: str, task_id: int) -> Dict[str, Any]:
-    """
-    Get detailed consensus status for a task
-    """
-    try:
-        # Get annotations count
-        annotations = db.query(models.Annotation).filter(
-            models.Annotation.discussion_id == discussion_id,
-            models.Annotation.task_id == task_id
-        ).all()
-        
-        # Get consensus annotation
-        consensus = db.query(models.ConsensusAnnotation).filter(
-            models.ConsensusAnnotation.discussion_id == discussion_id,
-            models.ConsensusAnnotation.task_id == task_id
-        ).first()
-        
-        # Get required annotators
-        required_annotators = 3 if task_id < 3 else 5
-        
-        # Calculate agreement if we have annotations
-        agreement_analysis = None
-        if len(annotations) >= 2:
-            agreement_analysis = _calculate_annotation_agreement(annotations, task_id)
-        
-        # Determine consensus phase
-        consensus_phase = _determine_consensus_phase(
-            len(annotations), 
-            required_annotators, 
-            consensus, 
-            agreement_analysis
-        )
-        
-        # Check completion criteria if consensus exists
-        completion_status = None
-        if consensus:
-            completion_status = _get_task_completion_status(consensus.data, task_id)
-        
-        return {
-            "discussion_id": discussion_id,
-            "task_id": task_id,
-            "annotations_count": len(annotations),
-            "required_annotators": required_annotators,
-            "has_consensus": consensus is not None,
-            "consensus_phase": consensus_phase,
-            "agreement_analysis": agreement_analysis,
-            "completion_status": completion_status,
-            "consensus_created_by": consensus.user_id if consensus else None,
-            "consensus_created_at": consensus.timestamp.isoformat() if consensus else None,
-            "recommended_action": _get_recommended_action(consensus_phase, completion_status)
-        }
-        
-    except Exception as e:
-        logger.error(f"Error getting consensus status: {str(e)}")
-        return {"error": str(e)}

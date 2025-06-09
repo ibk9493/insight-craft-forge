@@ -11,7 +11,16 @@ class UserSignup(BaseModel):
 # Base class for GoogleToken
 # class GoogleToken(BaseModel): # Defined later, remove duplicate
 #     token: str
-
+class Task3ConsensusData(BaseModel):
+    """Optional: Explicit schema for Task 3 consensus data"""
+    classify: Optional[str] = None
+    short_answer_list: Optional[List[str]] = None
+    longAnswer_text: Optional[str] = None
+    supporting_docs_available: Optional[bool] = None
+    
+    model_config = {
+        "from_attributes": True
+    }
 # Base class for AuthorizedUser
 class AuthorizedUserBase(BaseModel):
     email: str
