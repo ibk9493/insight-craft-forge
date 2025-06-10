@@ -40,7 +40,7 @@ export function useAnnotationSaver({
 
       // Add text value if present
       if (task.textValue !== undefined && task.textValue.trim() !== '') {
-        data[`${task.id}_text`] = task.textValue;
+        data[`${task.id}_text`] = task.textValue ?? task.options  ;
       }
 
       // Handle short_answer_list with new claim/weight format
@@ -61,7 +61,13 @@ export function useAnnotationSaver({
 
       // Add supportingDocs if present
       if (task.structuredInput && task.supportingDocs && Array.isArray(task.supportingDocs)) {
+        
         data[`${task.id}_data`] = task.supportingDocs;
+      }
+      console.log('##########',task)
+      if(task.id==='supporting_docs'){
+        
+        data[`${task.id}_options`] = task.selectedOption;
       }
 
       // Handle doc_download_link
@@ -193,7 +199,11 @@ export function useAnnotationSaver({
                   if (task.structuredInput && task.supportingDocs && Array.isArray(task.supportingDocs)) {
                     formData['supporting_docs'] = task.supportingDocs;
                   }
-
+                  console.log('##########',task.id,'task',task.selectedOption)
+                  if(task.id==='supporting_docs'){
+        
+                    formData[`${task.id}_options`] = task.selectedOption;
+                  }
                   // Handle doc_download_link for each form
                   if (task.id === 'doc_download_link' && task.docDownloadLink && task.docDownloadLink.trim() !== '') {
                     formData['doc_download_link'] = task.docDownloadLink.trim();
@@ -461,7 +471,10 @@ export function useAnnotationSaver({
                   else if (task.multiline && task.textValues && Array.isArray(task.textValues)) {
                     formData[`${task.id}_items`] = task.textValues;
                   }
-
+                  if(task.id==='supporting_docs'){
+        
+                    formData[`${task.id}_options`] = task.selectedOption;
+                  }
                   // Handle supporting docs
                   if (task.structuredInput && task.supportingDocs && Array.isArray(task.supportingDocs)) {
                     formData['supporting_docs'] = task.supportingDocs;

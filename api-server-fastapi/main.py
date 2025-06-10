@@ -810,7 +810,8 @@ async def get_summary_report(
                         "justification_for_addressing_all_aspects": annotation.data.get("explanation_text", ""),
                         "with_explanation": annotation.data.get("explanation", False),
                         "code_executable": annotation.data.get("execution") in ["Executable", "N/A"],
-                        "code_download_link": annotation.data.get("codeDownloadUrl", ""),
+                        "code_download_link": annotation.data.get("codeDownloadUrl_text", "") if annotation.data.get("codeDownloadUrl", "") in ["Verified manually", ""] 
+                      else annotation.data.get("codeDownloadUrl", ""),
                         "code_execution_screenshot": annotation.data.get("screenshot", "N/A"),
                     }
                     for annotation in filtered_task2_annotations
@@ -844,7 +845,8 @@ async def get_summary_report(
                     "justification_for_addressing_all_aspects": task2_consensus_data.get("explanation_text", ""),
                     "with_explanation": task2_consensus_data.get("explanation", False),
                     "code_executable": task2_consensus_data.get("execution") in ["Executable", "N/A"],
-                    "code_download_link": task2_consensus_data.get("codeDownloadUrl", ""),
+                     "code_download_link": task2_consensus_data.get("codeDownloadUrl_text", "") if task2_consensus_data.get("codeDownloadUrl", "") in ["Verified manually", ""] 
+                      else task2_consensus_data.get("codeDownloadUrl", ""),
                     "code_execution_screenshot": task2_consensus_data.get("screenshot", "N/A"),
                 }
             else:

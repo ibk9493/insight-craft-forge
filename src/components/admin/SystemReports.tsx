@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Loader, BarChart, PieChart, Download, User, AlertCircle, Clock, CheckSquare, Shield, Users, Activity, Flag, Archive } from 'lucide-react';
 import { api } from '@/services/api';
-import { EnhancedSystemSummary, TrainerBreakdown,GeneralReportData, EnhancedGeneralReport } from '@/services/api/types';
+import { EnhancedSystemSummary, TrainerBreakdown,GeneralReportData, } from '@/services/api/types';
 import { toast } from 'sonner';
 import { useUser } from '@/contexts/UserContext';
 import { 

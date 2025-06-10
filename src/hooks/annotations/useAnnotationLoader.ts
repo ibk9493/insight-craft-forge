@@ -99,23 +99,45 @@ export function useAnnotationLoader({
 
     // Handle supporting docs
     if (task.id === 'supporting_docs') {
+
+      console.log("here 1 ", annotation.data)
       // First try direct field
+      const docs_Options = annotation.data['supporting_docs_options']
+      console.log("here 1 1 ", docs_Options, )
       const docsData = annotation.data['supporting_docs'] || annotation.data['supporting_docs_data'];
+      console.log("here 1 2 ", docsData, )
       if (Array.isArray(docsData) && docsData.length > 0) {
         // Filter out empty docs
         const validDocs = docsData.filter((doc: any) => doc.link && doc.paragraph);
+        console.log("validDocs", validDocs);
         if (validDocs.length > 0) {
-          return {
+
+          const returnedTask = {
             ...task,
-            selectedOption: 'Provided',
+            selectedOption: docs_Options as string,
             status: 'completed' as SubTaskStatus,
             supportingDocs: validDocs.map((doc: any) => ({
               link: doc.link || '',
               paragraph: doc.paragraph || ''
             }))
           };
+          console.log("Returning supporting_docs task:", returnedTask); // ← Add this
+          return returnedTask;
+
+        }else {
+          const returnedTask = {
+            ...task,
+            selectedOption: docs_Options as string,
+            status: 'completed' as SubTaskStatus,
+            supportingDocs: validDocs.map((doc: any) => ({
+              link:  '',
+              paragraph:''
+            }))
+          };
+          console.log("Returning supporting_docs task:", returnedTask); // ← Add this
+          return returnedTask;
         }
-      }
+      } 
     }
 
     // Handle doc_download_link
@@ -356,8 +378,11 @@ export function useAnnotationLoader({
           status: 'completed' as SubTaskStatus,
           textValue: savedValue.join('\n')
         };
-      } else if (task.id === 'supporting_docs' && Array.isArray(savedValue)) {
+      } 
+       if (task.id === 'supporting_docs' && Array.isArray(savedValue)) {
         // Format as JSON string for display
+        console.log("here 2 ", annotation.data)
+        const docs_Options = annotation.data['supporting_docs_options']
         const formattedDocs = savedValue.map(doc => {
           if (typeof doc === 'object' && doc.link && doc.paragraph) {
             return { link: doc.link, paragraph: doc.paragraph };
@@ -366,7 +391,7 @@ export function useAnnotationLoader({
         });
         return {
           ...task,
-          selectedOption: '',
+          selectedOption: docs_Options,
           status: 'completed' as SubTaskStatus,
           textValue: JSON.stringify(formattedDocs, null, 2)
         };

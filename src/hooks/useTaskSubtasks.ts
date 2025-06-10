@@ -109,7 +109,67 @@ export function useTaskSubtasks() {
           return null;
         }
       }
-    }
+    },
+    {
+      id: 'aspects',
+      title: 'Addresses All Aspects',
+      status: 'pending' as SubTaskStatus,
+      options: ['Yes', 'No'],
+      description: 'Check if the answer addresses all aspects of the question',
+      requiresRemarks: true,
+      validation: {
+        required: true,
+        custom: (task) => {
+          if (!task.selectedOption) return 'Please select an option';
+          if (!task.textValue || task.textValue.trim().length < 10) {
+            return 'Please provide an explanation for your choice (minimum 10 characters)';
+          }
+          return null;
+        }
+      }
+    },
+    {
+      id: 'explanation',
+      title: 'Explanation Provided',
+      status: 'pending' as SubTaskStatus,
+      options: ['Yes', 'No'],
+      description: 'Check if the answer provides an explanation',
+      requiresRemarks: true,
+      validation: {
+        required: true,
+        custom: (task) => {
+          if (!task.selectedOption) return 'Please select an option';
+          if (!task.textValue || task.textValue.trim().length < 10) {
+            return 'Please provide an explanation for your choice (minimum 10 characters)(Same as address all aspects)';
+          }
+          return null;
+        }
+      }
+    },
+    {
+      id: 'codeDownloadUrl',
+      title: 'Code Download URL',
+      status: 'pending' as SubTaskStatus,
+      options: ['Verified manually', 'Not verified'],
+      description: 'Provide and verify the code download URL',
+      textInput: true,
+      textValue: '',
+      placeholder: 'https://github.com/owner/repo/archive/refs/tags/version.tar.gz',
+      enableDocDownload: false,
+      docDownloadLink: '',
+      validation: {
+        custom: (task) => {
+          if (task.selectedOption === 'Verified manually' && (!task.textValue || task.textValue.trim().length === 0)) {
+            return 'Please provide the code download URL';
+          }
+          // Optional: Add URL format validation
+          if (task.textValue && task.textValue.trim() && !task.textValue.startsWith('http')) {
+            return 'Please provide a valid URL starting with http:// or https://';
+          }
+          return null;
+        }
+      }
+    },
   ]);
   
   // Task 2 subtasks
@@ -245,6 +305,35 @@ const [task2SubTasks, setTask2SubTasks] = useState<SubTask[]>([
  // Fixed Task 3 subtasks with corrected validation logic
 const [task3SubTasks, setTask3SubTasks] = useState<SubTask[]>([
   {
+    id: 'supporting_docs',
+    title: 'Provide Supporting Docs',
+    status: 'pending' as SubTaskStatus,
+    options: ['Provided', 'Not Findable'],
+    description: 'Add supporting documentation with links (must start with "downloads/") and paragraphs',
+    structuredInput: true,
+    supportingDocs: [{ link: '', paragraph: '' }], // Initialize with one empty set
+    validation: {
+      custom: (task) => {
+        if (task.selectedOption === 'Provided') {
+          if (!task.supportingDocs || task.supportingDocs.filter(d => d.link.trim() && d.paragraph.trim()).length === 0) {
+            return 'Please provide at least one supporting document with both link and paragraph';
+          }
+          for (const doc of task.supportingDocs) {
+            if (doc.link.trim() && !doc.link.startsWith('downloads/')) {
+              return 'Supporting document links must start with "downloads/"';
+            }
+            if (doc.link.trim() && doc.paragraph.trim().length < 10) {
+              return 'Supporting paragraphs must be at least 10 characters long';
+            }
+          }
+        }else{
+          return null;
+        }
+        return null;
+      }
+    }
+  },
+  {
     id: 'rewrite',
     title: 'Rewrite Question Clearly',
     status: 'pending' as SubTaskStatus,
@@ -350,33 +439,7 @@ const [task3SubTasks, setTask3SubTasks] = useState<SubTask[]>([
       }
     }
   },
-  {
-    id: 'supporting_docs',
-    title: 'Provide Supporting Docs',
-    status: 'pending' as SubTaskStatus,
-    options: ['Provided', 'Not Needed'],
-    description: 'Add supporting documentation with links (must start with "downloads/") and paragraphs',
-    structuredInput: true,
-    supportingDocs: [{ link: '', paragraph: '' }], // Initialize with one empty set
-    validation: {
-      custom: (task) => {
-        if (task.selectedOption === 'Provided') {
-          if (!task.supportingDocs || task.supportingDocs.filter(d => d.link.trim() && d.paragraph.trim()).length === 0) {
-            return 'Please provide at least one supporting document with both link and paragraph';
-          }
-          for (const doc of task.supportingDocs) {
-            if (doc.link.trim() && !doc.link.startsWith('downloads/')) {
-              return 'Supporting document links must start with "downloads/"';
-            }
-            if (doc.link.trim() && doc.paragraph.trim().length < 10) {
-              return 'Supporting paragraphs must be at least 10 characters long';
-            }
-          }
-        }
-        return null;
-      }
-    }
-  },
+  
   {
     id: 'doc_download_link',
     title: 'Document Download Link (Optional)',
