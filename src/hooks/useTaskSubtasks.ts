@@ -90,27 +90,6 @@ export function useTaskSubtasks() {
       }
     },
     {
-      id: 'grounded',
-      title: 'Image Grounded Check',
-      status: 'pending' as SubTaskStatus,
-      options: ['True', 'False', 'N/A'],
-      description: 'Check if images are properly referenced (if any)',
-      requiresRemarks: true,
-      validation: {
-        required: true,
-        custom: (task) => {
-          if (!task.selectedOption) return 'Please select an option';
-          if (task.selectedOption === 'True' && (!task.textValue || task.textValue.trim().length < 10)) {
-            return 'Please explain why images are properly grounded (minimum 10 characters)';
-          }
-          if (task.selectedOption === 'False' && (!task.textValue || task.textValue.trim().length < 10)) {
-            return 'Please explain why images are not properly grounded (minimum 10 characters)';
-          }
-          return null;
-        }
-      }
-    },
-    {
       id: 'aspects',
       title: 'Addresses All Aspects',
       status: 'pending' as SubTaskStatus,
@@ -170,6 +149,53 @@ export function useTaskSubtasks() {
         }
       }
     },
+    {
+      id: 'execution',
+      title: 'Is the code provided in answer',
+      status: 'pending' as SubTaskStatus,
+      options: ['Yes', 'No'],
+      description: 'Check if the answer has code snippet present',
+      requiresRemarks: true,
+      validation: {
+        required: true,
+        custom: (task) => {
+          if (!task.selectedOption) return 'Please select an option';
+          
+          // Always require explanation, but stricter for "Not Executable"
+          if (!task.textValue || task.textValue.trim().length < 5) {
+            return 'Please provide an explanation for your choice (minimum 5 characters)';
+          }
+          
+          if (task.selectedOption === 'Not Executable' && task.textValue.trim().length < 15) {
+            return 'Please provide a detailed explanation of why the code is not executable (minimum 15 characters)';
+          }
+          
+          return null;
+        }
+      }
+    },
+    
+    {
+      id: 'grounded',
+      title: 'Image Grounded Check',
+      status: 'pending' as SubTaskStatus,
+      options: ['True', 'False', 'N/A'],
+      description: 'Check if images are properly referenced (if any)',
+      requiresRemarks: true,
+      validation: {
+        required: true,
+        custom: (task) => {
+          if (!task.selectedOption) return 'Please select an option';
+          if (task.selectedOption === 'True' && (!task.textValue || task.textValue.trim().length < 10)) {
+            return 'Please explain why images are properly grounded (minimum 10 characters)';
+          }
+          if (task.selectedOption === 'False' && (!task.textValue || task.textValue.trim().length < 10)) {
+            return 'Please explain why images are not properly grounded (minimum 10 characters)';
+          }
+          return null;
+        }
+      }
+    }
   ]);
   
   // Task 2 subtasks
