@@ -276,7 +276,8 @@ const ExportManager: React.FC = () => {
           justification_for_addressing_all_aspects: ann.data.aspects_text,
           with_explanation: !with_explanation_supporting_docs ? ann.data.explanation : false,
           with_explanation_text: ann.data.explanation_text,
-          code_download_link: ann.data.codeDownloadUrl_text
+          code_download_link: ann.data.codeDownloadUrl_text,
+          code_execuetion:true
         })
       }));
   
@@ -296,6 +297,7 @@ const ExportManager: React.FC = () => {
           : false,
         with_explanation_text: task1_consensus.data?.explanation_text,
         code_download_link: task1_consensus.data?.codeDownloadUrl_text,
+        code_execuetion:true
       })
     });
 
@@ -324,8 +326,8 @@ const ExportManager: React.FC = () => {
       answer,
       category,
       knowledge,
-      annotations_task_1_and_2: getAnnotationsTask1And2(),
-      agreed_annotation_task_1_and_2: getAgreedAnnotationTask1And2(),
+      annotations_tasks_1_and_2: getAnnotationsTask1And2(),
+      agreed_annotation_tasks_1_and_2: getAgreedAnnotationTask1And2(),
       annotations_task_3: getAnnotationTask3(),
     };
     console.log(forms.length>1?forms:"None" )
