@@ -257,16 +257,16 @@ const ExportManager: React.FC = () => {
       ["not findable", "n/a"].includes((f.supporting_docs_options ?? "").toLowerCase())
     );
   
-    const relevance_consensus = task1_consensus.data?.relevance ?? false;
-    const learning_consensus = task1_consensus.data?.learning ?? false;
-    const clarity_consensus = task1_consensus.data?.clarity ?? false;
+    const relevance_consensus = task1_consensus.data?.relevance ;
+    const learning_consensus = task1_consensus.data?.learning ;
+    const clarity_consensus = task1_consensus.data?.clarity;
   
     // Helper to get task 1+2 annotations
     const getAnnotationsTask1And2 = () =>
       task1_annotations.map((ann) => ({
         relevance: ann.data.relevance,
         relevance_text: ann.data.relevance_text,
-        learning: ann.data.learning,
+        learning_value: ann.data.learning,
         learning_text: ann.data.learning_text,
         clarity: ann.data.clarity,
         clarity_text: ann.data.clarity_text,
@@ -284,7 +284,7 @@ const ExportManager: React.FC = () => {
     const getAgreedAnnotationTask1And2 = () => ({
       relevance: relevance_consensus,
       relevance_text: task1_consensus.data?.relevance_text,
-      learning: learning_consensus,
+      learning_value: learning_consensus,
       learning_text: task1_consensus.data?.learning_text,
       clarity: clarity_consensus,
       clarity_text: task1_consensus.data?.clarity_text,
@@ -342,24 +342,28 @@ const ExportManager: React.FC = () => {
             supporting_docs: form.supporting_docs ?? [],
             long_answer: form.longAnswer_text ?? [],
             question_type: form.classify ?? "",
-            rewrite_question: form.rewrite_text ?? "",
+            rewritten_question: form.rewrite_text ?? "",
             doc_download_link: form.doc_download_link_text ?? "",
             question_image_links: form.question_image_links ?? []
           }
         });
       });
     } else {
+      const extractField = (forms, key) => {
+        const values = forms.map(f => f[key] ?? []);
+        return values.length === 1 ? values[0] : values;
+      };
       // 🟢 A-Type forms or single form scenario
       transformedDiscussions.push({
         ...baseTransformed,
         id,
         annotations_task_3: canProceedToTask3(discussion) && !with_explanation_supporting_docs ? getAnnotationTask3() : [],
         agreed_annotation_task_3: canProceedToTask3(discussion) && !with_explanation_supporting_docs ? {
-          short_answer_list: forms.map(f => f.short_answer_list ?? []),
-          supporting_docs: forms.map(f => f.supporting_docs ?? []),
-          long_answer: forms.map(f => f.longAnswer_text ?? []),
-          question_type: forms.map(f => f.classify ?? [])[0],
-          rewrite_question: forms.map(f => f.rewrite_text ?? [])[0],
+        short_answer_list:    extractField(forms, 'short_answer_list'),
+          supporting_docs: extractField(forms, 'supporting_docs'),
+          long_answer: extractField(forms, 'longAnswer_text'),
+          question_type:  forms.map(f => f.classify ?? [])[0],
+          rewritten_question: forms.map(f => f.rewrite_text ?? [])[0],
           doc_download_link: forms.map(f => f.doc_download_link_text ?? [])[0],
           question_image_links: forms.map(f => f.question_image_links ?? [])[0]
         } : {}
@@ -590,8 +594,9 @@ const ExportManager: React.FC = () => {
     if (!item.annotations.task1_consensus?.data) return false;
     
     const consensusData = item.annotations.task1_consensus.data;
+    console.log(consensusData)
     const booleanFlags = Object.entries(consensusData)
-      .filter(([key, value]) => typeof value === 'boolean' && key !== 'image_grounded')
+      .filter(([key, value]) => typeof value === 'boolean' && key !== 'image_grounded' && key !== 'execution' )
       .map(([_, value]) => value);
     
     return booleanFlags.length > 0 && booleanFlags.every(flag => flag === true);
