@@ -32,6 +32,7 @@ import AnnotationQuality from '@/components/admin/quality/AnnotationQuality';
 import { api, EnhancedSystemSummary } from '@/services/api';
 import ConsensusReviewDashboard from '@/components/admin/ConsensusReviewDashboard';
 import StatusFixManager from '@/components/admin/StatusFixManage';
+import ExportManager from '@/components/admin/ExportManager';
 
 const Admin = () => {
   const { isAuthenticated, isPodLead, isAdmin, user } = useUser();
@@ -181,6 +182,11 @@ const Admin = () => {
               <Settings className="h-4 w-4" />
               <span>Status Fix Manage</span>
             </Tab>
+            <Tab value="export-manager" className="flex items-center gap-2">
+              <Settings className="h-4 w-4" />
+              <span>Export Manager</span>
+            </Tab>
+            
             
             <Tab value="task-management" className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
@@ -285,6 +291,9 @@ const Admin = () => {
             <StatusFixManager />
           </TabPanel>
 
+          <TabPanel value="export-manager">
+            <ExportManager />
+          </TabPanel>
           {/* Bulk Task Management Tab */}
           {(isAdmin || isPodLead) && (
             <TabPanel value="bulk-tasks">
