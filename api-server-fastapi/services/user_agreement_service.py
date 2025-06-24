@@ -423,54 +423,75 @@ def generate_user_recommendations(stats: Dict[str, Any]) -> List[Dict[str, str]]
 
 def get_user_agreement_summary(db: Session, user_id: str) -> Dict[str, Any]:
     """
-    Get a quick summary of user's agreement statistics.
-    Lighter weight version for dashboard/overview purposes.
-    
-    Args:
-        db: Database session
-        user_id: ID of user to analyze
-        
-    Returns:
-        Dictionary with summary statistics
+    Get a quick summary of user's agreement statistics with individual annotation scores.
+    Enhanced to include agreement scores for each annotation.
     """
     try:
         # Get basic counts
         total_annotations = db.query(models.Annotation).filter(
             models.Annotation.user_id == user_id
         ).count()
-        
+
         if total_annotations == 0:
             return {
                 "user_id": user_id,
                 "total_annotations": 0,
                 "agreement_rate": 0,
-                "status": "no_data"
+                "status": "no_data",
+                "annotation_scores": []
             }
-        
-        # Get consensus comparison count (simplified)
-        # This is a lighter version - for full analysis use analyze_user_agreement
+
+        # Get all user annotations (not limited for complete analysis)
         user_annotations = db.query(models.Annotation).filter(
             models.Annotation.user_id == user_id
-        ).limit(50).all()  # Limit for performance
-        
+        ).all()
+
         agreements = 0
         comparisons_made = 0
-        
+        annotation_scores = []  # NEW: Store individual scores
+        score_sum = 0  # NEW: For calculating average score
+
         for annotation in user_annotations:
             consensus = consensus_service.get_consensus_annotation_by_discussion_and_task(
                 db, annotation.discussion_id, annotation.task_id
             )
-            
+
+            annotation_score_data = {
+                "discussion_id": annotation.discussion_id,
+                "task_id": annotation.task_id,
+                "annotation_timestamp": annotation.timestamp.isoformat() if annotation.timestamp else None,
+                "has_consensus": False,
+                "agreement_score": 0,
+                "agreement_type": "no_consensus"
+            }
+
             if consensus:
                 comparisons_made += 1
                 comparison = compare_annotation_with_consensus(
                     annotation.data, consensus.data, annotation.task_id
                 )
+
+                # Update annotation score data
+                annotation_score_data.update({
+                    "has_consensus": True,
+                    "agreement_score": comparison["agreement_score"],  # 0-100%
+                    "agreement_type": comparison["agreement_type"],
+                    "field_agreements": comparison["agreements"],
+                    "total_fields": comparison["total_fields"],
+                    "consensus_timestamp": consensus.timestamp.isoformat() if consensus.timestamp else None
+                })
+
+                score_sum += comparison["agreement_score"]
+
                 if comparison["agreement_type"] in ["perfect", "partial"]:
                     agreements += 1
-        
+
+            annotation_scores.append(annotation_score_data)
+
+        # Calculate rates
         agreement_rate = round((agreements / comparisons_made) * 100, 2) if comparisons_made > 0 else 0
-        
+        average_score = round(score_sum / comparisons_made, 2) if comparisons_made > 0 else 0
+
         # Determine status
         if agreement_rate >= 85:
             status = "excellent"
@@ -480,15 +501,34 @@ def get_user_agreement_summary(db: Session, user_id: str) -> Dict[str, Any]:
             status = "needs_improvement"
         else:
             status = "needs_training"
-        
+
+        # Calculate score distribution
+        score_distribution = {
+            "perfect_scores": len([a for a in annotation_scores if a["agreement_score"] == 100]),
+            "high_scores": len([a for a in annotation_scores if 80 <= a["agreement_score"] < 100]),
+            "medium_scores": len([a for a in annotation_scores if 60 <= a["agreement_score"] < 80]),
+            "low_scores": len([a for a in annotation_scores if 0 < a["agreement_score"] < 60]),
+            "no_consensus": len([a for a in annotation_scores if not a["has_consensus"]])
+        }
+
         return {
             "user_id": user_id,
             "total_annotations": total_annotations,
             "annotations_with_consensus": comparisons_made,
             "agreement_rate": agreement_rate,
-            "status": status
+            "average_agreement_score": average_score,  # NEW: Average of individual scores
+            "status": status,
+            "annotation_scores": annotation_scores,  # NEW: Individual annotation scores
+            "score_distribution": score_distribution,  # NEW: Score breakdown
+            "score_stats": {  # NEW: Statistical summary
+                "highest_score": max([a["agreement_score"] for a in annotation_scores if a["has_consensus"]],
+                                     default=0),
+                "lowest_score": min([a["agreement_score"] for a in annotation_scores if a["has_consensus"]], default=0),
+                "score_range": max([a["agreement_score"] for a in annotation_scores if a["has_consensus"]], default=0) -
+                               min([a["agreement_score"] for a in annotation_scores if a["has_consensus"]], default=0)
+            }
         }
-        
+
     except Exception as e:
         logger.error(f"Error getting user agreement summary: {str(e)}")
         return {
@@ -496,5 +536,6 @@ def get_user_agreement_summary(db: Session, user_id: str) -> Dict[str, Any]:
             "total_annotations": 0,
             "agreement_rate": 0,
             "status": "error",
-            "error": str(e)
+            "error": str(e),
+            "annotation_scores": []
         }

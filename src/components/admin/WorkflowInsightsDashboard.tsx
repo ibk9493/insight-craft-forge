@@ -528,6 +528,7 @@ const WorkflowInsightsDashboard: React.FC = () => {
                           <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
                             <div className="flex-1">
                               <p className="font-medium text-sm">{user.user_id}</p>
+                              <p className="font-medium text-sm">{user.user_email}</p>
                               <p className="text-xs text-gray-500">
                                 {user.total_annotations} annotations • {user.agreement_rate}% agreement rate
                               </p>
@@ -566,6 +567,7 @@ const WorkflowInsightsDashboard: React.FC = () => {
                           <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
                             <div className="flex-1">
                               <p className="font-medium text-sm">{user.user_id}</p>
+                              <p className="font-medium text-sm">{user.user_email}</p>
                               <p className="text-xs text-gray-500">
                                 {user.total_annotations} annotations • {user.agreement_rate}% agreement rate
                               </p>

@@ -1,5 +1,5 @@
 import { toast } from '@/components/ui/sonner';
-import { ApiError, EnhancedGeneralReport, EnhancedSystemSummary, StatusFixResult, StatusFixResult,  } from './types';
+import { ApiError,  EnhancedSystemSummary, StatusFixResult, } from './types';
 import { Discussion, Annotation, TaskStatus, GitHubDiscussion, UploadResult, 
          TaskManagementResult, UserRole,  UserSummary, 
          BatchUpload, BatchManagementResult, BulkTaskUpdate, BulkActionResult } from './types';
@@ -1117,7 +1117,7 @@ github: {
       const queryString = dateParams.length > 0 ? `?${dateParams.join('&')}` : '';
       
       console.log(`[Summary] Getting annotation activity data${queryString}`);
-      return safeApiRequest<{date: string, count: number}[]>(`/api/summary/activity${queryString}`, 'GET', undefined, undefined, []);
+      return safeApiRequest<{date: string, count: number}[]>(`/api/summary/activity`, 'GET', undefined, undefined, []);
     },
     
     getRepositoryBreakdown: () => {

@@ -1269,7 +1269,7 @@ def get_workflow_status_summary(db: Session, discussion_id: str) -> Dict[str, An
                     upstream_task = next((t for t in task_associations if t.task_number == upstream_task_num), None)
                     upstream_status = upstream_task.status if upstream_task else "unknown"
                     
-                    if upstream_status == "quality_failed":
+                    if upstream_status == "quality_failed" or  upstream_status == "microsoft_autogen_6065":
                         # Blocked by quality decision - this is normal workflow, not stuck
                         task_info["is_stuck"] = False
                         task_info["stuck_reason"] = f"Blocked by upstream quality decision (Task {upstream_task_num} quality_failed)"

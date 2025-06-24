@@ -56,7 +56,7 @@ const SystemReports: React.FC = () => {
         if (isAdmin || isPodLead) {
           try {
             const report = await api.workflow.generalReport();
-            setGeneralReport(report);
+            setGeneralReport(report as any);
             console.log("Received general report:", report);
           } catch (reportErr) {
             console.warn('Could not fetch general report:', reportErr);

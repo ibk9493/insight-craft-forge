@@ -1420,25 +1420,21 @@ async def get_user_agreement_summary(
 
 @app.get("/api/admin/users/agreement-overview", tags=["Admin", "User Analysis"])
 async def get_all_users_agreement_overview(
-    admin_user: schemas.AuthorizedUser = Depends(jwt_auth_service.get_admin),
-    db: Session = Depends(get_db)
+        include_annotation_scores: bool = Query(False, description="Include individual annotation scores"),
+        admin_user: schemas.AuthorizedUser = Depends(jwt_auth_service.get_admin),
+        db: Session = Depends(get_db)
 ):
     """
     Get agreement overview for all users (Admin only).
-    Useful for identifying users who need additional training.
-    
-    **Returns:**
-    - Agreement summary for all users
-    - Users ranked by performance
-    - Users flagged for additional training
+    Enhanced with individual annotation scores against consensus.
     """
     try:
         logger.info("Getting agreement overview for all users (admin request)")
-        
+
         # Get all users who have made annotations
         users_with_annotations = db.query(models.Annotation.user_id).distinct().all()
         user_ids = [user[0] for user in users_with_annotations]
-        
+
         if not user_ids:
             return {
                 "total_users": 0,
@@ -1448,61 +1444,167 @@ async def get_all_users_agreement_overview(
                     "good_users": 0,
                     "users_needing_improvement": 0,
                     "users_needing_training": 0
+                },
+                "overall_stats": {
+                    "total_annotations": 0,
+                    "average_agreement_rate": 0,
+                    "average_agreement_score": 0
                 }
             }
-        
+
         # Get summary for each user
         user_summaries = []
-        status_counts = {"excellent": 0, "good": 0, "needs_improvement": 0, "needs_training": 0, "no_data": 0, "error": 0}
-        
+        status_counts = {"excellent": 0, "good": 0, "needs_improvement": 0, "needs_training": 0, "no_data": 0,
+                         "error": 0}
+
+        # Aggregate stats
+        total_annotations_all = 0
+        total_agreement_rate_sum = 0
+        total_agreement_score_sum = 0
+        users_with_data = 0
+
         for user_id in user_ids:
             try:
+
                 summary = user_agreement_service.get_user_agreement_summary(db, user_id)
+                user_email = auth_service.get_authorized_user_by_id(db, user_id)
+                summary['user_email'] = user_email.email
+                # Optionally exclude annotation scores for lighter response
+                if not include_annotation_scores:
+                    summary.pop("annotation_scores", None)
+
                 user_summaries.append(summary)
-                
+
                 status = summary.get("status", "error")
                 if status in status_counts:
                     status_counts[status] += 1
-                    
+
+                # Aggregate for overall stats
+                if status not in ["no_data", "error"]:
+                    total_annotations_all += summary.get("total_annotations", 0)
+                    total_agreement_rate_sum += summary.get("agreement_rate", 0)
+                    total_agreement_score_sum += summary.get("average_agreement_score", 0)
+                    users_with_data += 1
+
             except Exception as e:
                 logger.error(f"Error getting summary for user {user_id}: {str(e)}")
                 user_summaries.append({
                     "user_id": user_id,
                     "status": "error",
-                    "error": str(e)
+                    "error": str(e),
+                    "annotation_scores": [] if include_annotation_scores else None
                 })
                 status_counts["error"] += 1
-        
+
         # Sort users by agreement rate (descending)
         user_summaries.sort(key=lambda x: x.get("agreement_rate", 0), reverse=True)
-        
+
         # Identify users needing attention
         users_needing_training = [
-            user for user in user_summaries 
+            user for user in user_summaries
             if user.get("status") in ["needs_training", "needs_improvement"]
         ]
-        
+
+        # Calculate overall statistics
+        overall_stats = {
+            "total_annotations": total_annotations_all,
+            "average_agreement_rate": round(total_agreement_rate_sum / users_with_data,
+                                            2) if users_with_data > 0 else 0,
+            "average_agreement_score": round(total_agreement_score_sum / users_with_data,
+                                             2) if users_with_data > 0 else 0,
+            "users_analyzed": users_with_data
+        }
+
         return {
             "total_users": len(user_summaries),
             "users": user_summaries,
             "users_needing_training": users_needing_training,
             "summary": {
                 "excellent_users": status_counts["excellent"],
-                "good_users": status_counts["good"], 
+                "good_users": status_counts["good"],
                 "users_needing_improvement": status_counts["needs_improvement"],
                 "users_needing_training": status_counts["needs_training"],
                 "users_with_no_data": status_counts["no_data"],
                 "users_with_errors": status_counts["error"]
             },
+            "overall_stats": overall_stats,  # NEW: Aggregate statistics
             "analysis_timestamp": datetime.utcnow().isoformat()
         }
-        
+
     except Exception as e:
         logger.error(f"Error getting all users agreement overview: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Overview generation failed: {str(e)}"
         )
+
+
+@app.get("/api/users/{user_id}/annotation-scores", tags=["User Analysis"])
+async def get_user_annotation_scores(
+        user_id: str = Path(..., description="User ID to analyze"),
+        task_filter: Optional[int] = Query(None, description="Filter by task ID"),
+        min_score: Optional[float] = Query(None, description="Minimum agreement score filter"),
+        max_score: Optional[float] = Query(None, description="Maximum agreement score filter"),
+        current_user: schemas.AuthorizedUser = Depends(jwt_auth_service.require_authentication),
+        db: Session = Depends(get_db)
+):
+    """
+    Get detailed annotation scores for a specific user.
+    Shows each annotation's agreement score against consensus.
+    """
+    try:
+        # Authorization check
+        if current_user.email != user_id and current_user.role not in ["admin", "pod_lead"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only view your own annotation scores unless you are an admin or pod lead"
+            )
+
+        logger.info(f"Getting annotation scores for user {user_id}")
+
+        summary = user_agreement_service.get_user_agreement_summary(db, user_id)
+        annotation_scores = summary.get("annotation_scores", [])
+
+        # Apply filters
+        filtered_scores = annotation_scores
+
+        if task_filter:
+            filtered_scores = [a for a in filtered_scores if a["task_id"] == task_filter]
+
+        if min_score is not None:
+            filtered_scores = [a for a in filtered_scores if a["agreement_score"] >= min_score]
+
+        if max_score is not None:
+            filtered_scores = [a for a in filtered_scores if a["agreement_score"] <= max_score]
+        # user_id convert to user email.
+        user = auth_service.get_authorized_users(db)
+
+
+        return {
+            "user_id": user_id,
+            "total_annotations": len(annotation_scores),
+            "filtered_annotations": len(filtered_scores),
+            "filters_applied": {
+                "task_filter": task_filter,
+                "min_score": min_score,
+                "max_score": max_score
+            },
+            "annotation_scores": filtered_scores,
+            "summary_stats": summary.get("score_stats", {}),
+            "score_distribution": summary.get("score_distribution", {}),
+            "overall_agreement_rate": summary.get("agreement_rate", 0),
+            "average_agreement_score": summary.get("average_agreement_score", 0)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting user annotation scores: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get annotation scores: {str(e)}"
+        )
+
 
 
 @app.get("/api/tasks/{discussion_id}/{task_id}/completion-status", tags=["Tasks"])

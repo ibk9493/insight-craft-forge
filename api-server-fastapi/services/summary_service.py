@@ -24,9 +24,9 @@ def get_system_summary(db: Session):
         
         # Task completion counts with enhanced categories
         task_completion_counts = {
-            1: {'completed': 0, 'consensus_created': 0, 'quality_failed': 0, 'total_done': 0},
-            2: {'completed': 0, 'consensus_created': 0, 'quality_failed': 0, 'total_done': 0},
-            3: {'completed': 0, 'consensus_created': 0, 'quality_failed': 0, 'total_done': 0}
+            1: {'completed': 0, 'consensus_created': 0, 'quality_failed': 0,'blocked': 0, 'total_done': 0},
+            2: {'completed': 0, 'consensus_created': 0, 'quality_failed': 0,'blocked': 0, 'total_done': 0},
+            3: {'completed': 0, 'consensus_created': 0, 'quality_failed': 0,'blocked': 0, 'total_done': 0}
         }
         
         # Enhanced stuck analysis (corrected logic)
@@ -36,11 +36,12 @@ def get_system_summary(db: Session):
         for disc in discussions:
             for task_num in range(1, 4):
                 task_status = disc.tasks[f'task{task_num}'].status
+                
                 if task_status in task_completion_counts[task_num]:
                     task_completion_counts[task_num][task_status] += 1
                 
                 # Count total "done" tasks (completed work, regardless of quality outcome)
-                if task_status in ('completed', 'consensus_created', 'quality_failed'):
+                if task_status in ('completed', 'consensus_created', 'quality_failed','blocked'):
                     task_completion_counts[task_num]['total_done'] += 1
         
         # Total annotations
@@ -209,7 +210,7 @@ def _analyze_task_bottlenecks_corrected(db: Session, discussions) -> dict:
                 continue
             
             # Check task progression states
-            if task_status not in ('completed', 'consensus_created', 'quality_failed'):
+            if task_status not in ('completed', 'consensus_created', 'quality_failed','blocked'):
                 if annotators < required_annotators:
                     # This is NORMAL workflow progression - not stuck
                     stuck_analysis[f"task{task_num}_missing_annotations"] += 1

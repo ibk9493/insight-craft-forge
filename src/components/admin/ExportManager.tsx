@@ -186,6 +186,7 @@ interface ValidationResult {
   task3ReadyValid: DiscussionOriginal[];
   task3ReadyErrors: DiscussionOriginal[];
   notExportReady: DiscussionOriginal[];
+  task1and2AvailableButFailingSomeQualityParameters: DiscussionOriginal[];
   allValidationErrors: ValidationError[];
 }
 
@@ -253,9 +254,10 @@ const ExportManager: React.FC = () => {
   
     const forms = task3_consensus?.data?.forms ?? [];
   
-    const with_explanation_supporting_docs = forms.some(f =>
-      ["not findable", "n/a"].includes((f.supporting_docs_options ?? "").toLowerCase())
-    );
+    const with_explanation_supporting_docs = forms.some(f => {
+      const option = (f.supporting_docs_options ?? "").toLowerCase().trim();
+      return ["not findable", "n/a", "not-findable", "notfindable"].includes(option);
+    });
   
     const relevance_consensus = task1_consensus.data?.relevance ;
     const learning_consensus = task1_consensus.data?.learning ;
@@ -277,7 +279,7 @@ const ExportManager: React.FC = () => {
           with_explanation: !with_explanation_supporting_docs ? ann.data.explanation : false,
           with_explanation_text: ann.data.explanation_text,
           code_download_link: ann.data.codeDownloadUrl_text,
-          code_execuetion:true
+          code_execution:true
         })
       }));
   
@@ -297,7 +299,7 @@ const ExportManager: React.FC = () => {
           : false,
         with_explanation_text: task1_consensus.data?.explanation_text,
         code_download_link: task1_consensus.data?.codeDownloadUrl_text,
-        code_execuetion:true
+        code_execution:true
       })
     });
 
@@ -319,8 +321,8 @@ const ExportManager: React.FC = () => {
     const baseTransformed = {
       title,
       url,
-      lang: repository_language,
-      code,
+      lang: repository_language??"",
+      code:code??"",
       createdAt: release_date,
       question,
       answer,
@@ -533,7 +535,7 @@ const ExportManager: React.FC = () => {
               pod_lead: item.annotations.task3_consensus.pod_lead_email,
             });
           }
-              if (docsOption === "Provided") {
+              if (docsOption?.toLowerCase().trim() === "provided") {
                 // Case 1: No supporting docs present despite saying "Provided"
                 if (docsArray.length === 0) {
                   errors.push({
@@ -578,7 +580,54 @@ const ExportManager: React.FC = () => {
           }
 
 
+          const consensusShortAnswers = task3Data.forms?.map(f => f.short_answer_list || []) || [];
+          const consensusLongAnswers = task3Data.forms?.map(f => f.longAnswer_text || []) || [];
+      
+          // Check if we have multiple forms (list of lists scenario)
+          if (consensusShortAnswers.length > 1) {
+            // Multiple forms case: each form should have matching lengths
+            consensusShortAnswers.forEach((shortAnswerList, formIndex) => {
+              const correspondingLongAnswer = consensusLongAnswers[formIndex];
+              
+              if (Array.isArray(shortAnswerList) && Array.isArray(correspondingLongAnswer)) {
+                if (shortAnswerList.length !== correspondingLongAnswer.length) {
+                  errors.push({
+                    discussionId: item.id,
+                    task: 'task3',
+                    field: `short_answer_list_length_mismatch_form_${formIndex}`,
+                    error: `Form ${formIndex}: short_answer_list length (${shortAnswerList.length}) does not match long_answer length (${correspondingLongAnswer.length})`,
+                    value: { 
+                      shortAnswerLength: shortAnswerList.length, 
+                      longAnswerLength: correspondingLongAnswer.length,
+                      formIndex 
+                    },
+                    pod_lead: item.annotations.task3_consensus.pod_lead_email,
+                  });
+                }
+              }
+            });
+          } else if (consensusShortAnswers.length === 1) {
+            // Single form case: check if the single form's short_answer_list matches long_answer
+            const singleShortAnswerList = consensusShortAnswers[0];
+            const singleLongAnswer = consensusLongAnswers[0];
             
+            if (Array.isArray(singleShortAnswerList) && Array.isArray(singleLongAnswer)) {
+              if (singleShortAnswerList.length !== singleLongAnswer.length) {
+                errors.push({
+                  discussionId: item.id,
+                  task: 'task3',
+                  field: 'short_answer_list_length_mismatch',
+                  error: `short_answer_list length (${singleShortAnswerList.length}) does not match long_answer length (${singleLongAnswer.length})`,
+                  value: { 
+                    shortAnswerLength: singleShortAnswerList.length, 
+                    longAnswerLength: singleLongAnswer.length 
+                  },
+                  pod_lead: item.annotations.task3_consensus.pod_lead_email,
+                });
+              }
+            }
+          }
+      
         });
       }
 
@@ -596,7 +645,7 @@ const ExportManager: React.FC = () => {
     const consensusData = item.annotations.task1_consensus.data;
     console.log(consensusData)
     const booleanFlags = Object.entries(consensusData)
-      .filter(([key, value]) => typeof value === 'boolean' && key !== 'image_grounded' && key !== 'execution' )
+      .filter(([key, value]) => typeof value === 'boolean' && key !== 'grounded' && key !== 'execution' )
       .map(([_, value]) => value);
     
     return booleanFlags.length > 0 && booleanFlags.every(flag => flag === true);
@@ -613,6 +662,14 @@ const isTask3Ready = (item: DiscussionOriginal) => {
            item.annotations.task3_annotations.length >= 5 && 
            item.annotations.task3_consensus !== null;
   };
+
+  const isTask3ReadyDummy = (item: DiscussionOriginal) => {
+    return isTask1Ready(item) && 
+           
+           item.annotations.task3_annotations.length >= 5 && 
+           item.annotations.task3_consensus !== null;
+  };
+
 
   const isExportReady = (item: DiscussionOriginal) => {
     return isTask3Ready(item) || (isTask1Ready(item) && !canProceedToTask3(item));
@@ -636,7 +693,7 @@ const isTask3Ready = (item: DiscussionOriginal) => {
     const task3ReadyErrors: DiscussionOriginal[] = [];
     const notExportReady: DiscussionOriginal[] = [];
     const allValidationErrors: ValidationError[] = [];
-  
+    const task1and2AvailableButFailingSomeQualityParameters: DiscussionOriginal[] = [];
     exportData.discussions.forEach(discussion => {
       const errors = hasValidationError(discussion);
       allValidationErrors.push(...errors);
@@ -644,7 +701,10 @@ const isTask3Ready = (item: DiscussionOriginal) => {
       const task1Ready = isTask1Ready(discussion);
       const task3Ready = isTask3Ready(discussion); // This now includes all Task 1 + Task 3 requirements
       const canProceed = canProceedToTask3(discussion);
-  
+      if(task1Ready && isTask3ReadyDummy(discussion) && !canProceed ){
+        console.log("Failed due to validation task id",discussion.id)
+        task1and2AvailableButFailingSomeQualityParameters.push(discussion)
+      }
       if (!task1Ready) {
         // Not even Task 1 ready
         notExportReady.push(discussion);
@@ -675,6 +735,7 @@ const isTask3Ready = (item: DiscussionOriginal) => {
       task1ReadyErrors,
       task3ReadyValid,
       task3ReadyErrors,
+      task1and2AvailableButFailingSomeQualityParameters,
       notExportReady,
       allValidationErrors
     });
@@ -874,6 +935,10 @@ const isTask3Ready = (item: DiscussionOriginal) => {
               <div>
                 <span className="text-gray-600">Task 3 Complete (Errors):</span>
                 <span className="ml-2 font-medium text-orange-600">{validationResult.task3ReadyErrors.length}</span>
+              </div>
+              <div>
+                <span className="text-gray-600">task 1 and 3 Available But Failing Some Quality Parameters:</span>
+                <span className="ml-2 font-medium text-orange-600">{validationResult.task1and2AvailableButFailingSomeQualityParameters.length}</span>
               </div>
             </div>
           </div>

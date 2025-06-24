@@ -406,6 +406,7 @@ const AnnotationQuality: React.FC<AnnotationQualityProps> = ({
                         <TableHeader>
                           <TableRow>
                             <TableHead>User ID</TableHead>
+                            <TableHead>User Email</TableHead>
                             <TableHead>Total Annotations</TableHead>
                             <TableHead>With Consensus</TableHead>
                             <TableHead>Agreement Rate</TableHead>
@@ -416,7 +417,9 @@ const AnnotationQuality: React.FC<AnnotationQualityProps> = ({
                         <TableBody>
                           {usersOverview.users.map((user) => (
                             <TableRow key={user.user_id}>
+                              
                               <TableCell className="font-medium">{user.user_id}</TableCell>
+                              <TableCell className="font-medium">{user.user_email}</TableCell>
                               <TableCell>{user.total_annotations}</TableCell>
                               <TableCell>{user.annotations_with_consensus}</TableCell>
                               <TableCell>

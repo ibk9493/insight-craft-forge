@@ -1,5 +1,14 @@
 // API types for the annotation system
 export interface EnhancedSystemSummary {
+  totalDiscussions: number;
+  totalAnnotations: number;
+  uniqueAnnotators: number;
+  consensusAnnotations: number;
+  taskCompletions: { task1: { completed: number; consensus_created: number; quality_failed: number; total_done: number; }; task2: { completed: number; consensus_created: number; quality_failed: number; total_done: number; }; task3: { completed: number; consensus_created: number; quality_failed: number; total_done: number; }; };
+  task1Completed: number;
+  task2Completed: number;
+  task3Completed: number;
+  batchesBreakdown: any[];
   // Basic metrics
   total_discussions: number;
   total_annotations: number;

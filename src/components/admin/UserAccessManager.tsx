@@ -138,6 +138,7 @@ const UserAccessManager: React.FC = () => {
                 {authorizedUsers.map((user) => (
                   <div key={user.email} className="flex items-center justify-between py-2 px-3 bg-muted rounded-md">
                     <div>
+                    <span className="font-medium">{user.id}</span>
                       <span className="font-medium">{user.email}</span>
                       <span className="ml-2 text-xs bg-primary/10 text-primary px-2 py-1 rounded">
                         {user.role === 'admin' ? 'Administrator' : 

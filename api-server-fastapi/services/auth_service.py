@@ -92,3 +92,30 @@ def verify_user_authorization(db: Session, email: str) -> schemas.AuthorizedUser
         email=user.email,
         role=user.role
     )
+
+
+def get_authorized_user_by_id(db: Session, user_id: int) -> Optional[schemas.AuthorizedUser]:
+    """
+    Get an authorized user by their ID
+    """
+    user = db.query(models.AuthorizedUser).filter(
+        models.AuthorizedUser.id == user_id
+    ).first()
+
+    if not user:
+        return None
+
+    return schemas.AuthorizedUser(
+        id=user.id,
+        email=user.email,
+        role=user.role
+    )
+
+
+def get_emails_by_role(db: Session, role: str) -> List[str]:
+    """
+    Get all email addresses for users with a specific role
+    """
+    users = db.query(models.AuthorizedUser).filter(
+        models.AuthorizedUser.role == role
+    ).all()

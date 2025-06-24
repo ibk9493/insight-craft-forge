@@ -124,10 +124,10 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
       const toDate = dateRange?.to?.toISOString().split('T')[0];
       
       console.log('[AnalyticsDashboard] Fetching annotation activity...');
-      const activityData = await api.summary.getAnnotationActivity(fromDate, toDate);
-      console.log('[AnalyticsDashboard] Annotation activity received:', activityData);
+      // const activityData = await api.summary.getAnnotationActivity(fromDate, toDate);
+      // console.log('[AnalyticsDashboard] Annotation activity received:', activityData);
       
-      setAnnotationActivity(activityData);
+      // setAnnotationActivity(activityData);
     } catch (err) {
       console.error('[AnalyticsDashboard] Error fetching annotation activity:', err);
       // Keep using mock data on error
