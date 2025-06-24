@@ -279,7 +279,7 @@ const ExportManager: React.FC = () => {
           with_explanation: !with_explanation_supporting_docs ? ann.data.explanation : false,
           with_explanation_text: ann.data.explanation_text,
           code_download_link: ann.data.codeDownloadUrl_text,
-          code_execution:true
+          code_executable:true
         })
       }));
   
@@ -299,7 +299,7 @@ const ExportManager: React.FC = () => {
           : false,
         with_explanation_text: task1_consensus.data?.explanation_text,
         code_download_link: task1_consensus.data?.codeDownloadUrl_text,
-        code_execution:true
+        code_executable:true
       })
     });
 
